@@ -15,6 +15,7 @@ from backend.config.settings import APP_NAME, API_PREFIX
 from backend.api.routes.health import router as health_router
 from backend.api.routes.quan_tri import router as quan_tri_router
 from backend.api.routes.f02 import router as f02_router
+from backend.api.routes.f03 import router as f03_router
 from backend.services.errors import LoiNghiepVu
 
 app = FastAPI(
@@ -42,6 +43,7 @@ app.add_exception_handler(Exception, xu_ly_loi_he_thong)
 # Health khong can prefix de probe de dang; dong thoi mount duoi /api/v1
 app.include_router(health_router, prefix=API_PREFIX, tags=["health"])
 app.include_router(f02_router, prefix=API_PREFIX, tags=["F02"])
+app.include_router(f03_router, prefix=API_PREFIX, tags=["F03"])
 app.include_router(health_router, tags=["health"])
 app.include_router(auth_router, prefix=API_PREFIX, tags=["xác thực"])
 app.include_router(quan_tri_router, prefix=API_PREFIX, tags=["quản trị"])

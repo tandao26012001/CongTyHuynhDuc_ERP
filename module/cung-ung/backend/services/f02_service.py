@@ -3,6 +3,8 @@
 from backend.data.db import get_conn
 from backend.data import f02_repo as repo
 from backend.data import catalog_repo
+from backend.data import de_nghi_tuong_tac_repo as tuong_tac
+from backend.services import catalog_service
 from backend.services.errors import KhongCoQuyen, KhongTimThay, LoiNghiepVu, ThieuDuLieu, XungDot
 from backend.services.phan_quyen_service import kiem_quyen
 from backend.services.sinh_ma import sinh_ma
@@ -37,6 +39,7 @@ def yeu_cau_xac_nhan_kt(id_dong, noi_dung, ho_so):
         _check_dong(ho_so, dong, "sua")
         cap_nhat = repo.cap_nhat_dong(conn, id_dong, dong["phien_ban"], {"can_xac_nhan_kt": True, "trang_thai_dong": "CHO_XAC_NHAN_KT"})
         if not cap_nhat: raise XungDot("Dong vua duoc cap nhat.")
+        tuong_tac.them_trao_doi(conn, dong["id_de_nghi"], noi_dung.strip(), ho_so["ma_nhan_vien"])
         return dict(cap_nhat)
 
 
@@ -113,8 +116,72 @@ def duyet_yeu_cau_huy(id_yc, dong_y, ly_do, phien_ban, ho_so):
 
 
 def hang_doi_cap_ma(ho_so):
-    kiem_quyen(ho_so, "danh_muc", "xem")
+    _yeu_cau(ho_so, "xem")
     with get_conn() as conn: return {"items": [dict(r) for r in repo.danh_sach_cap_ma(conn)]}
+
+
+def goi_y_cap_ma(id_yc, ho_so):
+    _yeu_cau(ho_so, "duyet")
+    with get_conn() as conn:
+        yc = repo.lay_cap_ma(conn, id_yc)
+        if not yc: raise KhongTimThay("Khong tim thay yeu cau cap ma.")
+        ten = catalog_service._khong_dau(yc["ten_de_xuat"])
+    return {"items": [dict(r) for r in catalog_repo.tim_trung_vat_tu(None, ten)]}
+
+
+def _cap_nhat_dong_tu_cap_ma(conn, yc, vat_tu):
+    dong = repo.lay_dong(conn, yc["id_de_nghi_dong"], True)
+    if not dong: raise KhongTimThay("Khong tim thay dong de nghi.")
+    result = repo.cap_nhat_dong(conn, dong["id"], dong["phien_ban"], {
+        "id_vt_duyet_mua": vat_tu["id"], "ten_hang_chup": vat_tu["ten_hang"],
+        "dvt_chup": vat_tu["dvt"], "phan_loai_chup": vat_tu["phan_loai"],
+        "trang_thai_dong": "NHAP", "can_xac_nhan_kt": False,
+    })
+    if not result: raise XungDot("Dong de nghi vua duoc cap nhat.")
+
+
+def cap_ma_moi(id_yc, du_lieu, ho_so, idempotency_key):
+    _yeu_cau(ho_so, "duyet")
+    if not idempotency_key: raise ThieuDuLieu("Thieu X-Idempotency-Key.", "THIEU_IDEMPOTENCY_KEY")
+    with get_conn() as conn:
+        yc = repo.lay_cap_ma(conn, id_yc, True)
+        if not yc: raise KhongTimThay("Khong tim thay yeu cau cap ma.")
+        if yc["trang_thai"] != "CHO_CAP": raise LoiNghiepVu("Yeu cau da duoc xu ly.", "YEU_CAU_DA_XU_LY")
+    du_lieu = {**du_lieu, "trang_thai": "HOAT_DONG", "phan_loai": du_lieu.get("phan_loai", "CHUYEN_DUNG"), "quy_cach": du_lieu.get("quy_cach") or yc.get("quy_cach"), "ma_chung_loai": du_lieu.get("ma_chung_loai") or yc.get("ma_chung_loai")}
+    created = catalog_service.tao_vat_tu(du_lieu, ho_so["ma_nhan_vien"], ho_so["ma_tai_khoan"], idempotency_key, xac_nhan_trung=True)
+    vat_tu = created["item"]
+    with get_conn() as conn:
+        yc = repo.lay_cap_ma(conn, id_yc, True)
+        if not yc or yc["trang_thai"] != "CHO_CAP": raise XungDot("Yeu cau vua duoc xu ly.")
+        _cap_nhat_dong_tu_cap_ma(conn, yc, vat_tu)
+        result = repo.cap_nhat_cap_ma(conn, id_yc, yc["phien_ban"], {"id_vat_tu_cap": vat_tu["id"], "nguoi_cap": ho_so["ma_nhan_vien"], "thoi_diem_cap": now_vn(), "trang_thai": "DA_CAP"})
+        if not result: raise XungDot("Yeu cau vua duoc cap nhat.")
+    return {"yeu_cau": dict(result), "vat_tu": vat_tu}
+
+
+def gan_ma_co_san(id_yc, id_vat_tu, phien_ban, ho_so):
+    _yeu_cau(ho_so, "duyet")
+    vat_tu = catalog_repo.lay_vat_tu(id_vat_tu)
+    if not vat_tu: raise KhongTimThay("Khong tim thay vat tu.")
+    if vat_tu["trang_thai"] != "HOAT_DONG": raise LoiNghiepVu("Vat tu khong dang hoat dong.", "VAT_TU_NGUNG")
+    with get_conn() as conn:
+        yc = repo.lay_cap_ma(conn, id_yc, True)
+        if not yc: raise KhongTimThay("Khong tim thay yeu cau cap ma.")
+        _cap_nhat_dong_tu_cap_ma(conn, yc, vat_tu)
+        result = repo.cap_nhat_cap_ma(conn, id_yc, phien_ban, {"id_vat_tu_cap": id_vat_tu, "nguoi_cap": ho_so["ma_nhan_vien"], "thoi_diem_cap": now_vn(), "trang_thai": "DA_CAP"})
+        if not result: raise XungDot("Yeu cau vua duoc cap nhat.")
+    return dict(result)
+
+
+def tu_choi_cap_ma(id_yc, ly_do, phien_ban, ho_so):
+    if not ly_do or not ly_do.strip(): raise ThieuDuLieu("Ly do tu choi bat buoc.", "THIEU_LY_DO")
+    _yeu_cau(ho_so, "duyet")
+    with get_conn() as conn:
+        result = repo.cap_nhat_cap_ma(conn, id_yc, phien_ban, {"ghi_chu": ly_do.strip(), "nguoi_cap": ho_so["ma_nhan_vien"], "thoi_diem_cap": now_vn(), "trang_thai": "TU_CHOI"})
+        if not result:
+            if not repo.lay_cap_ma(conn, id_yc): raise KhongTimThay("Khong tim thay yeu cau cap ma.")
+            raise XungDot("Yeu cau vua duoc xu ly.")
+    return dict(result)
 
 
 def lich_su_doi(id_dong, ho_so):

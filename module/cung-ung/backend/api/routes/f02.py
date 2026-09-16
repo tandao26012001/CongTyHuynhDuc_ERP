@@ -38,6 +38,23 @@ class DuyetHuyIn(BaseModel):
     dong_y: bool
     ly_do: str | None = None
 
+class CapMaIn(BaseModel):
+    ma_vat_tu: str = Field(min_length=1)
+    ten_hang: str = Field(min_length=1)
+    dvt: str = Field(min_length=1)
+    ma_chung_loai: str | None = None
+    phan_loai: str = "CHUYEN_DUNG"
+    quy_cach: str | None = None
+    ghi_chu: str | None = None
+
+class GanMaIn(BaseModel):
+    id_vat_tu: str = Field(min_length=1)
+    phien_ban: int
+
+class TuChoiCapMaIn(BaseModel):
+    phien_ban: int
+    ly_do: str = Field(min_length=1)
+
 @router.get("/xac-nhan-kt", response_model=PhanHoi)
 def hang_doi(request: Request, trang_thai: str | None = None):
     return thanh_cong(f02_service.hang_doi_ky_thuat(lay_ho_so(request), trang_thai))
@@ -77,3 +94,19 @@ def duyet_huy(id_yc: str, body: DuyetHuyIn, request: Request):
 @router.get("/yeu-cau-cap-ma", response_model=PhanHoi)
 def hang_doi_cap_ma(request: Request):
     return thanh_cong(f02_service.hang_doi_cap_ma(lay_ho_so(request)))
+
+@router.get("/yeu-cau-cap-ma/{id_yc}/goi-y-trung", response_model=PhanHoi)
+def goi_y_trung(id_yc: str, request: Request):
+    return thanh_cong(f02_service.goi_y_cap_ma(id_yc, lay_ho_so(request)))
+
+@router.post("/yeu-cau-cap-ma/{id_yc}/cap", response_model=PhanHoi)
+def cap_ma(id_yc: str, body: CapMaIn, request: Request):
+    return thanh_cong(f02_service.cap_ma_moi(id_yc, body.model_dump(), lay_ho_so(request), request.headers.get("X-Idempotency-Key")))
+
+@router.post("/yeu-cau-cap-ma/{id_yc}/gan", response_model=PhanHoi)
+def gan_ma(id_yc: str, body: GanMaIn, request: Request):
+    return thanh_cong(f02_service.gan_ma_co_san(id_yc, body.id_vat_tu, body.phien_ban, lay_ho_so(request)))
+
+@router.post("/yeu-cau-cap-ma/{id_yc}/tu-choi", response_model=PhanHoi)
+def tu_choi_cap_ma(id_yc: str, body: TuChoiCapMaIn, request: Request):
+    return thanh_cong(f02_service.tu_choi_cap_ma(id_yc, body.ly_do, body.phien_ban, lay_ho_so(request)))
