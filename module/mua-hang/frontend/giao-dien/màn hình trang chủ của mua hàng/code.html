@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HỆ THỐNG MUA HÀNG &amp; Quản lý Sản xuất - Tổng quan Hệ thống</title>
+<!-- Material Symbols Outlined Font -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Industrial Standard Fonts (Roboto, Roboto Condensed, JetBrains Mono) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Roboto+Condensed:ital,wght@0,400;0,700;1,700&amp;family=Roboto:ital,wght@0,400;0,500;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration Verbatim -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-fixed-dim": "#ffb3ad",
+            "on-tertiary-container": "#ff928b",
+            "background": "#faf8ff",
+            "on-tertiary-fixed-variant": "#930013",
+            "surface-dim": "#d1d9f6",
+            "on-error-container": "#93000a",
+            "surface-bright": "#faf8ff",
+            "surface-container-lowest": "#ffffff",
+            "surface": "#faf8ff",
+            "blue-tint": "#C6CCE9",
+            "secondary-container": "#8b9dfe",
+            "on-secondary-fixed": "#001159",
+            "ink-muted": "#8A93AA",
+            "rule": "#DCE1EC",
+            "outline": "#757683",
+            "on-secondary-fixed-variant": "#2b3e99",
+            "on-surface": "#121b30",
+            "inverse-on-surface": "#edf0ff",
+            "on-tertiary": "#ffffff",
+            "red-tint": "#F9B9BE",
+            "on-primary": "#ffffff",
+            "on-primary-fixed-variant": "#2c3d9a",
+            "ink-secondary": "#59627A",
+            "surface-container-highest": "#d9e2fe",
+            "on-tertiary-fixed": "#410004",
+            "surface-container-low": "#f1f3ff",
+            "on-background": "#121b30",
+            "outline-variant": "#c5c5d4",
+            "rule-soft": "#EDF0F6",
+            "primary-fixed": "#dee0ff",
+            "tertiary": "#630009",
+            "on-secondary-container": "#1b2f8b",
+            "red-subtle": "#FDECEE",
+            "blue-dark": "#1E2C75",
+            "error-container": "#ffdad6",
+            "pure-white": "#FFFFFF",
+            "on-error": "#ffffff",
+            "primary": "#092081",
+            "inverse-primary": "#bac3ff",
+            "primary-container": "#283a97",
+            "ink": "#0E1220",
+            "error": "#ba1a1a",
+            "pure-black": "#000000",
+            "on-surface-variant": "#454652",
+            "on-secondary": "#ffffff",
+            "tertiary-container": "#8d0011",
+            "surface-tint": "#4556b4",
+            "on-primary-fixed": "#00105b",
+            "inverse-surface": "#273046",
+            "surface-variant": "#d9e2fe",
+            "secondary-fixed-dim": "#bac3ff",
+            "secondary-fixed": "#dee1ff",
+            "tertiary-fixed": "#ffdad7",
+            "surface-container-high": "#e1e8ff",
+            "secondary": "#4557b2",
+            "red-dark": "#C4141F",
+            "blue-subtle": "#EEF0F9",
+            "surface-container": "#e9edff",
+            "primary-fixed-dim": "#bac3ff",
+            "paper": "#F4F6FA",
+            "on-primary-container": "#9eacff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter-dense": "0.5rem",
+            "space-sm": "0.5rem",
+            "margin": "1.5rem",
+            "space-xs": "0.25rem",
+            "margin-mobile": "0.75rem",
+            "gutter": "1rem",
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "space-xl": "2rem"
+          },
+          "fontFamily": {
+            "headline-lg": ["Roboto"],
+            "headline-md": ["Roboto"],
+            "label-caps": ["Roboto Condensed"],
+            "data-table-cell": ["Roboto Condensed"],
+            "headline-lg-mobile": ["Roboto"],
+            "label-eyebrow": ["Roboto Condensed"],
+            "body-sm": ["Roboto"],
+            "data-tabular-code": ["JetBrains Mono"],
+            "headline-sm": ["Roboto"],
+            "data-table-header": ["Roboto Condensed"],
+            "shopfloor-touch-primary": ["Roboto"],
+            "body-md": ["Roboto"],
+            "caption": ["Roboto"]
+          },
+          "fontSize": {
+            "headline-lg": ["23px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+            "data-table-cell": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "label-eyebrow": ["11px", { "lineHeight": "14px", "letterSpacing": "0.07em", "fontWeight": "700" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "data-tabular-code": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+            "headline-sm": ["15px", { "lineHeight": "22px", "fontWeight": "700" }],
+            "data-table-header": ["11px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+            "shopfloor-touch-primary": ["16px", { "lineHeight": "24px", "fontWeight": "700" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "caption": ["12px", { "lineHeight": "16px", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    /* Bi-Chromatic Strict Industrial Utilities */
+    .dong-canh-bao {
+      border-left: 3px solid #EE202E !important;
+    }
+    .pill-r {
+      background-color: #EE202E;
+      color: #FFFFFF;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11.5px;
+      line-height: 14px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pill-warn {
+      background-color: #FFFFFF;
+      color: #EE202E;
+      border: 1px solid #EE202E;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11.5px;
+      line-height: 14px;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pill-ok {
+      background-color: #EEF0F9;
+      color: #283A97;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11.5px;
+      line-height: 14px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pill-info {
+      background-color: #EDF0F6;
+      color: #59627A;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11.5px;
+      line-height: 14px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pill-black {
+      background-color: #000000;
+      color: #FFFFFF;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11.5px;
+      line-height: 14px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+  </style>
+</head>
+<body class="bg-paper text-ink antialiased min-h-screen flex flex-col font-body-md text-body-md selection:bg-blue-subtle selection:text-primary">
+<!-- ========================================================================= -->
+<!-- SIDEBAR NAVIGATION RAIL (Exact JSON Spec, 250px width, responsive drawer) -->
+<!-- ========================================================================= -->
+<aside class="fixed top-0 left-0 h-screen w-[250px] z-40 bg-pure-white border-r border-rule shadow-sm flex flex-col justify-between py-4 transition-transform duration-200 -translate-x-full min-[860px]:translate-x-0" id="sidebar-rail">
+<!-- Top Header & Brand Identity -->
+<div>
+<div class="px-4 pb-4 border-b border-rule">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-pure-white shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="precision_manufacturing">precision_manufacturing</span>
+</div>
+<div>
+<h1 class="text-headline-sm font-headline-sm text-primary tracking-wide uppercase leading-tight">HỆ THỐNG MUA HÀNG</h1>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary leading-tight">&amp; Quản lý Sản xuất</p>
+</div>
+</div>
+<!-- Close drawer button for mobile screens -->
+<button class="min-[860px]:hidden text-ink-secondary hover:text-ink p-1 rounded" id="close-drawer-btn">
+<span class="material-symbols-outlined text-[22px]" data-icon="close">close</span>
+</button>
+</div>
+</div>
+<!-- Module Context Switcher Tag -->
+<div class="px-4 py-2.5 bg-paper/60 border-b border-rule-soft flex items-center justify-between">
+<span class="text-label-eyebrow font-label-eyebrow text-ink-muted uppercase">PHÂN XƯỞNG CHÍNH</span>
+<span class="text-label-eyebrow font-label-eyebrow text-primary uppercase font-bold">XƯỞNG CƠ KHÍ SỐ 2</span>
+</div>
+<!-- Navigation Tabs (5 Tabs from JSON) -->
+<nav class="mt-3 space-y-1">
+<!-- Tab 1: Tổng quan (ACTIVE STATE as per JSON style_active_navigation) -->
+<a class="bg-blue-subtle text-primary border-l-4 border-primary font-label-caps text-label-caps px-4 py-3 flex items-center gap-3" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard" data-weight="fill" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="flex-1">Tổng quan</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</a>
+<!-- Tab 2: Đề nghị vật tư -->
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="inventory_2">inventory_2</span>
+<span class="flex-1">Đề nghị vật tư</span>
+<span class="pill-info font-normal text-[11px] px-1.5 py-0.5">8</span>
+</a>
+<!-- Tab 3: Báo giá -->
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="request_quote">request_quote</span>
+<span class="flex-1">Báo giá</span>
+</a>
+<!-- Tab 4: Đơn hàng -->
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="shopping_cart">shopping_cart</span>
+<span class="flex-1">Đơn hàng</span>
+<span class="pill-r text-[10px] px-1 py-0 font-bold">!</span>
+</a>
+<!-- Tab 5: Việc của tôi (with badge) -->
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="assignment_ind">assignment_ind</span>
+<span class="flex-1">Việc của tôi</span>
+<span class="pill-r font-bold text-[11px] px-1.5 py-0.5">18</span>
+</a>
+</nav>
+</div>
+<!-- Rail Footer Actions (Version info & Logout) -->
+<div class="px-4 pt-4 border-t border-rule space-y-2">
+<div class="flex items-center justify-between text-caption font-caption text-ink-muted px-2 py-1 bg-paper border border-rule-soft rounded">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+<span class="font-data-tabular-code text-data-tabular-code text-[11px]">Phiên bản v1.0</span>
+</div>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary"></span>
+</div>
+<button class="w-full flex items-center gap-2 px-3 py-2 text-label-caps font-label-caps text-ink-secondary hover:text-red-dark hover:bg-red-subtle border border-rule rounded transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]" data-icon="logout">logout</span>
+<span>Đăng xuất</span>
+</button>
+</div>
+</aside>
+<!-- Mobile Backdrop Overlay -->
+<div class="fixed inset-0 bg-ink/45 z-30 hidden min-[860px]:hidden" id="drawer-backdrop"></div>
+<!-- ========================================================================= -->
+<!-- TOPBAR COMPONENT (Exact JSON Spec, 58px fixed, border-b rule, high anchor) -->
+<!-- ========================================================================= -->
+<header class="fixed top-0 right-0 left-0 min-[860px]:left-[250px] h-[58px] z-30 bg-pure-white border-b border-rule flex items-center justify-between px-3 sm:px-margin shadow-sm">
+<!-- Left Cluster: Hamburger (mobile) & Title -->
+<div class="flex items-center gap-3">
+<!-- Mobile Drawer Trigger -->
+<button class="min-[860px]:hidden p-1.5 text-ink hover:bg-blue-subtle rounded flex items-center justify-center" id="open-drawer-btn">
+<span class="material-symbols-outlined text-[24px]" data-icon="menu">menu</span>
+</button>
+<div>
+<h2 class="text-headline-md font-headline-md text-ink tracking-tight flex items-center gap-2">
+<span>Mua hàng &amp; Quản lý Sản xuất</span>
+<span class="hidden md:inline-block text-ink-muted font-normal text-body-sm">| Tổng quan Phân hệ</span>
+</h2>
+</div>
+</div>
+<!-- Right Actions Cluster (Trailing actions & User credentials) -->
+<div class="flex items-center gap-2 sm:gap-4">
+<!-- Live Sync Indicator -->
+<div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-paper border border-rule rounded">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="text-label-eyebrow font-label-eyebrow text-ink">ĐỒNG BỘ: <strong class="text-primary">LIVE</strong></span>
+<button class="ml-1 text-ink-secondary hover:text-primary transition-colors flex items-center" title="Đồng bộ thủ công">
+<span class="material-symbols-outlined text-[16px]" data-icon="sync">sync</span>
+</button>
+</div>
+<!-- Quick Action: Barcode Scan Shopfloor -->
+<button class="flex items-center gap-1.5 px-2.5 py-1.5 bg-paper hover:bg-blue-subtle text-primary border border-rule rounded text-label-caps font-label-caps transition-colors" title="Quét Barcode / QR Cổng &amp; Xưởng">
+<span class="material-symbols-outlined text-[18px]" data-icon="qr_code_scanner">qr_code_scanner</span>
+<span class="hidden lg:inline text-ink">QUÉT MÃ</span>
+</button>
+<!-- Notifications Icon Action with Badge Count -->
+<div class="relative">
+<button class="p-1.5 text-ink-secondary hover:text-primary hover:bg-blue-subtle rounded transition-colors relative flex items-center justify-center" title="Thông báo khẩn hệ thống">
+<span class="material-symbols-outlined text-[22px]" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-4 h-4 bg-red-dark text-pure-white font-data-tabular-code text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-pure-white">5</span>
+</button>
+</div>
+<div class="h-6 w-[1px] bg-rule"></div>
+<!-- User Operator Identity -->
+<div class="flex items-center gap-2 pl-1">
+<div class="w-8 h-8 rounded bg-blue-subtle text-primary border border-primary/20 flex items-center justify-center font-bold text-[13px] uppercase">
+          TV
+        </div>
+<div class="hidden xl:block text-left leading-tight">
+<div class="text-body-sm font-headline-sm text-ink leading-tight">Trần Văn Sáng</div>
+<div class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase leading-tight">Quản đốc xưởng cơ khí</div>
+</div>
+</div>
+</div>
+</header>
+<!-- ========================================================================= -->
+<!-- MAIN CONTENT CANVAS (§2, §4, §5 Standards: 24px Desktop, 12px Mobile) -->
+<!-- ========================================================================= -->
+<main class="min-[860px]:ml-[250px] mt-[58px] p-3 sm:p-margin flex-1 space-y-5 bg-paper">
+<!-- 1. Hero & Fast Global Query Strip -->
+<div class="bg-pure-white border border-rule rounded p-4 sm:p-5 shadow-sm">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<!-- Welcome Block -->
+<div>
+<div class="flex items-center gap-2">
+<span class="pill-ok">PHÂN XƯỞNG CƠ KHÍ CHÍNH SỐ 2</span>
+<span class="text-caption font-caption text-ink-muted">Ca sản xuất: 01 (06:00 - 14:00)</span>
+</div>
+<h2 class="text-headline-lg font-headline-lg text-ink mt-1 tracking-tight">
+            Xin chào, Trần Văn Sáng
+          </h2>
+<p class="text-body-md font-body-md text-ink-secondary mt-0.5">
+            Hệ thống phát hiện <strong class="text-red-dark font-bold">47 đơn hàng/phiếu trễ hạn</strong> và <strong class="text-primary font-bold">18 đầu việc</strong> chờ bạn phê duyệt cấp tốc hôm nay.
+          </p>
+</div>
+<!-- Global Search / Barcode Filter -->
+<div class="w-full lg:w-[460px]">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-[20px] text-ink-secondary" data-icon="search">search</span>
+<input class="w-full pl-10 pr-24 py-2 bg-paper text-ink placeholder-ink-muted border border-rule rounded focus:border-primary focus:ring-1 focus:ring-primary text-body-sm transition-all outline-none font-body-sm" placeholder="Tìm nhanh module, số ĐNVT, PO-2024, mã phôi, dao cụ..." type="text"/>
+<button class="absolute right-1.5 top-1.5 px-2.5 py-1 bg-primary text-pure-white rounded text-label-caps font-label-caps text-[11px] hover:bg-blue-dark transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="filter_alt">filter_alt</span> LỌC
+            </button>
+</div>
+<div class="flex items-center gap-2 mt-1.5 text-label-eyebrow font-label-eyebrow text-ink-muted">
+<span>TRA CỨU NHANH:</span>
+<a class="text-primary hover:underline font-data-tabular-code" href="#">#PO-8821</a>
+<span class="text-rule">•</span>
+<a class="text-primary hover:underline font-data-tabular-code" href="#">#VT-SKD11</a>
+<span class="text-rule">•</span>
+<a class="text-primary hover:underline font-data-tabular-code" href="#">#RFQ-CNC04</a>
+</div>
+</div>
+</div>
+</div>
+<!-- 2. Operational KPI Fast Gauges (Bi-Chromatic Rules Only) -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+<!-- KPI 1: Chờ phê duyệt -->
+<div class="bg-pure-white border border-rule rounded p-3.5 shadow-sm">
+<div class="flex items-center justify-between">
+<span class="text-label-caps font-label-caps text-ink-secondary">CHỜ PHÊ DUYỆT</span>
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="pending_actions">pending_actions</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-lg font-data-tabular-code text-primary font-bold">18</span>
+<span class="text-caption font-caption text-ink-muted">chứng từ</span>
+</div>
+<div class="mt-1 text-label-eyebrow font-label-eyebrow text-ink-secondary">
+          7 phiếu khẩn &lt; 2h
+        </div>
+</div>
+<!-- KPI 2: Trễ hạn (CRITICAL PRECISION CRIMSON ALARM) -->
+<div class="bg-pure-white border-2 border-red-dark rounded p-3.5 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 w-8 h-8 bg-red-dark/10 rounded-bl-lg flex items-center justify-center text-red-dark font-bold text-xs">
+          !
+        </div>
+<div class="flex items-center justify-between">
+<span class="text-label-caps font-label-caps text-red-dark">TRỄ HẠN XỬ LÝ / GIAO</span>
+<span class="material-symbols-outlined text-red-dark text-[20px]" data-icon="warning">warning</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-lg font-data-tabular-code text-red-dark font-bold">47</span>
+<span class="pill-r text-[10px] py-0 px-1.5">BÁO ĐỘNG ĐỎ</span>
+</div>
+<div class="mt-1 text-label-eyebrow font-label-eyebrow text-red-dark font-bold">
+          Dừng dây chuyền tiện 03
+        </div>
+</div>
+<!-- KPI 3: Đang giao hàng -->
+<div class="bg-pure-white border border-rule rounded p-3.5 shadow-sm">
+<div class="flex items-center justify-between">
+<span class="text-label-caps font-label-caps text-ink-secondary">ĐANG GIAO HÀNG</span>
+<span class="material-symbols-outlined text-ink text-[20px]" data-icon="local_shipping">local_shipping</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-lg font-data-tabular-code text-ink font-bold">12</span>
+<span class="text-caption font-caption text-ink-muted">chuyến xe</span>
+</div>
+<div class="mt-1 text-label-eyebrow font-label-eyebrow text-ink-secondary">
+          4 chuyến đang tới cổng bảo vệ
+        </div>
+</div>
+<!-- KPI 4: Hoàn tất tháng -->
+<div class="bg-pure-white border border-rule rounded p-3.5 shadow-sm">
+<div class="flex items-center justify-between">
+<span class="text-label-caps font-label-caps text-ink-secondary">HOÀN TẤT THÁNG</span>
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="verified">verified</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-lg font-data-tabular-code text-primary font-bold">1.243</span>
+<span class="text-caption font-caption text-ink-muted">lô hàng</span>
+</div>
+<div class="mt-1 text-label-eyebrow font-label-eyebrow text-ink-secondary">
+          Đạt 98.2% định mức xưởng
+        </div>
+</div>
+</div>
+<!-- 3. Critical Alarms Requiring Immediate Intervention (dong-canh-bao) -->
+<div class="bg-pure-white border border-rule rounded shadow-sm overflow-hidden">
+<div class="px-4 py-3 bg-red-subtle/50 border-b border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-red-dark text-[20px]" data-icon="crisis_alert">crisis_alert</span>
+<h3 class="text-headline-sm font-headline-sm text-ink uppercase tracking-wide">
+            CẢNH BÁO KHẨN CẤP CẦN XỬ LÝ NGAY
+          </h3>
+<span class="pill-r">3 VỤ VIỆC CRITICAL</span>
+</div>
+<span class="text-label-eyebrow font-label-eyebrow text-ink-secondary">CẬP NHẬT THEO THỜI GIAN THỰC TẠI PHÂN XƯỞNG</span>
+</div>
+<div class="divide-y divide-rule-soft">
+<!-- Alarm Row 1 -->
+<div class="dong-canh-bao p-3.5 bg-pure-white hover:bg-blue-subtle/40 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="pill-r">THIẾU DAO CỤ SẢN XUẤT</span>
+<span class="font-data-tabular-code text-data-tabular-code text-ink font-bold">#DNVT-2024-0982</span>
+<span class="text-caption text-ink-muted">• Máy Phay 5-Trục CNC-08</span>
+</div>
+<p class="text-body-md font-body-md text-ink">
+              Mũi phay ngón hợp kim phi 12x75 (Thương hiệu Nachi) đã cạn kho dự phòng. Đơn hàng gia công khuôn ép vỏ động cơ đang chờ phôi.
+            </p>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<button class="px-3 py-1.5 bg-red-dark text-pure-white rounded text-label-caps font-label-caps hover:bg-black transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="flash_on">flash_on</span>
+              DUYỆT MUA HỎA TỐC
+            </button>
+<button class="px-3 py-1.5 bg-pure-white border border-rule text-ink rounded text-label-caps font-label-caps hover:bg-paper transition-colors">
+              XEM CHI TIẾT
+            </button>
+</div>
+</div>
+<!-- Alarm Row 2 -->
+<div class="dong-canh-bao p-3.5 bg-pure-white hover:bg-blue-subtle/40 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="pill-warn">TRỄ HẠN GIAO PHÔI THÉP</span>
+<span class="font-data-tabular-code text-data-tabular-code text-ink font-bold">#PO-2024-5412</span>
+<span class="text-caption text-ink-muted">• Nhà cung cấp: Thép Minh Phú CNC</span>
+</div>
+<p class="text-body-md font-body-md text-ink">
+              Phôi thép tròn SKD11 phi 180 quá hạn giao 3 ngày theo hợp đồng. Cảnh báo nguy cơ phạt vi phạm tiến độ bàn giao cho khách hàng.
+            </p>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<button class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="phone_in_talk">phone_in_talk</span>
+              KHIẾU NẠI TIẾN ĐỘ
+            </button>
+<button class="px-3 py-1.5 bg-pure-white border border-rule text-ink rounded text-label-caps font-label-caps hover:bg-paper transition-colors">
+              ĐỔI NCC DỰ PHÒNG
+            </button>
+</div>
+</div>
+<!-- Alarm Row 3 -->
+<div class="dong-canh-bao p-3.5 bg-pure-white hover:bg-blue-subtle/40 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="pill-r">LÔ HÀNG IQC KHÔNG ĐẠT</span>
+<span class="font-data-tabular-code text-data-tabular-code text-ink font-bold">#IQC-2024-0419</span>
+<span class="text-caption text-ink-muted">• Kiểm tra Cổng số 1</span>
+</div>
+<p class="text-body-md font-body-md text-ink">
+              Bulong lục giác chìm 12.9 M16x80 có độ cứng không đạt chứng nhận CO/CQ (đo mẫu 5/50 gãy ren). Yêu cầu lập biên bản hoàn trả ngay.
+            </p>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<button class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="assignment_return">assignment_return</span>
+              LẬP BIÊN BẢN TRẢ HÀNG
+            </button>
+<button class="px-3 py-1.5 bg-pure-white border border-rule text-ink rounded text-label-caps font-label-caps hover:bg-paper transition-colors">
+              HÌNH ẢNH HIỆN TRƯỜNG
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- 4. Main Operational Modules Grid (7 Modules as Required) -->
+<div>
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]" data-icon="grid_view">grid_view</span>
+<h3 class="text-headline-md font-headline-md text-ink uppercase tracking-tight">
+            DANH MỤC PHÂN HỆ NGHIỆP VỤ HỆ THỐNG
+          </h3>
+</div>
+<span class="text-label-eyebrow font-label-eyebrow text-ink-muted hidden sm:inline">CHỌN PHÂN HỆ ĐỂ ĐIỀU HÀNH CHI TIẾT</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+<!-- MODULE 1: ĐỀ NGHỊ VẬT TƯ -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="inventory_2">inventory_2</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 1: ĐỀ NGHỊ VẬT TƯ</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">ĐNVT XƯỞNG &amp; HẠN MỨC</p>
+</div>
+</div>
+<span class="pill-ok">8 CHỜ GỬI</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                Tạo phiếu cấp tốc xưởng dưới 45 giây. Kiểm tra tồn kho an toàn, hạn mức ngân sách và phân định mức độ khẩn cấp (Thường / Gấp / Khẩn hỏa tốc).
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink font-data-tabular-code">Tạo phiếu &lt;45s</span>
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink">Hạn mức xưởng: 82%</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="add_circle">add_circle</span>
+              TẠO ĐNVT MỚI
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              DANH SÁCH <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 2: BÁO GIÁ & CHỌN NHÀ CUNG CẤP -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="request_quote">request_quote</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 2: BÁO GIÁ &amp; CHỌN NCC</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">RFQ &amp; ĐÀM PHÁN ĐƠN GIÁ</p>
+</div>
+</div>
+<span class="pill-info">6 RFQ ACTIVE</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                So sánh tự động 3 nhà cung cấp (Ma trận kỹ thuật CO/CQ, thời hạn thanh toán, chiết khấu và năng lực giao xưởng trực tiếp).
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink font-data-tabular-code">So sánh 3 NCC</span>
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink">Thẩm định kỹ thuật</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="balance">balance</span>
+              SO SÁNH BÁO GIÁ
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              GỬI RFQ <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 3: ĐƠN HÀNG (PO) & HỢP ĐỒNG -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="shopping_cart">shopping_cart</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 3: ĐƠN HÀNG (PO)</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">TIẾN ĐỘ &amp; CẢNH BÁO GIAO</p>
+</div>
+</div>
+<span class="pill-r">47 TRỄ HẠN</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                Theo dõi vòng đời đơn hàng, tiến độ gia công tại nhà cung ứng ngoài. Kích hoạt còi báo động đỏ khi giao phôi đúc/dao cụ chậm trễ.
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink font-data-tabular-code">34 PO Đang chạy</span>
+<span class="text-caption bg-red-subtle border border-red-dark text-red-dark px-2 py-0.5 rounded font-bold">14 Phôi chậm</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="track_changes">track_changes</span>
+              THEO DÕI TIẾN ĐỘ
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              XUẤT PO MỚI <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 4: NHẬN HÀNG & KIỂM TRA IQC XƯỞNG -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="fact_check">fact_check</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 4: NHẬN HÀNG &amp; IQC</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">TIẾP NHẬN CỔNG &amp; SCAN</p>
+</div>
+</div>
+<span class="pill-ok">4 XE TẠI CỔNG</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                Tiếp nhận xe giao hàng tại cổng bảo vệ, quét mã Barcode/QR lô vật tư, nghiệm thu kích thước mẫu và chụp ảnh lỗi hiện trường đưa lên hệ thống.
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink font-data-tabular-code">Chụp ảnh hiện trường</span>
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink">CO/CQ Check</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="barcode_scanner">barcode_scanner</span>
+              QUÉT MÃ TIẾP NHẬN
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              BIÊN BẢN IQC <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 5: VIỆC CỦA TÔI & PHÊ DUYỆT CẤP TỐC -->
+<div class="bg-pure-white border-2 border-primary rounded shadow-sm hover:border-blue-dark transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-primary text-pure-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="assignment_ind">assignment_ind</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 5: VIỆC CỦA TÔI</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">HÀNG ĐỢI PHÊ DUYỆT CẤP TỐC</p>
+</div>
+</div>
+<span class="pill-r font-bold">18 ĐỢI BẠN</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                Duyệt hàng loạt trên thiết bị máy tính bảng xưởng, ký số chứng thực điện tử và chuyển tiếp sang Phòng Mua hàng trong 1 thao tác.
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-blue-subtle border border-primary text-primary px-2 py-0.5 rounded font-bold font-data-tabular-code">11 ĐNVT</span>
+<span class="text-caption bg-blue-subtle border border-primary text-primary px-2 py-0.5 rounded font-bold font-data-tabular-code">4 RFQ</span>
+<span class="text-caption bg-red-subtle border border-red-dark text-red-dark px-2 py-0.5 rounded font-bold font-data-tabular-code">3 Nghiệm thu</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="draw">draw</span>
+              DUYỆT HÀNG LOẠT (18)
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              CHI TIẾT <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 6: DANH MỤC DỮ LIỆU GỐC & ĐỊNH MỨC -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="dataset">dataset</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 6: DỮ LIỆU GỐC &amp; ĐỊNH MỨC</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">MASTER DATA &amp; BOM VẬT TƯ</p>
+</div>
+</div>
+<span class="pill-info">12.450 MÃ</span>
+</div>
+<div class="p-4 space-y-2.5">
+<p class="text-body-sm text-ink-secondary">
+                Chuẩn hóa mã danh mục vật tư CNC, danh sách nhà cung ứng đã thẩm định CO/CQ và bảng định mức tiêu hao nguyên phụ liệu lệnh sản xuất (LSX).
+              </p>
+<div class="pt-2 flex flex-wrap gap-1.5">
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink">Định mức LSX</span>
+<span class="text-caption bg-paper border border-rule px-2 py-0.5 rounded text-ink">Danh bạ NCC</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="search">search</span>
+              TRA CỨU VẬT TƯ
+            </a>
+<a class="text-label-caps font-label-caps text-primary hover:underline flex items-center gap-1" href="#">
+              BOM ĐỊNH MỨC <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- MODULE 7: QUẢN TRỊ & NHẬT KÝ HỆ THỐNG -->
+<div class="bg-pure-white border border-rule rounded shadow-sm hover:border-primary transition-all flex flex-col justify-between md:col-span-2 xl:col-span-3">
+<div>
+<div class="p-4 border-b border-rule flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-blue-subtle text-primary border border-rule flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]" data-icon="admin_panel_settings">admin_panel_settings</span>
+</div>
+<div>
+<h4 class="text-headline-sm font-headline-sm text-ink leading-tight">MODULE 7: QUẢN TRỊ &amp; NHẬT KÝ HỆ THỐNG</h4>
+<p class="text-label-eyebrow font-label-eyebrow text-ink-secondary uppercase">PHÂN QUYỀN VẬN HÀNH &amp; AUDIT TRAIL</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="pill-ok">AN TOÀN HỆ THỐNG</span>
+<span class="pill-info font-data-tabular-code text-[11px]">AUDIT: 24/7</span>
+</div>
+</div>
+<div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+<div>
+<span class="text-label-caps font-label-caps text-ink uppercase">Phân quyền Ma trận</span>
+<p class="text-body-sm text-ink-secondary mt-1">
+                  Kiểm soát thẩm quyền ký duyệt theo hạn mức giá trị từng xưởng, bảo vệ phân luồng nội bộ.
+                </p>
+</div>
+<div>
+<span class="text-label-caps font-label-caps text-ink uppercase">Nhật ký Kiểm toán (Audit)</span>
+<p class="text-body-sm text-ink-secondary mt-1">
+                  Ghi lại 100% thay đổi về đơn giá, số lượng đặt hàng, thời gian ký duyệt không thể xóa sửa.
+                </p>
+</div>
+<div>
+<span class="text-label-caps font-label-caps text-ink uppercase">Sao lưu &amp; Dự phòng</span>
+<p class="text-body-sm text-ink-secondary mt-1">
+                  Đồng bộ tức thời dữ liệu đám mây với máy chủ điều hành nội bộ tại trạm xưởng.
+                </p>
+</div>
+</div>
+</div>
+<div class="p-4 bg-paper/50 border-t border-rule flex items-center justify-between gap-2">
+<div class="text-label-eyebrow font-label-eyebrow text-ink-muted">
+              NHẬT KÝ GẦN NHẤT: <span class="text-ink font-data-tabular-code">14:12:05 - Quản đốc xác nhận lô #PO-8821</span>
+</div>
+<div class="flex items-center gap-3">
+<a class="px-3 py-1.5 bg-pure-white border border-rule text-ink rounded text-label-caps font-label-caps hover:bg-paper transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="security">security</span> PHÂN QUYỀN
+              </a>
+<a class="px-3 py-1.5 bg-primary text-pure-white rounded text-label-caps font-label-caps hover:bg-blue-dark transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="history">history</span> NHẬT KÝ AUDIT
+              </a>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. Fast Operational Queue Data Table (Industrial Density) -->
+<div class="bg-pure-white border border-rule rounded shadow-sm overflow-hidden">
+<div class="px-4 py-3 border-b border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div>
+<h3 class="text-headline-sm font-headline-sm text-ink uppercase tracking-tight">
+            HÀNG ĐỢI XỬ LÝ GẦN ĐÂY - PHÂN XƯỞNG CƠ KHÍ SỐ 2
+          </h3>
+<p class="text-caption font-caption text-ink-muted">Danh sách chứng từ yêu cầu kiểm tra đối chiếu trước 15:00</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 text-label-caps font-label-caps border border-rule rounded text-ink hover:bg-blue-subtle transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="download">download</span> XUẤT BÁO CÁO
+          </button>
+<button class="px-2.5 py-1 text-label-caps font-label-caps bg-primary text-pure-white rounded hover:bg-blue-dark transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="refresh">refresh</span> LÀM MỚI
+          </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-paper border-b border-rule text-data-table-header font-data-table-header text-ink-secondary uppercase">
+<th class="py-2.5 px-4">MÃ CHỨNG TỪ</th>
+<th class="py-2.5 px-4">LOẠI NGHIỆP VỤ</th>
+<th class="py-2.5 px-4">MÔ TẢ CHI TIẾT VẬT TƯ</th>
+<th class="py-2.5 px-4">BỘ PHẬN YÊU CẦU</th>
+<th class="py-2.5 px-4">THỜI HẠN</th>
+<th class="py-2.5 px-4">TRẠNG THÁI</th>
+<th class="py-2.5 px-4 text-right">THAO TÁC</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-rule-soft text-data-table-cell font-data-table-cell text-ink">
+<!-- Row 1: Urgent Approval Required -->
+<tr class="hover:bg-blue-subtle/50 transition-colors">
+<td class="py-2.5 px-4 font-data-tabular-code font-bold text-primary">#DNVT-8941</td>
+<td class="py-2.5 px-4 font-bold">Đề nghị vật tư</td>
+<td class="py-2.5 px-4">Thép thanh S45C phi 40 x 3000mm (20 cây)</td>
+<td class="py-2.5 px-4">Tổ Tiện CNC 01</td>
+<td class="py-2.5 px-4 font-data-tabular-code text-red-dark font-bold">14:30 (Còn 25p)</td>
+<td class="py-2.5 px-4">
+<span class="pill-r">KHẨN HỎA TỐC</span>
+</td>
+<td class="py-2.5 px-4 text-right">
+<button class="px-2 py-1 bg-primary text-pure-white text-[11px] font-label-caps rounded hover:bg-blue-dark transition-colors">DUYỆT NGAY</button>
+</td>
+</tr>
+<!-- Row 2: Standard PO Follow-up -->
+<tr class="hover:bg-blue-subtle/50 transition-colors">
+<td class="py-2.5 px-4 font-data-tabular-code font-bold text-primary">#PO-2024-1102</td>
+<td class="py-2.5 px-4">Đơn hàng nhà cung cấp</td>
+<td class="py-2.5 px-4">Dầu làm mát tưới nguội pha nước Mobilcut 100 (4 Phuy)</td>
+<td class="py-2.5 px-4">Bảo trì thiết bị</td>
+<td class="py-2.5 px-4 font-data-tabular-code text-ink-muted">17:00 Hôm nay</td>
+<td class="py-2.5 px-4">
+<span class="pill-ok">ĐANG VẬN CHUYỂN</span>
+</td>
+<td class="py-2.5 px-4 text-right">
+<button class="px-2 py-1 bg-pure-white border border-rule text-ink text-[11px] font-label-caps rounded hover:bg-paper transition-colors">THEO DÕI</button>
+</td>
+</tr>
+<!-- Row 3: IQC Inspection Failed -->
+<tr class="hover:bg-blue-subtle/50 transition-colors dong-canh-bao">
+<td class="py-2.5 px-4 font-data-tabular-code font-bold text-red-dark">#IQC-0889</td>
+<td class="py-2.5 px-4 font-bold text-red-dark">Kiểm tra nghiệm thu</td>
+<td class="py-2.5 px-4">Phớt làm kín chịu nhiệt Viton kích thước 45x60x7 (50 cái)</td>
+<td class="py-2.5 px-4">Kho phụ tùng</td>
+<td class="py-2.5 px-4 font-data-tabular-code text-red-dark font-bold">Quá hạn 2h</td>
+<td class="py-2.5 px-4">
+<span class="pill-r">KHÔNG ĐẠT TIÊU CHUẨN</span>
+</td>
+<td class="py-2.5 px-4 text-right">
+<button class="px-2 py-1 bg-red-dark text-pure-white text-[11px] font-label-caps rounded hover:bg-black transition-colors">LẬP BIÊN BẢN</button>
+</td>
+</tr>
+<!-- Row 4: RFQ Under Comparison -->
+<tr class="hover:bg-blue-subtle/50 transition-colors">
+<td class="py-2.5 px-4 font-data-tabular-code font-bold text-primary">#RFQ-CNC-442</td>
+<td class="py-2.5 px-4">Báo giá cạnh tranh</td>
+<td class="py-2.5 px-4">Gia công nhiệt luyện thấm Nitơ chi tiết trục dẫn hướng (30 bộ)</td>
+<td class="py-2.5 px-4">Kỹ thuật công nghệ</td>
+<td class="py-2.5 px-4 font-data-tabular-code text-ink-secondary">Ngày mai 10:00</td>
+<td class="py-2.5 px-4">
+<span class="pill-info">ĐÃ CÓ 3 BÁO GIÁ</span>
+</td>
+<td class="py-2.5 px-4 text-right">
+<button class="px-2 py-1 bg-pure-white border border-rule text-ink text-[11px] font-label-caps rounded hover:bg-paper transition-colors">CHỌN NCC</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination and Density Footer -->
+<div class="px-4 py-2.5 bg-paper border-t border-rule flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-caption font-caption text-ink-secondary">
+<div>Hiển thị 4 trong tổng số 47 chứng từ cần xử lý ca trực</div>
+<div class="flex items-center gap-1 font-data-tabular-code text-data-tabular-code">
+<button class="px-2 py-0.5 bg-pure-white border border-rule rounded text-ink-muted hover:text-ink disabled:opacity-50">«</button>
+<span class="px-2 py-0.5 bg-primary text-pure-white rounded font-bold">1</span>
+<button class="px-2 py-0.5 bg-pure-white border border-rule rounded text-ink hover:bg-blue-subtle">2</button>
+<button class="px-2 py-0.5 bg-pure-white border border-rule rounded text-ink hover:bg-blue-subtle">3</button>
+<button class="px-2 py-0.5 bg-pure-white border border-rule rounded text-ink hover:bg-blue-subtle">»</button>
+</div>
+</div>
+</div>
+</main>
+<!-- ========================================================================= -->
+<!-- INLINE VANILLA JAVASCRIPT: DRAWER & MICRO-INTERACTIONS -->
+<!-- ========================================================================= -->
+<script>
+    (function() {
+      // Elements
+      const rail = document.getElementById('sidebar-rail');
+      const backdrop = document.getElementById('drawer-backdrop');
+      const openBtn = document.getElementById('open-drawer-btn');
+      const closeBtn = document.getElementById('close-drawer-btn');
+
+      function openDrawer() {
+        rail.classList.remove('-translate-x-full');
+        backdrop.classList.remove('hidden');
+      }
+
+      function closeDrawer() {
+        rail.classList.add('-translate-x-full');
+        backdrop.classList.add('hidden');
+      }
+
+      if (openBtn) openBtn.addEventListener('click', openDrawer);
+      if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+      if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+      // Keyboard escape closes drawer
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          closeDrawer();
+        }
+      });
+    })();
+  </script>
+</body></html>

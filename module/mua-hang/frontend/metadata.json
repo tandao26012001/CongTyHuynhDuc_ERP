@@ -1,0 +1,6 @@
+{
+  "name": "Hệ Thống Mua Hàng & Quản Lý Sản Xuất",
+  "description": "Ứng dụng số hóa quy trình Đề nghị vật tư xưởng, So sánh báo giá NCC, Phê duyệt chứng từ và Kiểm tra chất lượng nhận hàng IQC xưởng sản xuất cơ khí.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
