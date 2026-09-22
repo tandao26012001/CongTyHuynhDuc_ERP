@@ -27,9 +27,9 @@ cd module/mua-hang/frontend
 npm run dev
 ```
 
-`npm run lint` và `npm run build` cũng dùng thư viện chung, không cần chạy
-`npm install` riêng trong `frontend/`. Khi tạo module mới, Python dùng lại môi
-trường trên nếu các phiên bản tương thích; Node tìm thư viện qua junction gốc.
+`npm run lint` và `npm run build` gọi các script ở `package.json` gốc và dùng
+thư viện chung; không chạy `npm install` riêng trong `frontend/`. Khi tạo module
+mới, khai báo script tương ứng ở gốc để tiếp tục dùng chung môi trường Node.
 Khi module cần thư viện/phiên bản mới, cập nhật môi trường chung theo
 `requirements.txt` hoặc `package.json` của module đó. Không dùng chung một phiên
 bản thư viện nếu các module có yêu cầu xung đột; lúc đó cần tách môi trường.

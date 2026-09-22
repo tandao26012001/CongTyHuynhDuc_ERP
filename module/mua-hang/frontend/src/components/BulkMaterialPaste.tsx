@@ -29,7 +29,7 @@ const sampleHeader = 'STT\tMÃ VẬT TƯ\tTÊN HÀNG - QUY CÁCH\tĐƠN VỊ TÍ
 const requiredColumns = new Set(['TÊN HÀNG - QUY CÁCH', 'ĐVT', 'SL', 'KỲ HẠN']);
 
 function parseRows(text: string): PreviewRow[] {
-  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line, index) => {
+  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map<PreviewRow>((line, index) => {
     const cells = line.split('\t').map((cell) => cell.trim());
     const source = cells.length >= 17
       ? [cells[0], cells[1], cells[2], cells[4], cells[5], cells[11], cells[12], cells[13], cells[14], cells[15], cells[16]]

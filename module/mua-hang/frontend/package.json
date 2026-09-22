@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "npm --prefix ../../.. run dev:mua-hang",
+    "build": "npm --prefix ../../.. run build:mua-hang",
+    "preview": "npm --prefix ../../.. exec vite preview module/mua-hang/frontend",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "npm --prefix ../../.. run lint:mua-hang"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
