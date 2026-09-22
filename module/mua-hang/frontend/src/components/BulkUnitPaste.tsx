@@ -37,11 +37,6 @@ export function BulkUnitPaste({ onClose, onImported, onError }: {
       setSubmitError('Chưa có dữ liệu để nhập. Hãy dán dữ liệu và bấm Xem trước trước khi submit.');
       return;
     }
-    const firstInvalidIndex = rows.findIndex((row) => !row.dvt || !row.ten_dvt || !Number.isInteger(row.so_le) || row.so_le < 0 || row.so_le > 4);
-    if (firstInvalidIndex >= 0) {
-      setSubmitError(`Dòng ${firstInvalidIndex + 1} chưa hợp lệ. Mã và tên đơn vị là bắt buộc; số lẻ phải là số nguyên từ 0 đến 4.`);
-      return;
-    }
     setSaving(true);
     setSubmitError('');
     setErrorDetails([]);
@@ -73,7 +68,7 @@ export function BulkUnitPaste({ onClose, onImported, onError }: {
         <button type="button" onClick={preview} className="min-h-11 px-5 bg-[#283A97] text-white font-bold rounded">XEM TRƯỚC DỮ LIỆU</button>
         {rows.length > 0 && <div className="overflow-x-auto border border-[#DCE1EC] rounded"><table className="w-full min-w-[650px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-2 text-left">MÃ ĐƠN VỊ *</th><th className="p-2 text-left">TÊN ĐƠN VỊ *</th><th className="p-2 text-right">SỐ LẺ</th><th className="p-2 w-14" /></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t"><td className="p-1"><input value={row.dvt} onChange={(event) => update(row.id, { dvt: event.target.value.toUpperCase() })} className={`w-full h-10 px-2 border rounded font-mono ${!row.dvt ? 'border-[#EE202E] bg-[#FDECEE]' : 'border-[#DCE1EC]'}`} /></td><td className="p-1"><input value={row.ten_dvt} onChange={(event) => update(row.id, { ten_dvt: event.target.value })} className={`w-full h-10 px-2 border rounded ${!row.ten_dvt ? 'border-[#EE202E] bg-[#FDECEE]' : 'border-[#DCE1EC]'}`} /></td><td className="p-1"><input type="number" min="0" max="4" value={row.so_le} onChange={(event) => update(row.id, { so_le: Number(event.target.value) })} className={`w-full h-10 px-2 border rounded text-right font-mono ${row.so_le < 0 || row.so_le > 4 || !Number.isInteger(row.so_le) ? 'border-[#EE202E] bg-[#FDECEE]' : 'border-[#DCE1EC]'}`} /></td><td className="p-1 text-center"><button onClick={() => setRows((current) => current.filter((item) => item.id !== row.id))} aria-label="Xóa dòng" className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td></tr>)}</tbody></table></div>}
       </div>
-      <footer className="p-4 border-t border-[#DCE1EC] flex justify-end gap-2"><button onClick={onClose} className="min-h-11 px-5 border border-[#DCE1EC] font-bold rounded">HỦY</button><button onClick={() => void save()} disabled={saving} className="min-h-11 px-5 bg-[#283A97] text-white font-bold rounded disabled:opacity-50">{saving ? 'ĐANG NHẬP…' : `NHẬP ${rows.length} DÒNG`}</button></footer>
+      <footer className="p-4 border-t border-[#DCE1EC] flex justify-end gap-2"><button onClick={onClose} disabled={saving} className="min-h-11 px-5 border border-[#DCE1EC] font-bold rounded disabled:opacity-50">HỦY</button><button onClick={() => void save()} disabled={saving} className="min-h-11 px-5 bg-[#283A97] text-white font-bold rounded disabled:opacity-50">{saving ? 'ĐANG LƯU…' : `NHẬP ${rows.length} DÒNG`}</button></footer>
     </div>
   </div>;
 }

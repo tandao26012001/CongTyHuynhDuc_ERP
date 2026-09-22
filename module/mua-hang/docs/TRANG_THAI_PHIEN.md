@@ -11,7 +11,7 @@
 - Đã có giao diện tạo, tìm vật tư và xem tồn khả dụng.
 - Form tạo đề nghị dùng danh mục đơn vị tính; gõ từ 2 ký tự ở tên hàng sẽ gợi ý vật tư và tự điền mã, đơn vị, mã vạch, tồn kho.
 - API mới: `GET /api/v1/don-vi-tinh`.
-- Tầng danh mục tương thích cả schema chuẩn và schema rút gọn hiện tại (`DANH_MUC_DONG`).
+- Tầng danh mục tương thích cả schema chuẩn và schema rút gọn hiện tại (`danh_muc_dong`).
 - Tồn kho trong module Mua hàng là dữ liệu tham chiếu chỉ đọc từ trường `DU_LIEU.ton_kho`; module không tính tồn và không ghi sổ kho.
 - Luồng cấp mã vật tư đã có backend F02 (`/api/v1/yeu-cau-cap-ma/...`), nhưng schema rút gọn hiện tại chưa có bảng/hàng đợi tương ứng nên chưa thể vận hành màn hình Kho cấp mã.
 

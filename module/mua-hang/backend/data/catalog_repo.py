@@ -3,7 +3,7 @@
 import json
 
 from psycopg import sql
-from psycopg.errors import UniqueViolation
+from psycopg.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
 from psycopg.types.json import Jsonb
 
 from backend.data.db import get_conn
@@ -39,7 +39,7 @@ def tim_vat_tu(tu_khoa: str, gioi_han: int):
                           CASE WHEN "TRANG_THAI"='DANG_SU_DUNG' THEN 'HOAT_DONG' ELSE "TRANG_THAI" END AS trang_thai,
                           CASE WHEN "DU_LIEU" ? 'ton_kho' THEN ("DU_LIEU"->>'ton_kho')::numeric ELSE NULL END AS ton_kho,
                           CASE WHEN lower("MA")=lower(%s) THEN 1.0 ELSE 0.8 END AS diem
-                   FROM "DANH_MUC_DONG"
+                   FROM danh_muc_dong
                    WHERE "MA_LOAI"='VT' AND "TRANG_THAI"='DANG_SU_DUNG'
                      AND ("MA" ILIKE %s OR "TEN" ILIKE %s)
                    ORDER BY diem DESC,"TEN" LIMIT %s''',
@@ -75,6 +75,136 @@ def tim_vat_tu(tu_khoa: str, gioi_han: int):
         ).fetchall()
 
 
+def lay_quy_tac_ma_vat_tu():
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT ma_quy_tac,kho,ma_nhom,ten_nhom,mau_ma,
+                      can_ma_vat_lieu,can_loai_hinh
+               FROM quy_tac_ma_vat_tu
+               WHERE trang_thai='HOAT_DONG'
+               ORDER BY thu_tu,ma_quy_tac"""
+        ).fetchall()
+
+
+def nhan_dien_quy_tac_ten(ten_khong_dau: str):
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT loai,tu_khoa,ten_chuan,ma_quy_uoc,uu_tien
+               FROM quy_tac_ten_hang WHERE trang_thai='HOAT_DONG'
+               ORDER BY CASE loai WHEN 'VAT_LIEU' THEN 1 WHEN 'BE_MAT' THEN 2 ELSE 3 END,
+                        uu_tien DESC,length(tu_khoa) DESC"""
+        ).fetchall()
+    ket_qua = []
+    for loai in ("VAT_LIEU", "BE_MAT", "MAU_SAC"):
+        match = next((dict(row) for row in rows if row["loai"] == loai and row["tu_khoa"] in ten_khong_dau), None)
+        if match:
+            ket_qua.append(match)
+    return ket_qua
+
+
+def lay_quy_tac_nhan_dien():
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT id,loai,tu_khoa,ten_chuan,ma_quy_uoc,uu_tien,trang_thai
+               FROM quy_tac_ten_hang
+               ORDER BY CASE loai WHEN 'VAT_LIEU' THEN 1 WHEN 'BE_MAT' THEN 2 ELSE 3 END,
+                        uu_tien DESC,tu_khoa"""
+        ).fetchall()
+
+
+def nhap_quy_tac_nhan_dien(danh_sach: list[dict]):
+    rows, errors = [], []
+    with get_conn() as conn:
+        for index, item in enumerate(danh_sach, 1):
+            dong = item.get("_dong", index)
+            try:
+                with conn.transaction():
+                    row = conn.execute(
+                        """INSERT INTO quy_tac_ten_hang
+                             (id,loai,tu_khoa,ten_chuan,ma_quy_uoc,uu_tien,trang_thai)
+                           VALUES(%(id)s,%(loai)s,%(tu_khoa)s,%(ten_chuan)s,%(ma_quy_uoc)s,%(uu_tien)s,'HOAT_DONG')
+                           RETURNING id,loai,tu_khoa,ten_chuan,ma_quy_uoc,uu_tien,trang_thai""",
+                        item,
+                    ).fetchone()
+                    rows.append(dict(row))
+            except UniqueViolation:
+                errors.append({"dong": dong, "ma": item.get("id", ""), "loi": "Mã hoặc từ khóa nhận diện đã tồn tại."})
+    return {"so_dong": len(rows), "items": rows, "co_loi": len(errors), "errors": errors}
+
+
+def nhap_chung_loai_hang_loat(danh_sach: list[dict], nguoi_tao: str):
+    rows, errors = [], []
+    with get_conn() as conn:
+        for index, item in enumerate(danh_sach, 1):
+            dong = item.get("_dong", index)
+            try:
+                with conn.transaction():
+                    row = conn.execute(
+                        """INSERT INTO chung_loai(ma_chung_loai,ten,thu_tu,nguoi_tao)
+                           VALUES(%(ma_chung_loai)s,%(ten)s,%(thu_tu)s,%(nguoi_tao)s)
+                           RETURNING ma_chung_loai AS ma,ten,thu_tu,phien_ban""",
+                        {**item, "nguoi_tao": nguoi_tao},
+                    ).fetchone()
+                    rows.append(dict(row))
+            except UniqueViolation:
+                errors.append({"dong": dong, "ma": item.get("ma_chung_loai", ""), "loi": "Mã hoặc tên chủng loại đã tồn tại."})
+    return {"so_dong": len(rows), "items": rows, "co_loi": len(errors), "errors": errors}
+
+
+def nhap_vat_tu_hang_loat_tung_dong(danh_sach: list[dict], nguoi_tao: str):
+    rows, errors = [], []
+    with get_conn() as conn:
+        for index, item in enumerate(danh_sach, 1):
+            dong = item.get("_dong", index)
+            try:
+                with conn.transaction():
+                    row = _tao_vat_tu(conn, item, nguoi_tao)
+                    rows.append(dict(row))
+            except UniqueViolation:
+                errors.append({"dong": dong, "ma": item.get("ma_vat_tu", ""), "loi": "Mã hoặc tên vật tư đã tồn tại."})
+            except (ForeignKeyViolation, CheckViolation) as exc:
+                errors.append({"dong": dong, "ma": item.get("ma_vat_tu", ""), "loi": "Đơn vị tính hoặc dữ liệu liên kết không hợp lệ."})
+    return {"so_dong": len(rows), "items": rows, "co_loi": len(errors), "errors": errors}
+
+
+def tao_tien_to_ma(quy_tac: dict, ma_vat_lieu: str | None, loai_hinh: str | None):
+    parts = [quy_tac["kho"], quy_tac["ma_nhom"]]
+    if quy_tac["can_ma_vat_lieu"] and ma_vat_lieu:
+        parts.extend(ma_vat_lieu.split("-"))
+    if quy_tac["can_loai_hinh"] and loai_hinh:
+        parts.append(loai_hinh)
+    return "-".join(parts)
+
+
+def xem_so_tiep_theo(khoa_ma: str):
+    with get_conn() as conn:
+        row = conn.execute("SELECT so_hien_tai+1 AS so_tiep FROM bo_dem_ma_vat_tu WHERE khoa_ma=%s", (khoa_ma,)).fetchone()
+        return row["so_tiep"] if row else 1
+
+
+def cap_ma_vat_tu(ma_quy_tac: str, ma_vat_lieu: str | None, loai_hinh: str | None):
+    with get_conn() as conn:
+        quy_tac = conn.execute(
+            """SELECT ma_quy_tac,kho,ma_nhom,mau_ma,can_ma_vat_lieu,can_loai_hinh
+               FROM quy_tac_ma_vat_tu
+               WHERE ma_quy_tac=%s AND trang_thai='HOAT_DONG' FOR SHARE""",
+            (ma_quy_tac,),
+        ).fetchone()
+        if not quy_tac:
+            return None
+        khoa_ma = tao_tien_to_ma(quy_tac, ma_vat_lieu, loai_hinh)
+        bo_dem = conn.execute(
+            """INSERT INTO bo_dem_ma_vat_tu(khoa_ma,so_hien_tai)
+               VALUES(%s,1)
+               ON CONFLICT(khoa_ma) DO UPDATE
+               SET so_hien_tai=bo_dem_ma_vat_tu.so_hien_tai+1,ngay_sua=now()
+               RETURNING so_hien_tai""",
+            (khoa_ma,),
+        ).fetchone()
+        stt = str(bo_dem["so_hien_tai"]).zfill(2)
+        return {"ma_vat_tu": f"{khoa_ma}-{stt}", "so_thu_tu": bo_dem["so_hien_tai"]}
+
+
 def lay_don_vi_tinh_hoat_dong():
     with get_conn() as conn:
         if conn.execute("SELECT to_regclass('mua_hang.don_vi_tinh') IS NOT NULL AS co").fetchone()["co"]:
@@ -85,7 +215,7 @@ def lay_don_vi_tinh_hoat_dong():
         return conn.execute(
             '''SELECT "MA" AS dvt,"TEN" AS ten_dvt,
                       coalesce(("DU_LIEU"->>'so_le')::smallint,0) AS so_le
-               FROM "DANH_MUC_DONG"
+               FROM danh_muc_dong
                WHERE "MA_LOAI"='DVT' AND "TRANG_THAI"='DANG_SU_DUNG'
                ORDER BY "TEN","MA"'''
         ).fetchall()
@@ -103,7 +233,7 @@ def nhap_don_vi_tinh_hang_loat(danh_sach: list[dict], nguoi_tao: str, khoa: str)
                 with conn.transaction():
                     if schema_rut_gon:
                         row = conn.execute(
-                            '''INSERT INTO "DANH_MUC_DONG"("ID","MA_LOAI","MA","TEN","DU_LIEU")
+                            '''INSERT INTO danh_muc_dong("ID","MA_LOAI","MA","TEN","DU_LIEU")
                                VALUES(%s,'DVT',%s,%s,%s)
                                ON CONFLICT ("ID") DO UPDATE SET "ID"=excluded."ID"
                                RETURNING "MA" AS dvt,"TEN" AS ten_dvt,
@@ -322,7 +452,7 @@ def tao_danh_muc(ma: str, du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: s
     if ma == "don-vi-tinh" and la_schema_rut_gon():
         with get_conn() as conn:
             row = conn.execute(
-                '''INSERT INTO "DANH_MUC_DONG"("ID","MA_LOAI","MA","TEN","DU_LIEU")
+                '''INSERT INTO danh_muc_dong("ID","MA_LOAI","MA","TEN","DU_LIEU")
                    VALUES(%s,'DVT',%s,%s,%s)
                    ON CONFLICT ("ID") DO UPDATE SET "ID"=excluded."ID"
                    RETURNING "MA" AS dvt,"TEN" AS ten_dvt,
@@ -408,7 +538,7 @@ def gia_tri_ton_tai(loai: str, gia_tri: str | None) -> bool:
             return False
         with get_conn() as conn:
             return conn.execute(
-                '''SELECT 1 FROM "DANH_MUC_DONG"
+                '''SELECT 1 FROM danh_muc_dong
                    WHERE "MA_LOAI"=%s AND ("MA"=%s OR "ID"=%s) AND "TRANG_THAI"='DANG_SU_DUNG' ''',
                 (ma_loai, gia_tri, gia_tri),
             ).fetchone() is not None
@@ -441,7 +571,7 @@ def tao_vat_tu(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str):
     if la_schema_rut_gon():
         with get_conn() as conn:
             row = conn.execute(
-                '''INSERT INTO "DANH_MUC_DONG"("ID","MA_LOAI","MA","TEN","DU_LIEU")
+                '''INSERT INTO danh_muc_dong("ID","MA_LOAI","MA","TEN","DU_LIEU")
                    VALUES(%s,'VT',%s,%s,%s)
                    ON CONFLICT ("ID") DO UPDATE SET "ID"=excluded."ID"
                    RETURNING "ID" AS id,"MA" AS ma_vat_tu,"TEN" AS ten_hang,

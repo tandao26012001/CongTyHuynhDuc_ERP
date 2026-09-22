@@ -9,4 +9,9 @@ BEGIN;
 \ir migrations/020_api_ghi_danh_muc.sql
 \ir migrations/021_hoan_thien_f01_de_nghi.sql
 \ir migrations/022_cho_phep_huy_de_nghi_nhap.sql
+\ir migrations/023_quy_tac_ma_vat_tu.sql
+\ir migrations/024_quy_tac_ten_hang.sql
+\ir migrations/025_bo_sung_chung_loai.sql
+\ir migrations/026_bo_sung_idempotency.sql
+\ir migrations/027_doi_ten_bang_ve_chu_thuong.sql
 COMMIT;

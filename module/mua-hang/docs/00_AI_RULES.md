@@ -78,7 +78,7 @@ he-thong-mua-hang/
 - **Sáu cột hệ thống trên mọi bảng giao dịch:** `ID` · `NGAY_TAO` · `NGUOI_TAO` · `NGAY_SUA` · `NGUOI_SUA` · `PHIEN_BAN`
 - **`ID` là chuỗi có tiền tố. CẤM dùng số tự tăng 1, 2, 3.**
 - Định dạng: ngày `YYYY-MM-DD` · ngày giờ `YYYY-MM-DD HH:MM:SS` múi giờ `Asia/Ho_Chi_Minh` · tiền VND số nguyên không thập phân · trạng thái là chuỗi mã không dấu · true/false · UTF-8, CSV xuất ra dùng UTF-8 có BOM.
-- Tên bảng và tên cột: **không dấu, viết hoa, nối bằng gạch dưới**.
+- Tên bảng trong PostgreSQL: **không dấu, viết thường, nối bằng gạch dưới (`snake_case`)**; cấm tạo bảng mới bằng định danh viết hoa có dấu ngoặc kép. Tên cột mới cũng ưu tiên `snake_case` viết thường để không phải dùng dấu ngoặc kép khi truy vấn.
 - Phân biệt rõ `NULL` (chưa nhập) và `0` (bằng không).
 - Báo cáo phải tính trực tiếp từ dữ liệu giao dịch gốc. **Cấm lấy file kết quả đã xuất làm đầu vào tính tiếp.**
 
@@ -102,6 +102,8 @@ he-thong-mua-hang/
 - Font **Roboto**, dự phòng `"Helvetica Neue", Arial, sans-serif`.
 - `HD-BLUE #283A97` là màu hành động chính. `HD-RED #EE202E` **chỉ** dùng cho logo, nhấn thương hiệu, và trạng thái nguy hiểm. **Không dùng đỏ cho nút Lưu / Tìm kiếm / Xác nhận.**
 - **Ba trạng thái giao diện ở MỌI màn hình:** Đang tải · Lỗi · Không có dữ liệu.
+- **Mọi form ghi dữ liệu phải phản hồi ngay tại nơi người dùng đang thao tác:** khi đang gửi phải khóa nút submit và hiện trạng thái `Đang lưu`; khi lỗi phải hiển thị cảnh báo màu đỏ ngay trong form/modal, không đặt lỗi ở lớp màn hình phía sau; khi lưu thành công phải hiện thông báo thành công, tự đóng form/modal và tải lại danh sách liên quan. Khi lỗi thì giữ form mở và giữ nguyên dữ liệu người dùng đã nhập để sửa.
+- **Nhập hàng loạt phải xử lý độc lập từng dòng:** dòng hợp lệ được ghi ngay; dòng trùng hoặc sai định dạng bị bỏ qua và giữ lại trên form kèm số dòng, mã và lý do lỗi để người dùng sửa rồi nhập lại. Cấm để một vài dòng lỗi chặn toàn bộ các dòng hợp lệ. Chỉ tự đóng modal khi không còn dòng lỗi; nếu còn lỗi phải thông báo rõ số dòng đã thêm và số dòng được giữ lại.
 - **Chín chức năng tối thiểu** (xem `07_FRONTEND_CHUAN.md` §2).
 - Màn hình dùng ở xưởng: vùng bấm ≥ 44×44 px, chữ ≥ 16 px, ưu tiên quét mã vạch, tối đa 3 bước cho nghiệp vụ thường xuyên.
 

@@ -65,6 +65,8 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
   const [unitsLoading, setUnitsLoading] = useState(true);
   const [unitsError, setUnitsError] = useState('');
   const [materialSuggestions, setMaterialSuggestions] = useState<Record<string, VatTuTraCuu[]>>({});
+  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     layDonViTinh()
@@ -129,7 +131,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
 
   const handleRemoveItem = (index: number) => {
     if (items.length <= 1) {
-      alert('Đề nghị vật tư cần có ít nhất 1 dòng vật tư.');
+      setSubmitError('Đề nghị vật tư cần có ít nhất 1 dòng vật tư.');
       return;
     }
     setItems((prev) => prev.filter((_, i) => i !== index));
@@ -154,14 +156,15 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError('');
     if (!productName.trim() || !deadline) {
-      alert('Vui lòng nhập tên sản phẩm và ngày cần vật tư.');
+      setSubmitError('Vui lòng nhập tên sản phẩm và ngày cần vật tư.');
       return;
     }
     if (items.some((it) => !it.name.trim() || !it.unit.trim() || it.quantity <= 0 || !it.deadline?.trim())) {
-      alert('Vui lòng nhập đủ tên hàng - quy cách, đơn vị tính, số lượng và kỳ hạn cho tất cả các dòng.');
+      setSubmitError('Vui lòng nhập đủ tên hàng - quy cách, đơn vị tính, số lượng và kỳ hạn cho tất cả các dòng.');
       return;
     }
 
@@ -190,13 +193,21 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
       comments: []
     };
 
-    onSubmitNewRequest(newRequest);
-    onNotify(`TẠO THÀNH CÔNG: Phiếu đề nghị vật tư [${newReqId}] đã được gửi tới Quản đốc xưởng phê duyệt!`);
-    onNavigate('requests');
+    setSubmitting(true);
+    try {
+      await Promise.resolve(onSubmitNewRequest(newRequest));
+      onNotify(`TẠO THÀNH CÔNG: Phiếu đề nghị vật tư [${newReqId}] đã được gửi tới Quản đốc xưởng phê duyệt!`);
+      onNavigate('requests');
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Không thể gửi đề nghị vật tư. Vui lòng thử lại.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 pb-24">
+      {submitError && <div role="alert" className="p-4 bg-[#FDECEE] border-l-4 border-[#EE202E] border-y border-r border-[#F9B9BE] text-[#C4141F] rounded flex items-start gap-2"><span className="material-symbols-outlined">error</span><div><strong>KHÔNG THỂ GỬI ĐỀ NGHỊ</strong><p className="mt-1 text-[13px]">{submitError}</p></div></div>}
       {/* Top Banner */}
       <div className="bg-white border border-[#DCE1EC] rounded p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -606,10 +617,11 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
 
           <button
             type="submit"
-            className="h-[38px] px-6 rounded bg-[#283A97] hover:bg-[#1E2C75] active:scale-[0.98] text-white font-condensed font-bold text-[12px] uppercase transition-all flex items-center gap-2 shadow-sm"
+            disabled={submitting}
+            className="h-[38px] px-6 rounded bg-[#283A97] hover:bg-[#1E2C75] active:scale-[0.98] text-white font-condensed font-bold text-[12px] uppercase transition-all flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-wait"
           >
-            <span className="material-symbols-outlined text-[19px]">send</span>
-            <span>GỬI DUYỆT NGAY ({items.length} DÒNG)</span>
+            <span className={`material-symbols-outlined text-[19px] ${submitting ? 'animate-spin' : ''}`}>{submitting ? 'progress_activity' : 'send'}</span>
+            <span>{submitting ? 'ĐANG LƯU…' : `GỬI DUYỆT NGAY (${items.length} DÒNG)`}</span>
           </button>
         </div>
       </footer>

@@ -140,3 +140,115 @@ export async function taoVatTu(input: { ma_vat_tu: string; ten_hang: string; dvt
     body: JSON.stringify({ ...input, phan_loai: 'THONG_DUNG_SX', trang_thai: 'HOAT_DONG' }),
   });
 }
+
+export interface QuyTacMaVatTu {
+  ma_quy_tac: string;
+  kho: 'TH' | 'VT' | 'TL';
+  ma_nhom: string;
+  ten_nhom: string;
+  mau_ma: string;
+  can_ma_vat_lieu: boolean;
+  can_loai_hinh: boolean;
+}
+
+export async function layQuyTacMaVatTu() {
+  return api<QuyTacMaVatTu[]>('/api/v1/quy-tac-ma-vat-tu');
+}
+
+export interface ChungLoai {
+  ma: string;
+  ten: string;
+  thu_tu: number | null;
+  phien_ban: number;
+}
+
+export interface QuyTacNhanDien {
+  id: string;
+  loai: 'VAT_LIEU' | 'BE_MAT' | 'MAU_SAC';
+  tu_khoa: string;
+  ten_chuan: string;
+  ma_quy_uoc: string;
+  uu_tien: number;
+  trang_thai: string;
+}
+
+export async function layChungLoai() {
+  const result = await api<{ items: ChungLoai[] }>('/api/v1/danh-muc/chung-loai?trang=1&kich_thuoc=100');
+  return result.items;
+}
+
+export async function layQuyTacNhanDien() {
+  return api<QuyTacNhanDien[]>('/api/v1/quy-tac-nhan-dien');
+}
+
+export async function taoChungLoai(input: { ma_chung_loai: string; ten: string; thu_tu?: number }) {
+  return api<{ item: ChungLoai }>('/api/v1/danh-muc/chung-loai', {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ du_lieu: input }),
+  });
+}
+
+export async function nhapChungLoaiHangLoat(rows: Array<{ ma_chung_loai: string; ten: string; thu_tu?: number }>) {
+  return api<{ so_dong: number; co_loi: number; errors: Array<{ dong: number; ma: string; loi: string }> }>('/api/v1/chung-loai/nhap-hang-loat', {
+    method: 'POST', body: JSON.stringify({ rows }),
+  });
+}
+
+export async function nhapQuyTacNhanDien(rows: Array<Omit<QuyTacNhanDien, 'trang_thai'>>) {
+  return api<{ so_dong: number; co_loi: number; errors: Array<{ dong: number; ma: string; loi: string }> }>('/api/v1/quy-tac-nhan-dien/nhap-hang-loat', {
+    method: 'POST', body: JSON.stringify({ rows }),
+  });
+}
+
+export async function capMaVatTu(input: { ma_quy_tac: string; ma_vat_lieu?: string; loai_hinh?: string }) {
+  return api<{ ma_vat_tu: string; so_thu_tu: number }>('/api/v1/vat-tu/cap-ma', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function duKienMaVatTu(input: { ma_quy_tac: string; ten_hang: string; loai_hinh?: string }) {
+  return api<{ ma_du_kien: string; ten_de_xuat: string; ma_vat_lieu: string | null; can_bo_sung: boolean }>('/api/v1/vat-tu/du-kien-ma', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export interface DongNhapVatTu {
+  ma_vat_tu: string;
+  ten_hang: string;
+  dvt: string;
+  quy_cach?: string;
+  ghi_chu?: string;
+  phan_loai?: string;
+  trang_thai?: string;
+}
+
+export interface KetQuaXemTruocNhapVatTu {
+  tong_so: number;
+  hop_le: number;
+  co_loi: number;
+  co_canh_bao: number;
+  chi_tiet: Array<{ dong: number; hop_le: boolean; loi: string[]; canh_bao_trung: unknown[] }>;
+  ma_xac_nhan: string;
+}
+
+export async function xemTruocNhapVatTu(rows: DongNhapVatTu[]) {
+  return api<KetQuaXemTruocNhapVatTu>('/api/v1/danh-muc/nhap-hang-loat/xem-truoc', {
+    method: 'POST',
+    body: JSON.stringify({ loai: 'vat-tu', rows }),
+  });
+}
+
+export async function xacNhanNhapVatTu(rows: DongNhapVatTu[], maXacNhan: string, xacNhanCanhBao = false) {
+  return api<{ so_dong?: number; items?: VatTuTraCuu[] }>('/api/v1/danh-muc/nhap-hang-loat/xac-nhan', {
+    method: 'POST',
+    headers: idempotencyHeaders(),
+    body: JSON.stringify({ loai: 'vat-tu', rows, ma_xac_nhan: maXacNhan, xac_nhan_canh_bao: xacNhanCanhBao }),
+  });
+}
+
+export async function nhapVatTuHangLoatTungDong(rows: DongNhapVatTu[]) {
+  return api<{ so_dong: number; co_loi: number; errors: Array<{ dong: number; ma: string; loi: string }> }>('/api/v1/vat-tu/nhap-hang-loat', {
+    method: 'POST', body: JSON.stringify({ rows }),
+  });
+}

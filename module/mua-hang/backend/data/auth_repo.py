@@ -8,7 +8,13 @@ from backend.data.db import get_conn
 
 
 def _co_mo_hinh_chuan(conn) -> bool:
-    return conn.execute("SELECT to_regclass('mua_hang.tai_khoan') IS NOT NULL AS co").fetchone()["co"]
+    return conn.execute(
+        """SELECT EXISTS (
+             SELECT 1 FROM information_schema.columns
+             WHERE table_schema='mua_hang' AND table_name='tai_khoan'
+               AND column_name='ma_tai_khoan'
+           ) AS co"""
+    ).fetchone()["co"]
 
 
 def _bam_token(token: str) -> str:
@@ -27,7 +33,7 @@ def lay_tai_khoan(ma_tai_khoan: str):
                           "MAT_KHAU_HASH" AS mat_khau_hash,
                           CASE WHEN "DANG_HOAT_DONG" THEN 'HOAT_DONG' ELSE 'KHOA' END AS trang_thai,
                           1 AS phien_ban
-                   FROM "TAI_KHOAN"
+                   FROM tai_khoan
                    WHERE lower("MA_TAI_KHOAN")=lower(%s)
                    LIMIT 1""",
                 (ma_tai_khoan,),
@@ -74,9 +80,9 @@ def tao_phien(ma_tai_khoan: str, token: str, ip: str | None, thiet_bi: str | Non
     with get_conn() as conn:
         if not _co_mo_hinh_chuan(conn):
             now = datetime.now(timezone.utc)
-            conn.execute('DELETE FROM "PHIEN" WHERE "NGAY_HET_HAN" <= now()')
+            conn.execute('DELETE FROM phien WHERE "NGAY_HET_HAN" <= now()')
             conn.execute(
-                """INSERT INTO "PHIEN"(
+                """INSERT INTO phien(
                      "ID","TOKEN_HASH","MA_TAI_KHOAN","NGAY_HET_HAN","NGAY_TAO","NGAY_SUA"
                    ) VALUES(%s,%s,%s,%s,%s,%s)""",
                 ("PHIEN-" + secrets.token_hex(12).upper(), _bam_token(token), ma_tai_khoan,
@@ -112,8 +118,8 @@ def lay_ho_so_tu_token(token: str):
                           CASE WHEN t."DANG_HOAT_DONG" THEN 'HOAT_DONG' ELSE 'KHOA' END AS trang_thai,
                           1 AS phien_ban,
                           p."NGAY_HET_HAN" AS het_han
-                   FROM "PHIEN" p
-                   JOIN "TAI_KHOAN" t ON t."MA_TAI_KHOAN"=p."MA_TAI_KHOAN"
+                   FROM phien p
+                   JOIN tai_khoan t ON t."MA_TAI_KHOAN"=p."MA_TAI_KHOAN"
                    WHERE p."TOKEN_HASH"=%s
                      AND p."NGAY_HET_HAN">now()
                      AND t."DANG_HOAT_DONG"=true""",
@@ -131,7 +137,7 @@ def lay_ho_so_tu_token(token: str):
 def xoa_phien(token: str) -> None:
     with get_conn() as conn:
         if not _co_mo_hinh_chuan(conn):
-            conn.execute('DELETE FROM "PHIEN" WHERE "TOKEN_HASH"=%s', (_bam_token(token),))
+            conn.execute('DELETE FROM phien WHERE "TOKEN_HASH"=%s', (_bam_token(token),))
             return
         conn.execute("DELETE FROM phien_dang_nhap WHERE token=%s", (token,))
 
@@ -153,10 +159,10 @@ def doi_mat_khau(ma_tai_khoan: str, mat_khau_hash: str) -> None:
     with get_conn() as conn:
         if not _co_mo_hinh_chuan(conn):
             conn.execute(
-                'UPDATE "TAI_KHOAN" SET "MAT_KHAU_HASH"=%s,"NGAY_SUA"=now() WHERE "MA_TAI_KHOAN"=%s',
+                'UPDATE tai_khoan SET "MAT_KHAU_HASH"=%s,"NGAY_SUA"=now() WHERE "MA_TAI_KHOAN"=%s',
                 (mat_khau_hash, ma_tai_khoan),
             )
-            conn.execute('DELETE FROM "PHIEN" WHERE "MA_TAI_KHOAN"=%s', (ma_tai_khoan,))
+            conn.execute('DELETE FROM phien WHERE "MA_TAI_KHOAN"=%s', (ma_tai_khoan,))
             return
         conn.execute(
             "UPDATE tai_khoan SET mat_khau_hash=%s,nguoi_sua=ma_nhan_vien WHERE ma_tai_khoan=%s",
@@ -170,7 +176,7 @@ def cap_nhat_hash_dang_nhap(ma_tai_khoan: str, mat_khau_hash: str) -> None:
     with get_conn() as conn:
         if not _co_mo_hinh_chuan(conn):
             conn.execute(
-                'UPDATE "TAI_KHOAN" SET "MAT_KHAU_HASH"=%s,"NGAY_SUA"=now() WHERE "MA_TAI_KHOAN"=%s',
+                'UPDATE tai_khoan SET "MAT_KHAU_HASH"=%s,"NGAY_SUA"=now() WHERE "MA_TAI_KHOAN"=%s',
                 (mat_khau_hash, ma_tai_khoan),
             )
             return
