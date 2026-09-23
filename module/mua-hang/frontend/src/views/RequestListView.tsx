@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { MaterialRequest, NavigationTab } from '../types';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 
 interface RequestListViewProps {
   requests: MaterialRequest[];
   onNavigate: (tab: NavigationTab) => void;
   onSelectRequest: (request: MaterialRequest) => void;
   onNotify: (msg: string) => void;
+  onDeleteRequests: (ids: Set<string>) => void;
 }
 
 function dinhDangNgayHienThi(value: string) {
@@ -17,7 +19,8 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
   requests,
   onNavigate,
   onSelectRequest,
-  onNotify
+  onNotify,
+  onDeleteRequests
 }) => {
   const [startDate, setStartDate] = useState('2026-08-01');
   const [endDate, setEndDate] = useState('2026-08-28');
@@ -40,6 +43,14 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
     }
     return true;
   });
+  const selection = useRowSelection(filtered.map((request) => request.id));
+
+  function deleteRequests(ids: Set<string>) {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'đề nghị vật tư')) return;
+    onDeleteRequests(ids);
+    selection.clearSelection();
+    onNotify(`Đã xoá ${ids.size} đề nghị vật tư.`);
+  }
 
   const getStatusBadge = (status: MaterialRequest['status'], text: string) => {
     switch (status) {
@@ -262,10 +273,12 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
 
       {/* DATA TABLE */}
       <div className="bg-white border border-[#DCE1EC] rounded shadow-sm overflow-hidden">
+        <div className="p-3 border-b border-[#DCE1EC]"><RowSelectionActions total={filtered.length} selectedCount={selection.selectedCount} allSelected={selection.allSelected} onToggleAll={selection.toggleAll} onDeleteSelected={() => deleteRequests(selection.selected)} onDeleteAll={() => deleteRequests(new Set(filtered.map((request) => request.id)))} /></div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-[#F4F6FA] border-b border-[#DCE1EC] font-condensed font-bold text-[11px] text-[#59627A] uppercase tracking-wider">
+                <th className="p-3 w-10 text-center"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả đề nghị" /></th>
                 <th className="p-3 w-32">MÃ ĐỀ NGHỊ</th>
                 <th className="p-3 w-28">NGÀY TẠO</th>
                 <th className="p-3">BỘ PHẬN</th>
@@ -274,6 +287,7 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
                 <th className="p-3 text-center w-24">SỐ DÒNG</th>
                 <th className="p-3">TRẠNG THÁI</th>
                 <th className="p-3 text-right">GIÁ DỰ TOÁN</th>
+                <th className="p-3 w-14" />
                 {/* <th className="p-3 text-center w-24">THAO TÁC</th> */}
               </tr>
             </thead>
@@ -287,13 +301,14 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
                     onNavigate('request-detail');
                   }}
                   className={`hover:bg-[#EEF0F9]/40 cursor-pointer transition-colors ${
-                    req.status === 'TRE_HAN'
+                    selection.selected.has(req.id) ? 'bg-[#EEF0F9]' : req.status === 'TRE_HAN'
                       ? 'bg-[#FFFDFD] border-l-4 border-l-[#EE202E]'
                       : req.id === 'DN-2026-000123'
                       ? 'bg-[#EEF0F9]/20'
                       : ''
                   }`}
                 >
+                  <td className="p-3 text-center" onClick={(event) => event.stopPropagation()}><SelectionCheckbox checked={selection.selected.has(req.id)} onChange={() => selection.toggle(req.id)} label={`Chọn đề nghị ${req.id}`} /></td>
                   <td className="p-3">
                     <span className="font-mono font-bold text-[#283A97] hover:underline">
                       {req.id}
@@ -323,6 +338,7 @@ export const RequestListView: React.FC<RequestListViewProps> = ({
                   <td className="p-3 text-right font-mono font-bold text-[#0E1220]">
                     {req.totalEstimatedPrice.toLocaleString('vi-VN')} đ
                   </td>
+                  <td className="p-1 text-center" onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => deleteRequests(new Set([req.id]))} aria-label={`Xoá đề nghị ${req.id}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td>
 
                   {/* <td
                     className="p-3 text-center"

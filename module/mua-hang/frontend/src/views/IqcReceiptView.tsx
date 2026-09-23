@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IqcInspectionItem } from '../types';
 import { INITIAL_IQC_ITEMS } from '../data/initialData';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 
 interface IqcReceiptViewProps {
   onNotify: (msg: string) => void;
@@ -32,6 +33,20 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
       url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=400&q=80'
     }
   ]);
+  const itemSelection = useRowSelection(items.map((item) => item.sku));
+  const photoSelection = useRowSelection(photos.map((photo) => String(photo.id)));
+
+  function deleteItems(ids: Set<string>) {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'dòng kiểm nhận')) return;
+    setItems((current) => current.filter((item) => !ids.has(item.sku)));
+    itemSelection.clearSelection();
+  }
+
+  function deletePhotos(ids: Set<string>) {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'ảnh kiểm tra')) return;
+    setPhotos((current) => current.filter((photo) => !ids.has(String(photo.id))));
+    photoSelection.clearSelection();
+  }
 
   const handleAdjustQty = (index: number, delta: number) => {
     setItems((prev) =>
@@ -230,10 +245,15 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
           </span>
         </div>
 
+        <div className="p-3 border-b border-[#DCE1EC]">
+          <RowSelectionActions total={items.length} selectedCount={itemSelection.selectedCount} allSelected={itemSelection.allSelected} onToggleAll={itemSelection.toggleAll} onDeleteSelected={() => deleteItems(itemSelection.selected)} onDeleteAll={() => deleteItems(new Set(items.map((item) => item.sku)))} />
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
               <tr className="bg-[#F4F6FA] border-b border-[#DCE1EC] font-condensed font-bold text-[11px] text-[#59627A] uppercase tracking-wider">
+                <th className="p-3 w-10 text-center"><SelectionCheckbox checked={itemSelection.allSelected} onChange={itemSelection.toggleAll} label="Chọn tất cả dòng kiểm nhận" /></th>
                 <th className="p-3 w-12 text-center">STT</th>
                 <th className="p-3">TÊN VẬT TƯ / MÃ SKU / TIÊU CHUẨN</th>
                 <th className="p-3 w-28 text-center">S.LƯỢNG TRÊN PO</th>
@@ -241,6 +261,7 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
                 <th className="p-3 w-28 text-center">ĐƠN VỊ TÍNH</th>
                 <th className="p-3 w-36">KẾT QUẢ ĐO KIỂM KỸ THUẬT</th>
                 <th className="p-3">TÌNH TRẠNG &amp; GHI CHÚ</th>
+                <th className="p-3 w-14" />
               </tr>
             </thead>
 
@@ -251,11 +272,12 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
                   <tr
                     key={item.sku}
                     className={`transition-colors ${
-                      isShort
+                      itemSelection.selected.has(item.sku) ? 'bg-[#EEF0F9]' : isShort
                         ? 'bg-[#FFFDFD] border-l-4 border-l-[#EE202E]'
                         : 'hover:bg-[#EEF0F9]/30'
                     }`}
                   >
+                    <td className="p-3 text-center"><SelectionCheckbox checked={itemSelection.selected.has(item.sku)} onChange={() => itemSelection.toggle(item.sku)} label={`Chọn dòng ${item.name}`} /></td>
                     <td className="p-3 text-center font-mono font-bold text-[#59627A]">
                       {item.stt}
                     </td>
@@ -316,6 +338,7 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
                     <td className="p-3">
                       <p className="text-[12px] text-[#59627A] leading-relaxed">{item.note}</p>
                     </td>
+                    <td className="p-2 text-center"><button type="button" onClick={() => deleteItems(new Set([item.sku]))} aria-label={`Xóa dòng ${item.name}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td>
                   </tr>
                 );
               })}
@@ -357,12 +380,14 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-3"><RowSelectionActions total={photos.length} selectedCount={photoSelection.selectedCount} allSelected={photoSelection.allSelected} onToggleAll={photoSelection.toggleAll} onDeleteSelected={() => deletePhotos(photoSelection.selected)} onDeleteAll={() => deletePhotos(new Set(photos.map((photo) => String(photo.id))))} /></div>
           {photos.map((photo) => (
             <div
               key={photo.id}
               className="border border-[#DCE1EC] rounded overflow-hidden bg-[#F4F6FA] group hover:border-[#283A97] transition-all"
             >
               <div className="h-40 overflow-hidden relative">
+                <label className="absolute z-10 top-2 left-2 w-10 h-10 bg-white/95 rounded flex items-center justify-center shadow cursor-pointer"><SelectionCheckbox checked={photoSelection.selected.has(String(photo.id))} onChange={() => photoSelection.toggle(String(photo.id))} label={`Chọn ảnh ${photo.caption}`} /></label>
                 <img
                   src={photo.url}
                   alt={photo.caption}
@@ -374,7 +399,7 @@ export const IqcReceiptView: React.FC<IqcReceiptViewProps> = ({ onNotify }) => {
                 </div>
               </div>
               <div className="p-2.5 text-[12px] text-[#0E1220] font-medium leading-snug">
-                {photo.caption}
+                <div className="flex items-start justify-between gap-2"><span>{photo.caption}</span><button type="button" onClick={() => deletePhotos(new Set([String(photo.id)]))} aria-label={`Xóa ảnh ${photo.caption}`} className="min-w-10 min-h-10 text-[#EE202E] shrink-0"><span className="material-symbols-outlined">delete</span></button></div>
               </div>
             </div>
           ))}

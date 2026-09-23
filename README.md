@@ -1,21 +1,27 @@
-# Môi trường dùng chung của ERP
+# Môi trường phát triển của ERP
 
 Các module nằm trong `module/`. Cấu hình kết nối dùng chung ở `.env` tại gốc repo
-(file này không được đưa vào Git). Công cụ và thư viện đã cài ở thư mục
-`../CongTyHuynhDuc_ERP_env/`, **bên ngoài repo**:
+(file này không được đưa vào Git). Môi trường Python nằm trong `.venv/` ngay tại
+gốc repo và không được đưa vào Git:
 
-- `Scripts/python.exe`: Python 3.14 và các thư viện backend hiện có.
-- `node_modules/`: thư viện frontend hiện có. `node_modules` ở gốc repo là
+- `.venv/Scripts/python.exe`: Python 3.14 và các thư viện backend hiện có.
+- `../CongTyHuynhDuc_ERP_env/node_modules/`: thư viện frontend hiện có. `node_modules` ở gốc repo là
   junction trỏ tới thư mục này; mã nguồn không chứa bản sao thư viện.
 - Node.js, npm và uv đã cài trên máy; npm dùng bộ nhớ đệm chung của người dùng.
 
-VS Code được cấu hình chọn sẵn Python chung qua `.vscode/settings.json`.
+VS Code được cấu hình chọn sẵn Python trong project qua `.vscode/settings.json`.
 
-Trong PowerShell, chạy từ gốc repo:
+Khởi tạo môi trường Python lần đầu từ PowerShell ở gốc repo:
 
 ```powershell
-$sharedEnv = Join-Path (Split-Path (Get-Location).Path -Parent) 'CongTyHuynhDuc_ERP_env'
-& (Join-Path $sharedEnv 'Scripts/Activate.ps1')
+uv venv .venv --python 3.14
+uv pip install --python .venv/Scripts/python.exe -r module/mua-hang/requirements.txt
+```
+
+Chạy backend:
+
+```powershell
+& .\.venv\Scripts\Activate.ps1
 cd module/mua-hang
 python run.py
 ```
@@ -25,6 +31,13 @@ python run.py
 ```powershell
 cd module/mua-hang/frontend
 npm run dev
+```
+
+Chạy kiểm thử backend từ thư mục gốc repo:
+
+```powershell
+cd module/mua-hang
+& ..\..\.venv\Scripts\python.exe -X utf8 -m pytest tests -q
 ```
 
 `npm run lint` và `npm run build` gọi các script ở `package.json` gốc và dùng

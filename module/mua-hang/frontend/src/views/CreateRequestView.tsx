@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DonViTinh, HoSo, layDonViTinh, timVatTu, VatTuTraCuu } from '../api/client';
 import { BulkMaterialPaste } from '../components/BulkMaterialPaste';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 import { MaterialRequest, MaterialItem, NavigationTab } from '../types';
 
 interface CreateRequestViewProps {
@@ -67,6 +68,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
   const [materialSuggestions, setMaterialSuggestions] = useState<Record<string, VatTuTraCuu[]>>({});
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const itemSelection = useRowSelection(items.map((item) => item.id));
 
   useEffect(() => {
     layDonViTinh()
@@ -104,6 +106,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
   }
 
   const [attachedPhotos, setAttachedPhotos] = useState<Array<{ name: string; size: string; url: string; type: 'image' | 'pdf' }>>([]);
+  const attachmentSelection = useRowSelection(attachedPhotos.map((file) => file.url));
 
   const totalEstimate = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
@@ -129,12 +132,16 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
     setItems((prev) => [...prev, newItem]);
   };
 
-  const handleRemoveItem = (index: number) => {
-    if (items.length <= 1) {
-      setSubmitError('Đề nghị vật tư cần có ít nhất 1 dòng vật tư.');
-      return;
-    }
-    setItems((prev) => prev.filter((_, i) => i !== index));
+  const deleteItems = (ids: Set<string>) => {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'dòng vật tư')) return;
+    setItems((prev) => prev.filter((item) => !ids.has(item.id)));
+    itemSelection.clearSelection();
+  };
+
+  const deleteAttachments = (ids: Set<string>) => {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'tệp đính kèm')) return;
+    setAttachedPhotos((prev) => prev.filter((file) => !ids.has(file.url)));
+    attachmentSelection.clearSelection();
   };
 
   async function checkMaterialCode(index: number) {
@@ -161,6 +168,10 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
     setSubmitError('');
     if (!productName.trim() || !deadline) {
       setSubmitError('Vui lòng nhập tên sản phẩm và ngày cần vật tư.');
+      return;
+    }
+    if (!items.length) {
+      setSubmitError('Đề nghị vật tư cần có ít nhất 1 dòng. Hãy thêm dòng vật tư trước khi gửi.');
       return;
     }
     if (items.some((it) => !it.name.trim() || !it.unit.trim() || it.quantity <= 0 || !it.deadline?.trim())) {
@@ -386,6 +397,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
         </div>
 
         <div className="p-4 space-y-4">
+          <RowSelectionActions total={items.length} selectedCount={itemSelection.selectedCount} allSelected={itemSelection.allSelected} onToggleAll={itemSelection.toggleAll} onDeleteSelected={() => deleteItems(itemSelection.selected)} onDeleteAll={() => deleteItems(new Set(items.map((item) => item.id)))} disabled={submitting} />
           {items.map((item, idx) => (
             <div
               key={item.id}
@@ -393,6 +405,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
             >
               <div className="flex items-center justify-between border-b border-[#EDF0F6] pb-2">
                 <div className="flex items-center gap-2">
+                  <SelectionCheckbox checked={itemSelection.selected.has(item.id)} onChange={() => itemSelection.toggle(item.id)} label={`Chọn dòng vật tư ${idx + 1}`} />
                   <span className="w-6 h-6 rounded-full bg-[#EEF0F9] text-[#283A97] font-mono font-bold text-[12px] flex items-center justify-center">
                     {idx + 1}
                   </span>
@@ -408,7 +421,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => handleRemoveItem(idx)}
+                  onClick={() => deleteItems(new Set([item.id]))}
                   className="text-[#EE202E] hover:bg-[#FDECEE] p-1 rounded text-[12px] flex items-center gap-1"
                   title="Xóa dòng"
                 >
@@ -542,12 +555,14 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
 
           {/* Previews */}
           <div className="space-y-2">
+            <RowSelectionActions total={attachedPhotos.length} selectedCount={attachmentSelection.selectedCount} allSelected={attachmentSelection.allSelected} onToggleAll={attachmentSelection.toggleAll} onDeleteSelected={() => deleteAttachments(attachmentSelection.selected)} onDeleteAll={() => deleteAttachments(new Set(attachedPhotos.map((file) => file.url)))} disabled={submitting} />
             {attachedPhotos.map((p, i) => (
               <div
                 key={p.name + i}
                 className="p-2.5 border border-[#DCE1EC] rounded bg-white flex items-center justify-between text-[12.5px]"
               >
                 <div className="flex items-center gap-2 overflow-hidden">
+                  <SelectionCheckbox checked={attachmentSelection.selected.has(p.url)} onChange={() => attachmentSelection.toggle(p.url)} label={`Chọn tệp ${p.name}`} />
                   {p.type === 'image' ? <img src={p.url} alt={p.name} className="w-9 h-9 object-cover rounded border border-[#DCE1EC] shrink-0" /> : <span className="w-9 h-9 flex items-center justify-center bg-[#FDECEE] text-[#EE202E] border border-[#F9B9BE] rounded material-symbols-outlined">picture_as_pdf</span>}
                   <div className="truncate">
                     <span className="font-bold text-[#0E1220] block truncate">{p.name}</span>
@@ -556,7 +571,7 @@ export const CreateRequestView: React.FC<CreateRequestViewProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setAttachedPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                  onClick={() => deleteAttachments(new Set([p.url]))}
                   className="text-[#EE202E] p-1 hover:bg-[#FDECEE] rounded"
                   title="Xóa tệp"
                 >

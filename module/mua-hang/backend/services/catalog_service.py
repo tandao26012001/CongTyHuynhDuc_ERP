@@ -146,12 +146,62 @@ def tim_vat_tu(tu_khoa: str, gioi_han: int = 20) -> list[dict]:
     return [dict(r) for r in catalog_repo.tim_vat_tu(q, min(max(gioi_han, 1), 50))]
 
 
+def danh_sach_vat_tu(bo_loc: dict | None = None, trang: int = 1, kich_thuoc: int = 25) -> dict:
+    bo_loc = bo_loc or {}
+    bo_loc_chuan = {
+        "tu_khoa": _khong_dau(bo_loc.get("tu_khoa", "")),
+        "ma_vat_tu": str(bo_loc.get("ma_vat_tu", "")).strip().lower(),
+        "ten_hang": _khong_dau(bo_loc.get("ten_hang", "")),
+        "dvt": str(bo_loc.get("dvt", "")).strip().upper(),
+        "trang_thai": str(bo_loc.get("trang_thai", "")).strip().upper(),
+    }
+    trang = max(trang, 1)
+    kich_thuoc = min(max(kich_thuoc, 1), 100)
+    rows, total = catalog_repo.danh_sach_vat_tu(
+        bo_loc_chuan, (trang - 1) * kich_thuoc, kich_thuoc
+    )
+    return {
+        "items": [dict(row) for row in rows],
+        "tong": total,
+        "trang": trang,
+        "kich_thuoc": kich_thuoc,
+    }
+
+
 def lay_quy_tac_ma_vat_tu() -> list[dict]:
     return [dict(row) for row in catalog_repo.lay_quy_tac_ma_vat_tu()]
 
 
 def lay_quy_tac_nhan_dien() -> list[dict]:
     return [dict(row) for row in catalog_repo.lay_quy_tac_nhan_dien()]
+
+
+def _xoa_ban_ghi(thao_tac, ma: str, ten: str) -> dict:
+    try:
+        da_xoa = thao_tac(ma)
+    except ForeignKeyViolation:
+        raise LoiNghiepVu(
+            f"Không thể xoá {ten} vì đang được dữ liệu khác sử dụng.", "DANG_DUOC_SU_DUNG"
+        ) from None
+    if not da_xoa:
+        raise KhongTimThay(f"Không tìm thấy {ten} cần xoá.")
+    return {"da_xoa": True, "ma": ma}
+
+
+def xoa_don_vi_tinh(dvt: str) -> dict:
+    return _xoa_ban_ghi(catalog_repo.xoa_don_vi_tinh, dvt, "đơn vị tính")
+
+
+def xoa_chung_loai(ma: str) -> dict:
+    return _xoa_ban_ghi(catalog_repo.xoa_chung_loai, ma, "chủng loại")
+
+
+def xoa_quy_tac_nhan_dien(id_quy_tac: str) -> dict:
+    return _xoa_ban_ghi(catalog_repo.xoa_quy_tac_nhan_dien, id_quy_tac, "quy tắc nhận diện")
+
+
+def xoa_vat_tu(id_vat_tu: str) -> dict:
+    return _xoa_ban_ghi(catalog_repo.xoa_vat_tu, id_vat_tu, "vật tư")
 
 
 def nhap_quy_tac_nhan_dien(rows: list[dict]) -> dict:
@@ -163,15 +213,29 @@ def nhap_quy_tac_nhan_dien(rows: list[dict]) -> dict:
             loai = _ma(row.get("loai"), "Loại quy tắc", 20)
             if loai not in {"VAT_LIEU", "BE_MAT", "MAU_SAC"}:
                 raise ThieuDuLieu("Loại quy tắc phải là VAT_LIEU, BE_MAT hoặc MAU_SAC.", "SAI_LOAI_QUY_TAC")
+            ten_thuc_te = _chuoi(
+                row.get("ten_thuc_te") or row.get("ten_chuan") or row.get("tu_khoa"),
+                "Tên hàng / Vật liệu thực tế", 100,
+            )
+            tu_khoa = _khong_dau(
+                re.sub(r"[*`]", "", str(row.get("tu_khoa") or ten_thuc_te))
+            ).upper()
+            ma_quy_uoc = _ma(row.get("ma_quy_uoc"), "Mã quy ước", 30)
+            tien_to = {"VAT_LIEU": "VL", "BE_MAT": "BM", "MAU_SAC": "MS"}[loai]
+            ma_ngan = re.sub(r"[^A-Z0-9]+", "-", ma_quy_uoc).strip("-")[:14]
+            dau_vet = hashlib.sha1(tu_khoa.encode("utf-8")).hexdigest()[:8].upper()
+            id_quy_tac = f"{tien_to}-{ma_ngan}-{dau_vet}"
             chuan.append({
-                "id": _ma(row.get("id"), "Mã quy tắc", 30), "loai": loai,
-                "tu_khoa": _ma(row.get("tu_khoa"), "Từ khóa", 100),
-                "ten_chuan": _chuoi(row.get("ten_chuan"), "Tên chuẩn", 100),
-                "ma_quy_uoc": _ma(row.get("ma_quy_uoc"), "Mã quy ước", 30),
-                "uu_tien": int(row.get("uu_tien") or 0), "_dong": dong,
+                "id": id_quy_tac, "loai": loai, "tu_khoa": tu_khoa,
+                "ten_chuan": re.sub(r"[*`]", "", ten_thuc_te).strip(),
+                "ma_quy_uoc": ma_quy_uoc,
+                "vi_du_ten_hang": _chuoi(row.get("vi_du_ten_hang"), "Ví dụ tên hàng", 300, False),
+                "vi_du_ma_vat_tu": _chuoi(row.get("vi_du_ma_vat_tu"), "Ví dụ mã vật tư", 100, False),
+                "uu_tien": int(row.get("uu_tien") if row.get("uu_tien") is not None else 50),
+                "_dong": dong,
             })
         except (LoiNghiepVu, ValueError, TypeError) as exc:
-            errors.append({"dong": dong, "ma": str(row.get("id") or ""), "loi": str(exc)})
+            errors.append({"dong": dong, "ma": str(row.get("ma_quy_uoc") or ""), "loi": str(exc)})
     result = catalog_repo.nhap_quy_tac_nhan_dien(chuan) if chuan else {"so_dong": 0, "items": [], "co_loi": 0, "errors": []}
     result["errors"] = errors + result["errors"]
     result["co_loi"] = len(result["errors"])
@@ -199,9 +263,10 @@ def nhap_vat_tu_hang_loat_tung_dong(rows: list[dict], nguoi_tao: str) -> dict:
     if not rows or len(rows) > 500:
         raise ThieuDuLieu("Danh sách phải có từ 1 đến 500 dòng.", "SO_DONG_KHONG_HOP_LE")
     chuan, errors = [], []
+    tham_chieu = catalog_repo.lay_tham_chieu_chuan_vat_tu()
     for dong, row in enumerate(rows, 1):
         try:
-            item = _chuan_vat_tu(row)
+            item = _chuan_vat_tu(row, tham_chieu)
             item["_dong"] = dong
             chuan.append(item)
         except (LoiNghiepVu, ValueError, TypeError) as exc:
@@ -229,6 +294,28 @@ def cap_ma_vat_tu(ma_quy_tac: str, ma_vat_lieu: str | None, loai_hinh: str | Non
     return result
 
 
+def cap_ma_vat_tu_hang_loat(rows: list[dict]) -> list[dict]:
+    if not rows or len(rows) > 500:
+        raise ThieuDuLieu("Danh sách phải có từ 1 đến 500 dòng.", "SO_DONG_KHONG_HOP_LE")
+    quy_tac_theo_ma = {
+        row["ma_quy_tac"]: row for row in lay_quy_tac_ma_vat_tu()
+    }
+    prefixes = []
+    for row in rows:
+        ma_quy_tac = _ma(row.get("ma_quy_tac"), "Quy tắc mã", 30)
+        quy_tac = quy_tac_theo_ma.get(ma_quy_tac)
+        if not quy_tac:
+            raise KhongTimThay("Không tìm thấy quy tắc mã vật tư.", "KHONG_TIM_THAY_QUY_TAC_MA")
+        mvl = _ma(row.get("ma_vat_lieu"), "Mã vật liệu", 40) if quy_tac["can_ma_vat_lieu"] else None
+        if mvl and not re.fullmatch(r"[A-Z0-9]{2,10}(-[A-Z0-9]{2,10})*", mvl):
+            raise ThieuDuLieu("Mã vật liệu/đặc tính không đúng quy tắc.", "SAI_MA_VAT_LIEU")
+        loai = _ma(row.get("loai_hinh"), "Loại hình", 2) if quy_tac["can_loai_hinh"] and row.get("loai_hinh") else None
+        if loai and loai not in LOAI_HINH_VT:
+            raise ThieuDuLieu("Loại hình phải là ON, VU, CU, CV hoặc HO.", "SAI_LOAI_HINH")
+        prefixes.append(catalog_repo.tao_tien_to_ma(quy_tac, mvl, loai))
+    return catalog_repo.cap_ma_vat_tu_hang_loat(prefixes)
+
+
 def du_kien_ma_vat_tu(ma_quy_tac: str, ten_hang: str, loai_hinh: str | None = None) -> dict:
     ten = _chuoi(ten_hang, "Tên vật tư", 300, False) or ""
     quy_tac = next((row for row in lay_quy_tac_ma_vat_tu() if row["ma_quy_tac"] == ma_quy_tac), None)
@@ -243,6 +330,55 @@ def du_kien_ma_vat_tu(ma_quy_tac: str, ten_hang: str, loai_hinh: str | None = No
     prefix = catalog_repo.tao_tien_to_ma(quy_tac, ma_vat_lieu, loai)
     so_tiep = catalog_repo.xem_so_tiep_theo(prefix)
     return {"ma_du_kien": f"{prefix}-{str(so_tiep).zfill(2)}", "ten_de_xuat": re.sub(r"\s+", " ", ten.upper()).strip(), "ma_vat_lieu": ma_vat_lieu, "can_bo_sung": False}
+
+
+def du_kien_ma_vat_tu_hang_loat(rows: list[dict]) -> list[dict]:
+    if not rows or len(rows) > 500:
+        raise ThieuDuLieu("Danh sách phải có từ 1 đến 500 dòng.", "SO_DONG_KHONG_HOP_LE")
+
+    danh_sach_quy_tac, danh_sach_nhan_dien, danh_sach_bo_dem = catalog_repo.lay_du_lieu_du_kien_ma_hang_loat()
+    quy_tac_theo_ma = {row["ma_quy_tac"]: row for row in danh_sach_quy_tac}
+    bo_dem = {row["khoa_ma"]: row["so_hien_tai"] for row in danh_sach_bo_dem}
+    da_dung: dict[str, int] = {}
+    ket_qua = []
+
+    for row in rows:
+        try:
+            ma_quy_tac = _ma(row.get("ma_quy_tac"), "Quy tắc mã", 30)
+            ten = _chuoi(row.get("ten_hang"), "Tên vật tư", 300, False) or ""
+            quy_tac = quy_tac_theo_ma.get(ma_quy_tac)
+            if not quy_tac:
+                raise KhongTimThay("Không tìm thấy quy tắc mã vật tư.", "KHONG_TIM_THAY_QUY_TAC_MA")
+
+            thanh_phan = catalog_repo.nhan_dien_quy_tac_ten_tu_danh_sach(
+                _khong_dau(ten).upper(), danh_sach_nhan_dien
+            )
+            ma_vat_lieu = "-".join(item["ma_quy_uoc"] for item in thanh_phan) or None
+            if quy_tac["can_ma_vat_lieu"] and not ma_vat_lieu:
+                ket_qua.append({
+                    "ma_du_kien": quy_tac["mau_ma"].replace("{STT}", "[tự cấp]"),
+                    "ten_de_xuat": ten.upper(), "ma_vat_lieu": None,
+                    "can_bo_sung": True, "loi": None,
+                })
+                continue
+
+            loai = _ma(row.get("loai_hinh"), "Loại hình", 2) if row.get("loai_hinh") else None
+            if loai and loai not in LOAI_HINH_VT:
+                raise ThieuDuLieu("Loại hình phải là ON, VU, CU, CV hoặc HO.", "SAI_LOAI_HINH")
+            prefix = catalog_repo.tao_tien_to_ma(quy_tac, ma_vat_lieu, loai)
+            so_tiep = bo_dem.get(prefix, 0) + da_dung.get(prefix, 0) + 1
+            da_dung[prefix] = da_dung.get(prefix, 0) + 1
+            ket_qua.append({
+                "ma_du_kien": f"{prefix}-{str(so_tiep).zfill(2)}",
+                "ten_de_xuat": re.sub(r"\s+", " ", ten.upper()).strip(),
+                "ma_vat_lieu": ma_vat_lieu, "can_bo_sung": False, "loi": None,
+            })
+        except LoiNghiepVu as exc:
+            ket_qua.append({
+                "ma_du_kien": "", "ten_de_xuat": str(row.get("ten_hang") or "").upper(),
+                "ma_vat_lieu": None, "can_bo_sung": False, "loi": str(exc),
+            })
+    return ket_qua
 
 
 def lay_don_vi_tinh_hoat_dong() -> list[dict]:
@@ -333,19 +469,23 @@ def _trang_thai(value, tap_hop: set[str]) -> str:
     return result
 
 
-def _chuan_vat_tu(du_lieu: dict) -> dict:
+def _chuan_vat_tu(du_lieu: dict, tham_chieu: dict | None = None) -> dict:
     ma = _ma(du_lieu.get("ma_vat_tu"), "Mã vật tư", 40)
-    if not catalog_repo.la_schema_rut_gon() and not RE_MA_VAT_TU.fullmatch(ma):
+    rut_gon = tham_chieu["rut_gon"] if tham_chieu is not None else catalog_repo.la_schema_rut_gon()
+    if not rut_gon and not RE_MA_VAT_TU.fullmatch(ma):
         raise ThieuDuLieu("Mã vật tư không đúng quy tắc đã đăng ký.", "SAI_MA_VAT_TU")
     ten = _chuoi(du_lieu.get("ten_hang"), "Tên hàng", 300)
     dvt = _ma(du_lieu.get("dvt"), "Đơn vị tính", 20)
-    if not catalog_repo.gia_tri_ton_tai("dvt", dvt):
+    dvt_ton_tai = dvt in tham_chieu["don_vi_tinh"] if tham_chieu is not None else catalog_repo.gia_tri_ton_tai("dvt", dvt)
+    if not dvt_ton_tai:
         raise ThieuDuLieu("Đơn vị tính không tồn tại.", "THAM_CHIEU_KHONG_TON_TAI")
     chung_loai = _chuoi(du_lieu.get("ma_chung_loai"), "Mã chủng loại", 20, False)
-    if chung_loai and not catalog_repo.gia_tri_ton_tai("chung_loai", chung_loai):
+    chung_loai_ton_tai = chung_loai in tham_chieu["chung_loai"] if tham_chieu is not None else catalog_repo.gia_tri_ton_tai("chung_loai", chung_loai)
+    if chung_loai and not chung_loai_ton_tai:
         raise ThieuDuLieu("Chủng loại không tồn tại.", "THAM_CHIEU_KHONG_TON_TAI")
     id_goc = _chuoi(du_lieu.get("id_vt_goc"), "Vật tư gốc", 20, False)
-    if id_goc and not catalog_repo.gia_tri_ton_tai("vat_tu", id_goc):
+    id_goc_ton_tai = id_goc in tham_chieu["vat_tu"] if tham_chieu is not None else catalog_repo.gia_tri_ton_tai("vat_tu", id_goc)
+    if id_goc and not id_goc_ton_tai:
         raise ThieuDuLieu("Vật tư gốc không tồn tại.", "THAM_CHIEU_KHONG_TON_TAI")
     phan_loai = _trang_thai(du_lieu.get("phan_loai", "THONG_DUNG_SX"), PHAN_LOAI_VT)
     loai_phoi = _chuoi(du_lieu.get("loai_phoi"), "Loại phôi", 4, False)
@@ -582,6 +722,50 @@ def _chuan_theo_loai(loai: str, row: dict) -> dict:
     return _chuan_danh_muc(loai, row)
 
 
+def _hoan_tat_xem_truoc(loai: str, rows: list[dict], ket_qua: list[dict], danh_sach_chuan: list[dict]) -> dict:
+    payload = {"loai": loai, "rows": danh_sach_chuan}
+    ma_xac_nhan = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":")).encode()
+    ).hexdigest()
+    return {
+        "loai": loai, "tong_so": len(rows), "hop_le": sum(1 for x in ket_qua if x["hop_le"]),
+        "co_loi": sum(1 for x in ket_qua if x["loi"]),
+        "co_canh_bao": sum(1 for x in ket_qua if x["canh_bao_trung"]),
+        "chi_tiet": ket_qua, "ma_xac_nhan": ma_xac_nhan, "du_lieu_chuan_hoa": danh_sach_chuan,
+    }
+
+
+def _xem_truoc_vat_tu_hang_loat(rows: list[dict]) -> dict:
+    da_chuan: list[tuple[dict | None, list[str]]] = []
+    de_kiem_tra = []
+    tham_chieu = catalog_repo.lay_tham_chieu_chuan_vat_tu()
+    for stt, row in enumerate(rows, 1):
+        try:
+            chuan = _chuan_vat_tu(row, tham_chieu)
+            da_chuan.append((chuan, []))
+            de_kiem_tra.append({"dong": stt, **chuan})
+        except LoiNghiepVu as exc:
+            da_chuan.append((None, [str(exc)]))
+
+    trung_theo_dong = catalog_repo.tim_trung_vat_tu_hang_loat(de_kiem_tra)
+    ket_qua, danh_sach_chuan, da_gap = [], [], {}
+    for stt, (chuan, loi) in enumerate(da_chuan, 1):
+        canh_bao = []
+        if chuan is not None:
+            chan, canh_bao = _tach_trung(trung_theo_dong.get(stt, []), "vat-tu")
+            if chan:
+                loi.append("Mã hoặc tên vật tư đã tồn tại")
+            khoa = (chuan["ma_vat_tu"], chuan["ten_khong_dau"])
+            for gia_tri in khoa:
+                if gia_tri and ("vat-tu", gia_tri) in da_gap:
+                    loi.append(f"Trùng với dòng {da_gap[('vat-tu', gia_tri)]} trong tệp nhập")
+                elif gia_tri:
+                    da_gap[("vat-tu", gia_tri)] = stt
+            danh_sach_chuan.append(chuan)
+        ket_qua.append({"dong": stt, "hop_le": not loi, "loi": loi, "canh_bao_trung": canh_bao})
+    return _hoan_tat_xem_truoc("vat-tu", rows, ket_qua, danh_sach_chuan)
+
+
 def xem_truoc_nhap_hang_loat(loai: str, rows: list[dict]) -> dict:
     if loai not in LOAI_NHAP_LO:
         raise KhongTimThay("Loại danh mục không hỗ trợ nhập hàng loạt.", "LOAI_NHAP_KHONG_HOP_LE")
@@ -589,6 +773,8 @@ def xem_truoc_nhap_hang_loat(loai: str, rows: list[dict]) -> dict:
         raise ThieuDuLieu("Danh sách nhập không được rỗng.")
     if len(rows) > 500:
         raise ThieuDuLieu("Mỗi lần chỉ được nhập tối đa 500 dòng.", "VUOT_GIOI_HAN_NHAP")
+    if loai == "vat-tu":
+        return _xem_truoc_vat_tu_hang_loat(rows)
     ket_qua, danh_sach_chuan = [], []
     da_gap = {}
     for stt, row in enumerate(rows, 1):
@@ -622,16 +808,7 @@ def xem_truoc_nhap_hang_loat(loai: str, rows: list[dict]) -> dict:
         if chuan is not None:
             danh_sach_chuan.append(chuan)
         ket_qua.append({"dong": stt, "hop_le": not loi, "loi": loi, "canh_bao_trung": canh_bao})
-    payload = {"loai": loai, "rows": danh_sach_chuan}
-    ma_xac_nhan = hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":")).encode()
-    ).hexdigest()
-    return {
-        "loai": loai, "tong_so": len(rows), "hop_le": sum(1 for x in ket_qua if x["hop_le"]),
-        "co_loi": sum(1 for x in ket_qua if x["loi"]),
-        "co_canh_bao": sum(1 for x in ket_qua if x["canh_bao_trung"]),
-        "chi_tiet": ket_qua, "ma_xac_nhan": ma_xac_nhan, "du_lieu_chuan_hoa": danh_sach_chuan,
-    }
+    return _hoan_tat_xem_truoc(loai, rows, ket_qua, danh_sach_chuan)
 
 
 def xac_nhan_nhap_hang_loat(

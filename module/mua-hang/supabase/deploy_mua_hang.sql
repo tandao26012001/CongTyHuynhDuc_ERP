@@ -14,4 +14,7 @@ BEGIN;
 \ir migrations/025_bo_sung_chung_loai.sql
 \ir migrations/026_bo_sung_idempotency.sql
 \ir migrations/027_doi_ten_bang_ve_chu_thuong.sql
+\ir migrations/028_quy_tac_nhan_dien_theo_mau_excel.sql
+\ir migrations/029_tach_bang_don_vi_tinh.sql
+\ir migrations/030_tach_bang_vat_tu.sql
 COMMIT;

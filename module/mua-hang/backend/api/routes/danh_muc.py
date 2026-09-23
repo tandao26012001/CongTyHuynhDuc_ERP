@@ -75,10 +75,18 @@ class CapMaVatTuBody(BaseModel):
     loai_hinh: str | None = None
 
 
+class CapMaVatTuHangLoatBody(BaseModel):
+    rows: list[CapMaVatTuBody]
+
+
 class DuKienMaVatTuBody(BaseModel):
     ma_quy_tac: str
     ten_hang: str = ""
     loai_hinh: str | None = None
+
+
+class DuKienMaVatTuHangLoatBody(BaseModel):
+    rows: list[DuKienMaVatTuBody]
 
 
 class NhaCungCapBody(BaseModel):
@@ -238,6 +246,21 @@ def tim_vat_tu(request: Request, q: str, gioi_han: int = 20):
     return thanh_cong(catalog_service.tim_vat_tu(q, gioi_han))
 
 
+@router.get("/vat-tu", summary="Danh sách vật tư có bộ lọc và phân trang", response_model=PhanHoi)
+def danh_sach_vat_tu(
+    request: Request, q: str = "", ma_vat_tu: str = "", ten_hang: str = "",
+    dvt: str = "", trang_thai: str = "", trang: int = 1, kich_thuoc: int = 25,
+):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
+    return thanh_cong(catalog_service.danh_sach_vat_tu({
+        "tu_khoa": q,
+        "ma_vat_tu": ma_vat_tu,
+        "ten_hang": ten_hang,
+        "dvt": dvt,
+        "trang_thai": trang_thai,
+    }, trang, kich_thuoc))
+
+
 @router.get("/quy-tac-ma-vat-tu", summary="Danh sách quy tắc cấp mã vật tư", response_model=PhanHoi)
 def danh_sach_quy_tac_ma_vat_tu(request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
@@ -248,6 +271,12 @@ def danh_sach_quy_tac_ma_vat_tu(request: Request):
 def danh_sach_quy_tac_nhan_dien(request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
     return thanh_cong(catalog_service.lay_quy_tac_nhan_dien())
+
+
+@router.delete("/quy-tac-nhan-dien/{id_quy_tac}", summary="Xoá quy tắc nhận diện", response_model=PhanHoi)
+def xoa_quy_tac_nhan_dien(id_quy_tac: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "sua")
+    return thanh_cong(catalog_service.xoa_quy_tac_nhan_dien(id_quy_tac))
 
 
 @router.post("/quy-tac-nhan-dien/nhap-hang-loat", summary="Thêm một hoặc nhiều quy tắc nhận diện", response_model=PhanHoi)
@@ -276,10 +305,26 @@ def cap_ma_vat_tu(body: CapMaVatTuBody, request: Request):
     return thanh_cong(catalog_service.cap_ma_vat_tu(body.ma_quy_tac, body.ma_vat_lieu, body.loai_hinh))
 
 
+@router.post("/vat-tu/cap-ma-hang-loat", summary="Cấp mã cho nhiều vật tư", response_model=PhanHoi)
+def cap_ma_vat_tu_hang_loat(body: CapMaVatTuHangLoatBody, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "sua")
+    return thanh_cong(catalog_service.cap_ma_vat_tu_hang_loat(
+        [row.model_dump() for row in body.rows]
+    ))
+
+
 @router.post("/vat-tu/du-kien-ma", summary="Xem mã vật tư dự kiến theo tên hàng", response_model=PhanHoi)
 def du_kien_ma_vat_tu(body: DuKienMaVatTuBody, request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
     return thanh_cong(catalog_service.du_kien_ma_vat_tu(body.ma_quy_tac, body.ten_hang, body.loai_hinh))
+
+
+@router.post("/vat-tu/du-kien-ma-hang-loat", summary="Xem mã dự kiến cho nhiều vật tư", response_model=PhanHoi)
+def du_kien_ma_vat_tu_hang_loat(body: DuKienMaVatTuHangLoatBody, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
+    return thanh_cong(catalog_service.du_kien_ma_vat_tu_hang_loat(
+        [row.model_dump() for row in body.rows]
+    ))
 
 
 @router.get("/don-vi-tinh", summary="Danh sách đơn vị tính đang sử dụng", response_model=PhanHoi)
@@ -289,6 +334,18 @@ def lay_don_vi_tinh(request: Request):
     except KhongCoQuyen:
         phan_quyen_service.kiem_quyen(lay_ho_so(request), "de_nghi", "xem")
     return thanh_cong(catalog_service.lay_don_vi_tinh_hoat_dong())
+
+
+@router.delete("/don-vi-tinh/{dvt}", summary="Xoá đơn vị tính", response_model=PhanHoi)
+def xoa_don_vi_tinh(dvt: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "sua")
+    return thanh_cong(catalog_service.xoa_don_vi_tinh(dvt))
+
+
+@router.delete("/chung-loai/{ma_chung_loai}", summary="Xoá chủng loại", response_model=PhanHoi)
+def xoa_chung_loai(ma_chung_loai: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "sua")
+    return thanh_cong(catalog_service.xoa_chung_loai(ma_chung_loai))
 
 
 @router.post("/don-vi-tinh/nhap-hang-loat", summary="Nhập hàng loạt đơn vị tính", response_model=PhanHoi)
@@ -328,6 +385,12 @@ def tao_vat_tu(
 def lay_vat_tu(id_vat_tu: str, request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
     return thanh_cong(catalog_service.lay_vat_tu(id_vat_tu))
+
+
+@router.delete("/vat-tu/{id_vat_tu}", summary="Xoá vật tư", response_model=PhanHoi)
+def xoa_vat_tu(id_vat_tu: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "sua")
+    return thanh_cong(catalog_service.xoa_vat_tu(id_vat_tu))
 
 
 @router.patch("/vat-tu/{id_vat_tu}", summary="Sửa vật tư", response_model=PhanHoi)

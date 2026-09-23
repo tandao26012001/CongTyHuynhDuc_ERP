@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialRequest, RequestComment, NavigationTab } from '../types';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 
 interface RequestDetailViewProps {
   request: MaterialRequest;
   onNavigate: (tab: NavigationTab) => void;
   onApproveRequest: (id: string) => void;
   onNotify: (msg: string) => void;
+  onUpdateRequest: (request: MaterialRequest) => void;
 }
 
 export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
   request,
   onNavigate,
   onApproveRequest,
-  onNotify
+  onNotify,
+  onUpdateRequest
 }) => {
   const [comments, setComments] = useState<RequestComment[]>(
     request.comments || [
@@ -47,7 +50,7 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
 
   const [newComment, setNewComment] = useState('');
 
-  const items = request.items || [
+  const defaultItems = [
     {
       id: '1',
       code: 'VT-CK-00412',
@@ -82,6 +85,18 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
       note: 'Cấp bổ sung máy phay CNC #02'
     }
   ];
+  const [items, setItems] = useState(request.items || defaultItems);
+  const selection = useRowSelection(items.map((item) => item.id));
+
+  useEffect(() => { setItems(request.items || defaultItems); }, [request]);
+
+  function deleteItems(ids: Set<string>) {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'dòng vật tư')) return;
+    const next = items.filter((item) => !ids.has(item.id));
+    setItems(next); selection.clearSelection();
+    onUpdateRequest({ ...request, items: next, lineCount: next.length });
+    onNotify(`Đã xoá ${ids.size} dòng vật tư khỏi đề nghị.`);
+  }
 
   const total = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
 
@@ -259,10 +274,12 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
           </span>
         </div>
 
+        <div className="p-3 border-b border-[#DCE1EC]"><RowSelectionActions total={items.length} selectedCount={selection.selectedCount} allSelected={selection.allSelected} onToggleAll={selection.toggleAll} onDeleteSelected={() => deleteItems(selection.selected)} onDeleteAll={() => deleteItems(new Set(items.map((item) => item.id)))} /></div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="bg-[#F4F6FA] border-b border-[#DCE1EC] font-condensed font-bold text-[11px] text-[#59627A] uppercase tracking-wider">
+                <th className="p-3 w-10 text-center"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả dòng vật tư" /></th>
                 <th className="p-3 w-10 text-center">STT</th>
                 <th className="p-3">MÃ &amp; TÊN VẬT TƯ / QUY CÁCH KỸ THUẬT</th>
                 <th className="p-3 w-28 text-center">ĐƠN VỊ TÍNH</th>
@@ -270,6 +287,7 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
                 <th className="p-3 w-28 text-center">TỒN KHO</th>
                 <th className="p-3 w-36 text-right">ĐƠN GIÁ DỰ KIẾN</th>
                 <th className="p-3 w-40 text-right">THÀNH TIỀN DỰ TOÁN</th>
+                <th className="p-3 w-14" />
               </tr>
             </thead>
 
@@ -277,7 +295,8 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
               {items.map((item, idx) => {
                 const sub = item.quantity * item.unitPrice;
                 return (
-                  <tr key={item.id} className="hover:bg-[#EEF0F9]/30 transition-colors">
+                  <tr key={item.id} className={selection.selected.has(item.id) ? 'bg-[#EEF0F9]' : 'hover:bg-[#EEF0F9]/30 transition-colors'}>
+                    <td className="p-3 text-center"><SelectionCheckbox checked={selection.selected.has(item.id)} onChange={() => selection.toggle(item.id)} label={`Chọn ${item.name}`} /></td>
                     <td className="p-3 text-center font-mono font-bold text-[#59627A]">{idx + 1}</td>
 
                     <td className="p-3">
@@ -316,18 +335,20 @@ export const RequestDetailView: React.FC<RequestDetailViewProps> = ({
                     <td className="p-3 text-right font-mono font-bold text-[#0E1220] text-[14px]">
                       {sub.toLocaleString('vi-VN')} đ
                     </td>
+                    <td className="p-1 text-center"><button type="button" onClick={() => deleteItems(new Set([item.id]))} aria-label={`Xoá ${item.name}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td>
                   </tr>
                 );
               })}
 
               {/* Total Summary Row */}
               <tr className="bg-[#F4F6FA] font-bold border-t-2 border-[#DCE1EC]">
-                <td colSpan={6} className="p-3 text-right font-condensed uppercase text-[#0E1220]">
+                <td colSpan={7} className="p-3 text-right font-condensed uppercase text-[#0E1220]">
                   TỔNG CỘNG GIÁ TRỊ VẬT TƯ (TẠM TÍNH):
                 </td>
                 <td className="p-3 text-right font-mono text-[16px] text-[#283A97]">
                   {total.toLocaleString('vi-VN')} VNĐ
                 </td>
+                <td />
               </tr>
             </tbody>
           </table>

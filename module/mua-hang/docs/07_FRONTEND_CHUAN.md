@@ -251,6 +251,8 @@ function veTrangThai(el, trangThai, {loi, thuLai, trong} = {}) {
 ```
 
 **Quy tắc bảng chi tiết:**
+- Mọi danh sách dòng có thể chỉnh sửa phải có checkbox **chọn từng dòng / chọn tất cả**, nút **Xóa đã chọn / Xóa tất cả**, và nút **Xóa dòng** tại từng dòng. Xoá hàng loạt phải hỏi xác nhận và chỉ xoá đúng phạm vi đã chọn.
+- Quy tắc chọn/xoá cũng áp dụng cho bảng hiển thị dữ liệu có quyền xoá; thanh hành động hàng loạt phải nằm ngoài bảng. Không cung cấp xoá cho nhật ký kiểm toán hoặc bản ghi nghiệp vụ đã được quy định là bất biến.
 - Thêm dòng bằng **một phím** (Enter ở dòng cuối, hoặc nút `+`).
 - Ô mã vật tư là **combobox tìm mờ**: gõ 2 ký tự → gợi ý; chọn xong tự điền tên hàng, ĐVT, chủng loại.
 - Không có kết quả → nút **"Chưa có mã? Gửi yêu cầu cấp mã"** ngay trong dropdown.
@@ -492,3 +494,4 @@ luồng        flow · fstep · buoc · buoc-h · buoc-n · breaker
 - [ ] Phím `Tab` đi đúng thứ tự, có viền focus nhìn thấy được
 - [ ] Xử lý 409 không làm mất dữ liệu người dùng đang gõ
 - [ ] Không gọi API trong vòng lặp render (N+1 ở frontend)
+- [ ] Form nhiều dòng có đủ chọn từng dòng, chọn tất cả, xoá đã chọn, xoá tất cả và xoá từng dòng

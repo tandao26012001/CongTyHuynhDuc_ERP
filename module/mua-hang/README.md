@@ -10,12 +10,12 @@ hay commit. Backend tự đọc file này bất kể chạy lệnh từ thư m�
 `DB_SCHEMA` mặc định là `mua_hang` cho module này.
 
 ```bash
-# Dùng môi trường Python chung ../CongTyHuynhDuc_ERP_env (xem README gốc).
+# Dùng môi trường Python `.venv` ở gốc repo (xem README gốc).
 python run.py  # -> http://127.0.0.1:8010  Swagger: /docs
 ```
 
-Trên Windows PowerShell, từ gốc repo kích hoạt môi trường chung:
-`& (Join-Path (Split-Path (Get-Location).Path -Parent) 'CongTyHuynhDuc_ERP_env/Scripts/Activate.ps1')`,
+Trên Windows PowerShell, từ gốc repo kích hoạt môi trường của project:
+`& .\.venv\Scripts\Activate.ps1`,
 sau đó `cd module/mua-hang` và `python run.py`. Các module tạo sau cần được
 cấu hình đọc cùng `.env` gốc; `.env` không tự động áp dụng cho mọi công cụ.
 

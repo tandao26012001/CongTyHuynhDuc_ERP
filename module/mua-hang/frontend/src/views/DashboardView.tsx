@@ -1,12 +1,14 @@
 import React from 'react';
 import { HoSo } from '../api/client';
 import { MaterialRequest, NavigationTab } from '../types';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 
 interface DashboardViewProps {
   requests: MaterialRequest[];
   onNavigate: (tab: NavigationTab) => void;
   pendingTasksCount: number;
   currentUser: HoSo;
+  onDeleteRequests: (ids: Set<string>) => void;
 }
 
 const modules: Array<{ title: string; sub: string; icon: string; badge: string; description: string; tags: string[]; action: string; tab: NavigationTab; critical?: boolean }> = [
@@ -24,8 +26,14 @@ const alerts = [
   ['LÔ HÀNG IQC KHÔNG ĐẠT', '#IQC-2024-0419', 'Kiểm tra Cổng số 1', 'Bu lông lục giác chìm 12.9 M16x80 có độ cứng không đạt chứng nhận CO/CQ. Yêu cầu lập biên bản hoàn trả ngay.', 'LẬP BIÊN BẢN TRẢ HÀNG']
 ];
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ requests, onNavigate, pendingTasksCount, currentUser }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ requests, onNavigate, pendingTasksCount, currentUser, onDeleteRequests }) => {
   const displayName = currentUser.ho_va_ten || currentUser.ma_tai_khoan;
+  const recentRequests = requests.slice(0, 4);
+  const selection = useRowSelection(recentRequests.map((request) => request.id));
+  const deleteRequests = (ids: Set<string>) => {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'chứng từ')) return;
+    onDeleteRequests(ids); selection.clearSelection();
+  };
   const metrics = [
     ['CHỜ PHÊ DUYỆT', pendingTasksCount, 'chứng từ', '7 phiếu khẩn < 2h', 'assignment_turned_in', false],
     ['TRỄ HẠN XỬ LÝ / GIAO', 47, 'báo động đỏ', 'Dừng dây chuyền tiện 03', 'warning', true],
@@ -68,7 +76,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ requests, onNaviga
 
       <section className="bg-white border border-[#DCE1EC] overflow-hidden">
         <header className="p-3 border-b border-[#DCE1EC] flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-condensed font-bold text-[14px]">HÀNG ĐỢI XỬ LÝ GẦN ĐÂY - PHÂN XƯỞNG CƠ KHÍ SỐ 2</h2><p className="text-[10px] text-[#8A93AA]">Danh sách chứng từ yêu cầu kiểm tra đối chiếu trước 15:00</p></div><div className="flex gap-2"><button className="border border-[#DCE1EC] h-8 px-3 text-[10px] font-bold">XUẤT BÁO CÁO</button><button className="bg-[#092081] text-white h-8 px-3 text-[10px] font-bold">LÀM MỚI</button></div></header>
-        <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-[#F4F6FA] text-[#59627A] text-[9px] font-condensed font-bold"><tr>{['MÃ CHỨNG TỪ','LOẠI NGHIỆP VỤ','MÔ TẢ CHI TIẾT VẬT TƯ','BỘ PHẬN YÊU CẦU','THỜI HẠN','TRẠNG THÁI','THAO TÁC'].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#EDF0F6] text-[10px]">{requests.slice(0, 4).map((request: MaterialRequest) => { const danger = request.status === 'TRE_HAN' || request.status === 'BAT_KHA_THI'; return <tr key={request.id} className={`hover:bg-[#EEF0F9]/50 ${danger ? 'border-l-2 border-l-[#EE202E]' : ''}`}><td className={`px-3 py-3 font-mono font-bold ${danger ? 'text-[#C4141F]' : 'text-[#092081]'}`}>#{request.id}</td><td className="px-3 py-3 font-bold">Đề nghị vật tư</td><td className="px-3 py-3 max-w-[280px]">{request.lsxItem}</td><td className="px-3 py-3">{request.department}</td><td className={`px-3 py-3 font-mono ${danger ? 'text-[#EE202E] font-bold' : 'text-[#59627A]'}`}>{request.deadline}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 font-condensed font-bold text-[9px] ${danger ? 'bg-[#EE202E] text-white' : 'bg-[#EEF0F9] text-[#092081]'}`}>{request.statusText}</span></td><td className="px-3 py-3 text-right"><button onClick={() => onNavigate('request-detail')} className={`h-7 px-2 font-condensed font-bold text-[9px] ${danger ? 'bg-[#C4141F] text-white' : 'border border-[#DCE1EC]'}`}>{danger ? 'XỬ LÝ NGAY' : 'THEO DÕI'}</button></td></tr>; })}</tbody></table></div>
+        <div className="p-3 border-b border-[#DCE1EC]"><RowSelectionActions total={recentRequests.length} selectedCount={selection.selectedCount} allSelected={selection.allSelected} onToggleAll={selection.toggleAll} onDeleteSelected={() => deleteRequests(selection.selected)} onDeleteAll={() => deleteRequests(new Set(recentRequests.map((request) => request.id)))} /></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-[#F4F6FA] text-[#59627A] text-[9px] font-condensed font-bold"><tr><th className="px-3 py-2.5 w-10 text-center"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả chứng từ gần đây" /></th>{['MÃ CHỨNG TỪ','LOẠI NGHIỆP VỤ','MÔ TẢ CHI TIẾT VẬT TƯ','BỘ PHẬN YÊU CẦU','THỜI HẠN','TRẠNG THÁI','THAO TÁC'].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#EDF0F6] text-[10px]">{recentRequests.map((request: MaterialRequest) => { const danger = request.status === 'TRE_HAN' || request.status === 'BAT_KHA_THI'; return <tr key={request.id} className={`hover:bg-[#EEF0F9]/50 ${selection.selected.has(request.id) ? 'bg-[#EEF0F9]' : danger ? 'border-l-2 border-l-[#EE202E]' : ''}`}><td className="px-3 py-3 text-center"><SelectionCheckbox checked={selection.selected.has(request.id)} onChange={() => selection.toggle(request.id)} label={`Chọn chứng từ ${request.id}`} /></td><td className={`px-3 py-3 font-mono font-bold ${danger ? 'text-[#C4141F]' : 'text-[#092081]'}`}>#{request.id}</td><td className="px-3 py-3 font-bold">Đề nghị vật tư</td><td className="px-3 py-3 max-w-[280px]">{request.lsxItem}</td><td className="px-3 py-3">{request.department}</td><td className={`px-3 py-3 font-mono ${danger ? 'text-[#EE202E] font-bold' : 'text-[#59627A]'}`}>{request.deadline}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 font-condensed font-bold text-[9px] ${danger ? 'bg-[#EE202E] text-white' : 'bg-[#EEF0F9] text-[#092081]'}`}>{request.statusText}</span></td><td className="px-3 py-3 text-right"><div className="flex justify-end gap-1"><button onClick={() => onNavigate('request-detail')} className={`h-7 px-2 font-condensed font-bold text-[9px] ${danger ? 'bg-[#C4141F] text-white' : 'border border-[#DCE1EC]'}`}>{danger ? 'XỬ LÝ NGAY' : 'THEO DÕI'}</button><button type="button" onClick={() => deleteRequests(new Set([request.id]))} aria-label={`Xoá chứng từ ${request.id}`} className="min-w-8 min-h-8 text-[#EE202E]"><span className="material-symbols-outlined text-[17px]">delete</span></button></div></td></tr>; })}</tbody></table></div>
         <footer className="bg-[#F4F6FA] border-t border-[#DCE1EC] px-3 py-2 text-[10px] text-[#59627A]">Hiển thị {Math.min(4, requests.length)} trong tổng số {requests.length} chứng từ cần xử lý ca trực</footer>
       </section>
     </div>

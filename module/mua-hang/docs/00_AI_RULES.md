@@ -104,6 +104,8 @@ he-thong-mua-hang/
 - **Ba trạng thái giao diện ở MỌI màn hình:** Đang tải · Lỗi · Không có dữ liệu.
 - **Mọi form ghi dữ liệu phải phản hồi ngay tại nơi người dùng đang thao tác:** khi đang gửi phải khóa nút submit và hiện trạng thái `Đang lưu`; khi lỗi phải hiển thị cảnh báo màu đỏ ngay trong form/modal, không đặt lỗi ở lớp màn hình phía sau; khi lưu thành công phải hiện thông báo thành công, tự đóng form/modal và tải lại danh sách liên quan. Khi lỗi thì giữ form mở và giữ nguyên dữ liệu người dùng đã nhập để sửa.
 - **Nhập hàng loạt phải xử lý độc lập từng dòng:** dòng hợp lệ được ghi ngay; dòng trùng hoặc sai định dạng bị bỏ qua và giữ lại trên form kèm số dòng, mã và lý do lỗi để người dùng sửa rồi nhập lại. Cấm để một vài dòng lỗi chặn toàn bộ các dòng hợp lệ. Chỉ tự đóng modal khi không còn dòng lỗi; nếu còn lỗi phải thông báo rõ số dòng đã thêm và số dòng được giữ lại.
+- **Mọi biểu mẫu có danh sách nhiều dòng phải có đủ thao tác chọn và xoá:** checkbox chọn từng dòng, checkbox chọn tất cả, nút `Xóa đã chọn`, nút `Xóa tất cả`, và nút xoá riêng trên từng dòng. Xoá hàng loạt phải hỏi xác nhận, cập nhật số dòng ngay và không được làm mất các dòng không chọn.
+- **Mọi bảng hiển thị dữ liệu có bản ghi được phép xoá cũng áp dụng cùng bộ thao tác chọn/xoá ở trên.** Nút thao tác hàng loạt đặt ngoài bảng để luôn nhìn thấy; bảng chỉ đọc, nhật ký kiểm toán hoặc dữ liệu nghiệp vụ bất biến không được thêm xoá giả trên frontend.
 - **Chín chức năng tối thiểu** (xem `07_FRONTEND_CHUAN.md` §2).
 - Màn hình dùng ở xưởng: vùng bấm ≥ 44×44 px, chữ ≥ 16 px, ưu tiên quét mã vạch, tối đa 3 bước cho nghiệp vụ thường xuyên.
 

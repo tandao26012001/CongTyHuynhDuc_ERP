@@ -1,0 +1,129 @@
+-- Đồng bộ quy tắc nhận diện với mẫu "QUY TẮC ĐẶT TÊN HÀNG.xlsx".
+ALTER TABLE mua_hang.quy_tac_ten_hang
+  ADD COLUMN IF NOT EXISTS vi_du_ten_hang varchar(300),
+  ADD COLUMN IF NOT EXISTS vi_du_ma_vat_tu varchar(100);
+
+-- Gộp các cách gọi cùng một quy ước thành một dòng như trong mẫu.
+DELETE FROM mua_hang.quy_tac_ten_hang
+WHERE id IN ('VL-SUS316B', 'VL-SUS304B', 'VL-SUS201B', 'VL-THEP');
+
+UPDATE mua_hang.quy_tac_ten_hang SET
+  tu_khoa = CASE id
+    WHEN 'VL-SUS' THEN 'INOX / SUS CHUNG'
+    WHEN 'VL-SUS201' THEN 'INOX 201 / SUS 201'
+    WHEN 'VL-SUS304' THEN 'INOX 304 / SUS 304'
+    WHEN 'VL-SUS316' THEN 'INOX 316 / SUS 316'
+    WHEN 'VL-SS400' THEN 'SAT / THEP / THEP TAM / SAT KEM'
+    WHEN 'VL-AL5052' THEN 'NHOM 5052 / A5052'
+    WHEN 'VL-AL6061' THEN 'NHOM 6061 / A6061'
+    WHEN 'VL-AL7075' THEN 'NHOM 7075 / A7075'
+    WHEN 'VL-AL2017' THEN 'NHOM 2017 / A2017'
+    WHEN 'VL-PHIMCAM' THEN 'PHIM CAM / PHIP CAM'
+    WHEN 'BM-SOC' THEN 'SOC / HAIRLINE / HL'
+    WHEN 'MS-TRONG' THEN 'TRONG / TRONG SUOT'
+    WHEN 'MS-XAM' THEN 'XAM / XAM GHI'
+    ELSE tu_khoa
+  END,
+  ten_chuan = CASE id
+    WHEN 'VL-SUS' THEN 'Inox / SUS chung'
+    WHEN 'VL-SUS201' THEN 'Inox 201 / SUS 201'
+    WHEN 'VL-SUS304' THEN 'Inox 304 / SUS 304'
+    WHEN 'VL-SUS316' THEN 'Inox 316 / SUS 316'
+    WHEN 'VL-SS400' THEN 'Sắt / Thép / Thép tấm / Sắt kẽm'
+    WHEN 'VL-AL5052' THEN 'Nhôm 5052 / A5052'
+    WHEN 'VL-AL6061' THEN 'Nhôm 6061 / A6061'
+    WHEN 'VL-AL7075' THEN 'Nhôm 7075 / A7075'
+    WHEN 'VL-AL2017' THEN 'Nhôm 2017 / A2017'
+    WHEN 'VL-PHIMCAM' THEN 'Phím cam / Phíp cam'
+    WHEN 'BM-SOC' THEN 'Sọc (Hairline / HL)'
+    WHEN 'MS-TRONG' THEN 'Trong (Trong suốt)'
+    WHEN 'MS-XAM' THEN 'Xám / Xám ghi'
+    ELSE ten_chuan
+  END
+WHERE id IN (
+  'VL-SUS', 'VL-SUS201', 'VL-SUS304', 'VL-SUS316', 'VL-SS400',
+  'VL-AL5052', 'VL-AL6061', 'VL-AL7075', 'VL-AL2017', 'VL-PHIMCAM',
+  'BM-SOC', 'MS-TRONG', 'MS-XAM'
+);
+
+UPDATE mua_hang.quy_tac_ten_hang
+SET ma_quy_uoc = 'NHUA-PP'
+WHERE id = 'VL-NHUAPP';
+
+INSERT INTO mua_hang.quy_tac_ten_hang
+  (id, loai, tu_khoa, ten_chuan, ma_quy_uoc, uu_tien)
+VALUES ('BM-GANDUC', 'BE_MAT', 'GAN DUC / CHEQUERED', 'Gân đúc (Chequered)', 'GAN-DUC', 100)
+ON CONFLICT (id) DO UPDATE SET
+  tu_khoa = excluded.tu_khoa,
+  ten_chuan = excluded.ten_chuan,
+  ma_quy_uoc = excluded.ma_quy_uoc,
+  uu_tien = excluded.uu_tien;
+
+UPDATE mua_hang.quy_tac_ten_hang SET
+  vi_du_ten_hang = CASE ma_quy_uoc
+    WHEN 'SUS' THEN 'INOX 8.0MM*1000*500'
+    WHEN 'SUS201' THEN 'INOX 201 1.0MM*2010*310'
+    WHEN 'SUS304' THEN 'INOX 304 4.0MM*690*420'
+    WHEN 'SUS316' THEN 'INOX 316 SỌC 5.0MM*1335*360'
+    WHEN 'SS400' THEN 'SẮT - TẤM - T1.0x1220x1080'
+    WHEN 'AL' THEN 'NHÔM 1.0MM*500*415'
+    WHEN 'AL5052' THEN 'NHÔM 5052 1.0MM*500*415'
+    WHEN 'AL6061' THEN 'NHÔM 6061 15.0MM*380*340'
+    WHEN 'AL7075' THEN 'NHÔM 7075 10.0MM*1200*1190'
+    WHEN 'AL2017' THEN 'NHÔM 2017 15.0MM*630*740'
+    WHEN 'MICA' THEN 'MICA - TRONG - TẤM'
+    WHEN 'PET' THEN 'PET 10.0MM*1000*285'
+    WHEN 'POM' THEN 'POM TRẮNG 10.0MM*1000*700'
+    WHEN 'PHIM-CAM' THEN 'PHÍM CAM 10.0MM*640*630'
+    WHEN 'NHUA-PP' THEN 'NHỰA PP - TẤM - T10.0x1010x590'
+    WHEN 'POLY' THEN 'POLY 10.0MM*1600*1220'
+    WHEN 'SOC' THEN 'INOX 304 SỌC 1.2MM*1285*380'
+    WHEN 'GAN' THEN 'NHÔM GÂN - TẤM - T3.0x1000x290'
+    WHEN 'GAN-DUC' THEN 'NHÔM GÂN ĐÚC - TẤM - T3.0x1000x290'
+    WHEN '2B' THEN 'INOX 2B 2.0MM*1530*1110'
+    WHEN 'PO' THEN 'SẮT PO 1.0MM*1380*600'
+    WHEN 'MC' THEN 'POM MC xanh 10.0MM*1050*90'
+    WHEN 'TRONG' THEN 'MICA TRONG 10.0MM'
+    WHEN 'DEN' THEN 'MICA ĐEN 10.0MM'
+    WHEN 'TRANG' THEN 'POM TRẮNG 10.0MM'
+    WHEN 'TRA' THEN 'MICA - TRÀ - TẤM'
+    WHEN 'XAM' THEN 'NHỰA PP xám 30.0MM'
+    WHEN 'XAM-SUA' THEN 'NHỰA PP xám sữa 10.0MM'
+    WHEN 'XANH' THEN 'POM MC xanh 10.0MM'
+    WHEN 'VANG' THEN 'POM VÀNG 10.0MM'
+    ELSE vi_du_ten_hang
+  END,
+  vi_du_ma_vat_tu = CASE ma_quy_uoc
+    WHEN 'SUS' THEN 'VT-TL-SUS-01'
+    WHEN 'SUS201' THEN 'VT-TL-SUS201-02'
+    WHEN 'SUS304' THEN 'VT-TL-SUS304-01'
+    WHEN 'SUS316' THEN 'VT-TL-SUS316-SOC-01'
+    WHEN 'SS400' THEN 'VT-TL-SS400-01'
+    WHEN 'AL' THEN 'VT-TL-AL-01'
+    WHEN 'AL5052' THEN 'VT-TL-AL5052-01'
+    WHEN 'AL6061' THEN 'VT-TL-AL6061-01'
+    WHEN 'AL7075' THEN 'VT-TL-AL7075-01'
+    WHEN 'AL2017' THEN 'VT-TL-AL2017-01'
+    WHEN 'MICA' THEN 'VT-TL-MICA-TRONG-01'
+    WHEN 'PET' THEN 'VT-TL-PET-01'
+    WHEN 'POM' THEN 'VT-TL-POM-TRANG-01'
+    WHEN 'PHIM-CAM' THEN 'VT-PL-PHIM-CAM-04'
+    WHEN 'NHUA-PP' THEN 'VT-TL-NHUA-PP-01'
+    WHEN 'POLY' THEN 'VT-TL-POLY-01'
+    WHEN 'SOC' THEN 'VT-TL-SUS304-SOC-01'
+    WHEN 'GAN' THEN 'VT-TL-AL-GAN-01'
+    WHEN 'GAN-DUC' THEN 'VT-TL-AL-GAN-DUC-01'
+    WHEN '2B' THEN 'VT-TL-SUS-2B-01'
+    WHEN 'PO' THEN 'VT-TL-SS400-PO-01'
+    WHEN 'MC' THEN 'VT-TL-POM-MC-XANH-01'
+    WHEN 'TRONG' THEN 'VT-TL-MICA-TRONG-01'
+    WHEN 'DEN' THEN 'VT-TL-MICA-DEN-01'
+    WHEN 'TRANG' THEN 'VT-TL-POM-TRANG-01'
+    WHEN 'TRA' THEN 'VT-TL-MICA-TRA-01'
+    WHEN 'XAM' THEN 'VT-TL-NHUA-PP-XAM-01'
+    WHEN 'XAM-SUA' THEN 'VT-TL-NHUA-PP-XAM-SUA-01'
+    WHEN 'XANH' THEN 'VT-TL-POM-MC-XANH-01'
+    WHEN 'VANG' THEN 'VT-TL-POM-VANG-01'
+    ELSE vi_du_ma_vat_tu
+  END
+WHERE loai IN ('VAT_LIEU', 'BE_MAT', 'MAU_SAC');

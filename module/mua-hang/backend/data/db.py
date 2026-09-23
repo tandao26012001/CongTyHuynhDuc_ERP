@@ -4,7 +4,12 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from backend.config.settings import DATABASE_URL, DB_SCHEMA
+from backend.config.settings import (
+    DATABASE_URL,
+    DB_CONNECT_TIMEOUT_SECONDS,
+    DB_SCHEMA,
+    DB_STATEMENT_TIMEOUT_MS,
+)
 
 
 def _dsn() -> str:
@@ -15,8 +20,17 @@ def _dsn() -> str:
 
 @contextmanager
 def get_conn():
-    conn = psycopg.connect(_dsn(), row_factory=dict_row)
+    conn = psycopg.connect(
+        _dsn(),
+        row_factory=dict_row,
+        connect_timeout=DB_CONNECT_TIMEOUT_SECONDS,
+    )
     try:
+        # PostgreSQL tự hủy truy vấn quá hạn thay vì giữ worker vô thời hạn.
+        conn.execute(
+            "SELECT set_config('statement_timeout', %s, false)",
+            (f"{DB_STATEMENT_TIMEOUT_MS}ms",),
+        )
         conn.execute(
             sql.SQL("SET search_path TO {}, public").format(sql.Identifier(DB_SCHEMA))
         )

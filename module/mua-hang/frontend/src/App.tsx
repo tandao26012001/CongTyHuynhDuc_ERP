@@ -142,6 +142,7 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               pendingTasksCount={pendingTasksCount}
+              onDeleteRequests={(ids) => setRequests((current) => current.filter((request) => !ids.has(request.id)))}
             />
           )}
 
@@ -173,6 +174,13 @@ export default function App() {
               }}
               onSelectRequest={(req) => setSelectedRequest(req)}
               onNotify={showNotification}
+              onDeleteRequests={(ids) => {
+                setRequests((current) => current.filter((request) => !ids.has(request.id)));
+                if (ids.has(selectedRequest.id)) {
+                  const replacement = requests.find((request) => !ids.has(request.id));
+                  if (replacement) setSelectedRequest(replacement);
+                }
+              }}
             />
           )}
 
@@ -197,6 +205,10 @@ export default function App() {
               }}
               onApproveRequest={handleApproveRequest}
               onNotify={showNotification}
+              onUpdateRequest={(updated) => {
+                setSelectedRequest(updated);
+                setRequests((current) => current.map((request) => request.id === updated.id ? updated : request));
+              }}
             />
           )}
 

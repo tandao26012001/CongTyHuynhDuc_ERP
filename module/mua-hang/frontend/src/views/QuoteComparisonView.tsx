@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SupplierBid } from '../types';
 import { INITIAL_SUPPLIER_BIDS } from '../data/initialData';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from '../components/RowSelection';
 
 interface QuoteComparisonViewProps {
   onNotify: (msg: string) => void;
@@ -18,6 +19,16 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
   const [p1, setP1] = useState('24.500');
   const [p2, setP2] = useState('345.000');
   const [p3, setP3] = useState('920.000');
+  const [hiddenQuoteRows, setHiddenQuoteRows] = useState<Set<string>>(() => new Set());
+  const quoteRowIds = ['0', '1', '2'].filter((id) => !hiddenQuoteRows.has(id));
+  const quoteSelection = useRowSelection(quoteRowIds);
+
+  function deleteQuoteRows(ids: Set<string>) {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'dòng so sánh')) return;
+    setHiddenQuoteRows((current) => new Set([...current, ...ids]));
+    quoteSelection.clearSelection();
+    onNotify(`Đã xoá ${ids.size} dòng khỏi bảng so sánh.`);
+  }
 
   // Attached PDF files
   const attachedFiles = [
@@ -272,6 +283,8 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
           </div>
         </div>
 
+        <div className="p-3 border-b border-[#DCE1EC]"><RowSelectionActions total={quoteRowIds.length} selectedCount={quoteSelection.selectedCount} allSelected={quoteSelection.allSelected} onToggleAll={quoteSelection.toggleAll} onDeleteSelected={() => deleteQuoteRows(quoteSelection.selected)} onDeleteAll={() => deleteQuoteRows(new Set(quoteRowIds))} /></div>
+
         {/* Responsive Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[980px]">
@@ -356,8 +369,9 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
               </tr>
 
               {/* Item 1 */}
-              <tr className="hover:bg-[#EEF0F9]/30 transition-colors">
+              {!hiddenQuoteRows.has('0') && <tr className={quoteSelection.selected.has('0') ? 'bg-[#EEF0F9]' : 'hover:bg-[#EEF0F9]/30 transition-colors'}>
                 <td className="p-3 sticky left-0 bg-white z-10 border-r border-[#DCE1EC]">
+                  <div className="flex items-center justify-between gap-2 mb-1"><SelectionCheckbox checked={quoteSelection.selected.has('0')} onChange={() => quoteSelection.toggle('0')} label="Chọn Thép tròn S45C" /><button type="button" onClick={() => deleteQuoteRows(new Set(['0']))} aria-label="Xoá dòng Thép tròn S45C" className="min-w-8 min-h-8 text-[#EE202E]"><span className="material-symbols-outlined text-[18px]">delete</span></button></div>
                   <div className="font-bold text-[#0E1220]">1. Thép tròn S45C cán nóng</div>
                   <div className="text-[12px] text-[#59627A] font-mono">Quy cách: Ø65 x 1200mm | Dung sai h9</div>
                   <div className="text-[11.5px] text-[#8A93AA]">Mã vật tư: <span className="font-mono">VT-S45C-065</span></div>
@@ -394,11 +408,12 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
                   <div className="text-[12px] text-[#59627A] mt-0.5">Thành tiền: {formatVND(bids[2].items[0].totalPrice)}</div>
                   <div className="text-[11px] text-[#8A93AA]">{bids[2].items[0].diffNote}</div>
                 </td>
-              </tr>
+              </tr>}
 
               {/* Item 2 */}
-              <tr className="hover:bg-[#EEF0F9]/30 transition-colors">
+              {!hiddenQuoteRows.has('1') && <tr className={quoteSelection.selected.has('1') ? 'bg-[#EEF0F9]' : 'hover:bg-[#EEF0F9]/30 transition-colors'}>
                 <td className="p-3 sticky left-0 bg-white z-10 border-r border-[#DCE1EC]">
+                  <div className="flex items-center justify-between gap-2 mb-1"><SelectionCheckbox checked={quoteSelection.selected.has('1')} onChange={() => quoteSelection.toggle('1')} label="Chọn Dao phay ngón D12" /><button type="button" onClick={() => deleteQuoteRows(new Set(['1']))} aria-label="Xoá dòng Dao phay ngón D12" className="min-w-8 min-h-8 text-[#EE202E]"><span className="material-symbols-outlined text-[18px]">delete</span></button></div>
                   <div className="font-bold text-[#0E1220]">2. Dao phay ngón Carbide 4 me cắt</div>
                   <div className="text-[12px] text-[#59627A] font-mono">Model: 4FL-D12x30x75-TiAlN Coating</div>
                   <div className="text-[11.5px] text-[#8A93AA]">Mã vật tư: <span className="font-mono">CC-EM-D12</span></div>
@@ -433,11 +448,12 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
                   </div>
                   <div className="text-[12px] text-[#59627A] mt-0.5">Thành tiền: {formatVND(bids[2].items[1].totalPrice)}</div>
                 </td>
-              </tr>
+              </tr>}
 
               {/* Item 3 */}
-              <tr className="hover:bg-[#EEF0F9]/30 transition-colors">
+              {!hiddenQuoteRows.has('2') && <tr className={quoteSelection.selected.has('2') ? 'bg-[#EEF0F9]' : 'hover:bg-[#EEF0F9]/30 transition-colors'}>
                 <td className="p-3 sticky left-0 bg-white z-10 border-r border-[#DCE1EC]">
+                  <div className="flex items-center justify-between gap-2 mb-1"><SelectionCheckbox checked={quoteSelection.selected.has('2')} onChange={() => quoteSelection.toggle('2')} label="Chọn Dao phay ngón D20" /><button type="button" onClick={() => deleteQuoteRows(new Set(['2']))} aria-label="Xoá dòng Dao phay ngón D20" className="min-w-8 min-h-8 text-[#EE202E]"><span className="material-symbols-outlined text-[18px]">delete</span></button></div>
                   <div className="font-bold text-[#0E1220]">3. Dao phay ngón thô Carbide D20</div>
                   <div className="text-[12px] text-[#59627A] font-mono">Model: ROUGH-D20x45x100-AlCrN</div>
                   <div className="text-[11.5px] text-[#8A93AA]">Mã vật tư: <span className="font-mono">CC-EM-D20R</span></div>
@@ -472,7 +488,7 @@ export const QuoteComparisonView: React.FC<QuoteComparisonViewProps> = ({ onNoti
                   </div>
                   <div className="text-[12px] text-[#59627A] mt-0.5">Thành tiền: {formatVND(bids[2].items[2].totalPrice)}</div>
                 </td>
-              </tr>
+              </tr>}
 
               {/* Category Header 2 */}
               <tr className="bg-[#F4F6FA] font-bold">

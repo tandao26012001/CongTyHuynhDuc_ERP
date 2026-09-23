@@ -1,5 +1,6 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from backend.api.envelope import that_bai
 from backend.config.settings import PHIEN_HEADER
@@ -18,7 +19,9 @@ async def chan_quyen(request: Request, call_next):
         return await call_next(request)
     token = request.headers.get(PHIEN_HEADER, "")
     try:
-        ho_so = auth_service.lay_ho_so(token)
+        # Xác thực có truy vấn PostgreSQL đồng bộ; đưa sang threadpool để một
+        # kết nối DB chậm không khóa event loop và làm treo toàn bộ API.
+        ho_so = await run_in_threadpool(auth_service.lay_ho_so, token)
     except LoiNghiepVu as exc:
         return JSONResponse(status_code=exc.http, content=that_bai(str(exc), exc.ma_loi))
     request.state.ho_so = ho_so

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ApprovalTask, NavigationTab } from '../types';
 import { INITIAL_APPROVAL_TASKS } from '../data/initialData';
+import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox } from '../components/RowSelection';
 
 interface MyTasksViewProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -57,6 +58,15 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
     setSelectedTaskIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  const deleteTasks = (ids: Set<string>) => {
+    if (!ids.size || !confirmDeleteRows(ids.size, 'công việc')) return;
+    setTasks((current) => current.filter((task) => !ids.has(task.id)));
+    setSelectedTaskIds((current) => current.filter((id) => !ids.has(id)));
+    const removedPending = tasks.filter((task) => ids.has(task.id) && task.status === 'pending').length;
+    onTasksCountChange?.(Math.max(0, pendingCount - removedPending));
+    onNotify(`Đã xoá ${ids.size} công việc.`);
   };
 
   const handleApproveSingle = (task: ApprovalTask) => {
@@ -288,6 +298,10 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
           </div>
         </div>
 
+        <div className="p-3 border-b border-[#DCE1EC]">
+          <RowSelectionActions total={filteredTasks.length} selectedCount={filteredTasks.filter((task) => selectedTaskIds.includes(task.id)).length} allSelected={filteredTasks.length > 0 && filteredTasks.every((task) => selectedTaskIds.includes(task.id))} onToggleAll={() => setSelectedTaskIds(filteredTasks.every((task) => selectedTaskIds.includes(task.id)) ? [] : filteredTasks.map((task) => task.id))} onDeleteSelected={() => deleteTasks(new Set(selectedTaskIds))} onDeleteAll={() => deleteTasks(new Set(filteredTasks.map((task) => task.id)))} />
+        </div>
+
         {/* Task Items Table for Desktop */}
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-left border-collapse">
@@ -354,6 +368,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
                           >
                             {task.docCode}
                           </button>
+                          <button type="button" onClick={() => deleteTasks(new Set([task.id]))} aria-label={`Xoá công việc ${task.docCode}`} className="min-w-8 min-h-8 text-[#EE202E] hover:bg-[#FDECEE] rounded"><span className="material-symbols-outlined text-[18px]">delete</span></button>
                           <span
                             className={`pill text-[10px] px-2 py-0.2 ${
                               task.docType.includes('PO')
@@ -464,6 +479,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
+                    <SelectionCheckbox checked={selectedTaskIds.includes(task.id)} onChange={() => handleToggleSelect(task.id)} label={`Chọn công việc ${task.docCode}`} />
                     <button
                       onClick={() => handleViewDetail(task)}
                       className="font-mono font-bold text-[#283A97] text-[14px]"
@@ -522,6 +538,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
                   >
                     Từ chối
                   </button>
+                  <button type="button" onClick={() => deleteTasks(new Set([task.id]))} aria-label={`Xoá công việc ${task.docCode}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button>
                 </div>
               </div>
             </div>
