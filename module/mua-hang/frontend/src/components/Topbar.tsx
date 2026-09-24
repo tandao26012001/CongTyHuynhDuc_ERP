@@ -39,12 +39,14 @@ export const Topbar: React.FC<TopbarProps> = ({
         return { main: 'QUẢN TRỊ', sub: 'Tiện ích' };
       case 'reports':
         return { main: 'ĐIỀU HÀNH', sub: 'Báo cáo' };
+      case 'production-orders':
+        return { main: 'SẢN XUẤT', sub: 'Lệnh sản xuất' };
       case 'purchase-orders':
         return { main: 'MUA HÀNG', sub: 'Đơn hàng' };
       case 'payments':
         return { main: 'MUA HÀNG', sub: 'Thanh toán' };
       case 'outsource':
-        return { main: 'GIA CÔNG NGOÀI', sub: 'Đặt ngoài' };
+        return { main: 'KINH DOANH', sub: 'Đặt ngoài' };
       default:
         return { main: 'Hệ Thống Mua Hàng', sub: 'Quản lý Sản xuất' };
     }

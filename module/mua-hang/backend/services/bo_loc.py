@@ -24,6 +24,7 @@ TRUONG_LOC: dict[str, dict[str, tuple[str, str]]] = {
         "ma_vat_tu": ("lower(coalesce(v.ma_vat_tu, ''))", "chua"),
         "ten_hang": ("v.ten_khong_dau", "chua"),
         "dvt": ("upper(v.dvt)", "bang"),
+        "ma_chung_loai": ("v.ma_chung_loai", "bang"),
         "trang_thai": ("v.trang_thai", "bang"),
     },
 }

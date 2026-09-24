@@ -211,9 +211,15 @@ def xac_nhan_nhap(
 
 
 @router.get("/danh-muc/{ma}", summary="Đọc một danh mục", response_model=PhanHoi)
-def lay_danh_muc(ma: str, request: Request, trang: int = 1, kich_thuoc: int = 20):
+def lay_danh_muc(
+    ma: str, request: Request, trang: int = 1, kich_thuoc: int = 20,
+    q: str = "", trang_thai: str = "", ma_bo_phan: str = "",
+):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
-    return thanh_cong(catalog_service.lay_danh_muc(ma, trang, kich_thuoc))
+    return thanh_cong(catalog_service.lay_danh_muc(
+        ma, trang, kich_thuoc,
+        {"q": q, "trang_thai": trang_thai, "ma_bo_phan": ma_bo_phan},
+    ))
 
 
 @router.post("/danh-muc/{ma}", summary="Tạo bản ghi danh mục nền", response_model=PhanHoi)
@@ -249,7 +255,8 @@ def tim_vat_tu(request: Request, q: str, gioi_han: int = 20):
 @router.get("/vat-tu", summary="Danh sách vật tư có bộ lọc và phân trang", response_model=PhanHoi)
 def danh_sach_vat_tu(
     request: Request, q: str = "", ma_vat_tu: str = "", ten_hang: str = "",
-    dvt: str = "", trang_thai: str = "", trang: int = 1, kich_thuoc: int = 25,
+    dvt: str = "", ma_chung_loai: str = "", trang_thai: str = "",
+    trang: int = 1, kich_thuoc: int = 25,
 ):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
     return thanh_cong(catalog_service.danh_sach_vat_tu({
@@ -257,8 +264,17 @@ def danh_sach_vat_tu(
         "ma_vat_tu": ma_vat_tu,
         "ten_hang": ten_hang,
         "dvt": dvt,
+        "ma_chung_loai": ma_chung_loai,
         "trang_thai": trang_thai,
     }, trang, kich_thuoc))
+
+
+@router.get("/lenh-san-xuat", summary="Danh sách lệnh sản xuất chỉ đọc", response_model=PhanHoi)
+def danh_sach_lenh_san_xuat(
+    request: Request, q: str = "", trang: int = 1, kich_thuoc: int = 25,
+):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "danh_muc", "xem")
+    return thanh_cong(catalog_service.danh_sach_lenh_san_xuat(q, trang, kich_thuoc))
 
 
 @router.get("/quy-tac-ma-vat-tu", summary="Danh sách quy tắc cấp mã vật tư", response_model=PhanHoi)

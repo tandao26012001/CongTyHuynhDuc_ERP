@@ -1,5 +1,7 @@
 const TOKEN_KEY = 'hd_phien';
 const API_TIMEOUT_MS = 15_000;
+const BULK_IMPORT_TIMEOUT_MS = 60_000;
+export const PHIEN_HET_HAN_EVENT = 'hd-phien-het-han';
 
 export interface HoSo {
   ma_tai_khoan: string;
@@ -34,7 +36,7 @@ export function luuToken(token: string) {
   else sessionStorage.removeItem(TOKEN_KEY);
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
   if (init.body) headers.set('Content-Type', 'application/json');
@@ -48,13 +50,18 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const timeoutId = globalThis.setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, API_TIMEOUT_MS);
+  }, timeoutMs);
 
   try {
     const response = await fetch(path, { ...init, headers, signal: controller.signal });
     const result = await response.json() as ApiEnvelope<T>;
     if (!response.ok || !result.ok) {
-      if (response.status === 401) luuToken('');
+      if (response.status === 401) {
+        luuToken('');
+        globalThis.dispatchEvent(new CustomEvent(PHIEN_HET_HAN_EVENT, {
+          detail: result.error || 'Phiên đăng nhập đã hết. Hãy đăng nhập lại.',
+        }));
+      }
       throw new ApiError(result.error || 'Không thể kết nối hệ thống.', result.ma_loi, response.status);
     }
     return result.data;
@@ -82,6 +89,184 @@ export async function layHoSo() {
   return api<HoSo>('/api/v1/toi');
 }
 
+export interface BoPhanDanhMuc {
+  ma: string;
+  ten: string;
+  loai: string | null;
+  thu_tu: number | null;
+  trang_thai: string;
+  phien_ban: number;
+}
+
+export interface DuLieuBoPhan {
+  ma_bo_phan: string;
+  ten: string;
+  loai?: string;
+  thu_tu?: number;
+  trang_thai: 'HOAT_DONG' | 'NGUNG';
+}
+
+export interface NhanVienDanhMuc {
+  ma: string;
+  ten: string;
+  ma_bo_phan: string | null;
+  ten_bo_phan: string | null;
+  chuc_vu: string | null;
+  ngay_vao_lam: string | null;
+  trang_thai: 'HOAT_DONG' | 'TAM_NGHI' | 'NGHI_VIEC';
+  ghi_chu: string | null;
+  phien_ban: number;
+}
+
+export interface DuLieuNhanVien {
+  ma_nhan_vien: string;
+  ho_va_ten: string;
+  ma_bo_phan?: string;
+  chuc_vu?: string;
+  ngay_vao_lam?: string;
+  trang_thai: NhanVienDanhMuc['trang_thai'];
+  ghi_chu?: string;
+}
+
+export async function layBoPhanDanhMuc() {
+  return api<{ items: BoPhanDanhMuc[]; tong: number }>('/api/v1/danh-muc/bo-phan?trang=1&kich_thuoc=100');
+}
+
+export async function layDanhSachBoPhan(
+  trang = 1, kichThuoc = 25, boLoc: { q?: string; trang_thai?: string } = {},
+) {
+  const params = new URLSearchParams({ trang: String(trang), kich_thuoc: String(kichThuoc) });
+  if (boLoc.q?.trim()) params.set('q', boLoc.q.trim());
+  if (boLoc.trang_thai) params.set('trang_thai', boLoc.trang_thai);
+  return api<{ items: BoPhanDanhMuc[]; tong: number; trang: number; kich_thuoc: number }>(
+    `/api/v1/danh-muc/bo-phan?${params.toString()}`,
+  );
+}
+
+export async function taoBoPhan(input: DuLieuBoPhan) {
+  return api<{ item: BoPhanDanhMuc }>('/api/v1/danh-muc/bo-phan', {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ du_lieu: input }),
+  });
+}
+
+export async function suaBoPhan(ma: string, input: DuLieuBoPhan, phienBan: number) {
+  return api<BoPhanDanhMuc>(`/api/v1/danh-muc/bo-phan/${encodeURIComponent(ma)}`, {
+    method: 'PATCH', body: JSON.stringify({ du_lieu: input, phien_ban: phienBan }),
+  });
+}
+
+export async function xemTruocNhapBoPhan(rows: DuLieuBoPhan[]) {
+  return api<KetQuaXemTruocNhapVatTu>('/api/v1/danh-muc/nhap-hang-loat/xem-truoc', {
+    method: 'POST', body: JSON.stringify({ loai: 'bo-phan', rows }),
+  });
+}
+
+export async function xacNhanNhapBoPhan(rows: DuLieuBoPhan[], maXacNhan: string) {
+  return api<{ so_dong: number; items: BoPhanDanhMuc[] }>('/api/v1/danh-muc/nhap-hang-loat/xac-nhan', {
+    method: 'POST', headers: idempotencyHeaders(),
+    body: JSON.stringify({ loai: 'bo-phan', rows, ma_xac_nhan: maXacNhan, xac_nhan_canh_bao: false }),
+  });
+}
+
+export async function layNhanVienDanhMuc(
+  trang = 1, kichThuoc = 25, boLoc: { q?: string; trang_thai?: string; ma_bo_phan?: string } = {},
+) {
+  const params = new URLSearchParams({ trang: String(trang), kich_thuoc: String(kichThuoc) });
+  if (boLoc.q?.trim()) params.set('q', boLoc.q.trim());
+  if (boLoc.trang_thai) params.set('trang_thai', boLoc.trang_thai);
+  if (boLoc.ma_bo_phan) params.set('ma_bo_phan', boLoc.ma_bo_phan);
+  return api<{ items: NhanVienDanhMuc[]; tong: number; trang: number; kich_thuoc: number }>(
+    `/api/v1/danh-muc/nhan-vien?${params.toString()}`,
+  );
+}
+
+export async function taoNhanVien(input: DuLieuNhanVien) {
+  return api<{ item: NhanVienDanhMuc }>('/api/v1/danh-muc/nhan-vien', {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ du_lieu: input }),
+  });
+}
+
+export async function suaNhanVien(ma: string, input: DuLieuNhanVien, phienBan: number) {
+  return api<NhanVienDanhMuc>(`/api/v1/danh-muc/nhan-vien/${encodeURIComponent(ma)}`, {
+    method: 'PATCH', body: JSON.stringify({ du_lieu: input, phien_ban: phienBan }),
+  });
+}
+
+export async function xemTruocNhapNhanVien(rows: DuLieuNhanVien[]) {
+  return api<KetQuaXemTruocNhapVatTu>('/api/v1/danh-muc/nhap-hang-loat/xem-truoc', {
+    method: 'POST', body: JSON.stringify({ loai: 'nhan-vien', rows }),
+  });
+}
+
+export async function xacNhanNhapNhanVien(rows: DuLieuNhanVien[], maXacNhan: string) {
+  return api<{ so_dong: number; items: NhanVienDanhMuc[] }>('/api/v1/danh-muc/nhap-hang-loat/xac-nhan', {
+    method: 'POST', headers: idempotencyHeaders(),
+    body: JSON.stringify({ loai: 'nhan-vien', rows, ma_xac_nhan: maXacNhan, xac_nhan_canh_bao: false }),
+  });
+}
+
+export interface TaiKhoanQuanTri {
+  ma_tai_khoan: string;
+  ma_nhan_vien: string;
+  ho_va_ten: string;
+  ma_bo_phan: string;
+  vai_tro: string | null;
+  trang_thai: 'CHO_DUYET' | 'HOAT_DONG' | 'KHOA';
+  lan_dang_nhap_cuoi: string | null;
+  ngay_tao: string | null;
+  phien_ban: number;
+}
+
+export interface QuyenVaiTro {
+  vai_tro: string;
+  trang: string;
+  duoc_xem: boolean;
+  duoc_sua: boolean;
+  duoc_duyet: boolean;
+  duoc_xuat: boolean;
+  pham_vi: 'toan_bo' | 'bo_phan' | 'ca_nhan';
+  phien_ban: number;
+}
+
+export interface VaiTroQuanTri {
+  ma: string;
+  ten: string;
+  thu_tu: number | null;
+  mo_ta: string | null;
+  quyen: QuyenVaiTro[];
+}
+
+export async function layTaiKhoanQuanTri(trang = 1, kichThuoc = 25, q = '', trangThai = '') {
+  const params = new URLSearchParams({
+    trang: String(trang), kich_thuoc: String(kichThuoc), q, trang_thai: trangThai,
+  });
+  return api<{ items: TaiKhoanQuanTri[]; tong: number; trang: number; kich_thuoc: number }>(
+    `/api/v1/tai-khoan?${params.toString()}`,
+  );
+}
+
+export async function duyetTaiKhoan(ma: string, vaiTro: string, phienBan: number) {
+  return api<{ ma_tai_khoan: string; trang_thai: string }>(`/api/v1/tai-khoan/${encodeURIComponent(ma)}/duyet`, {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ vai_tro: vaiTro, phien_ban: phienBan }),
+  });
+}
+
+export async function khoaTaiKhoan(ma: string, phienBan: number) {
+  return api<{ ma_tai_khoan: string; trang_thai: string }>(`/api/v1/tai-khoan/${encodeURIComponent(ma)}/khoa`, {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ phien_ban: phienBan }),
+  });
+}
+
+export async function layVaiTroVaPhanQuyen() {
+  return api<{ items: VaiTroQuanTri[] }>('/api/v1/vai-tro');
+}
+
+export async function capNhatPhanQuyen(quyen: QuyenVaiTro) {
+  return api<QuyenVaiTro>(`/api/v1/phan-quyen/${encodeURIComponent(quyen.vai_tro)}/${encodeURIComponent(quyen.trang)}`, {
+    method: 'PATCH', headers: idempotencyHeaders(), body: JSON.stringify(quyen),
+  });
+}
+
 export async function dangXuat() {
   try {
     await api('/api/v1/dang-xuat', { method: 'POST' });
@@ -95,6 +280,9 @@ export interface VatTuTraCuu {
   ma_vat_tu: string;
   ten_hang: string;
   dvt: string;
+  ma_chung_loai?: string | null;
+  ten_chung_loai?: string | null;
+  phan_loai?: string | null;
   ton_kho?: number | null;
   ma_vach?: string | null;
   quy_cach?: string | null;
@@ -116,13 +304,15 @@ export interface BoLocVatTu {
   ma_vat_tu?: string;
   ten_hang?: string;
   dvt?: string;
+  ma_chung_loai?: string;
   trang_thai?: string;
 }
 
 export async function layDanhSachVatTu(trang = 1, kichThuoc = 25, boLoc: BoLocVatTu = {}) {
   const params = new URLSearchParams({ trang: String(trang), kich_thuoc: String(kichThuoc) });
   const mapping: Record<keyof BoLocVatTu, string> = {
-    tu_khoa: 'q', ma_vat_tu: 'ma_vat_tu', ten_hang: 'ten_hang', dvt: 'dvt', trang_thai: 'trang_thai',
+    tu_khoa: 'q', ma_vat_tu: 'ma_vat_tu', ten_hang: 'ten_hang', dvt: 'dvt',
+    ma_chung_loai: 'ma_chung_loai', trang_thai: 'trang_thai',
   };
   for (const [key, apiKey] of Object.entries(mapping)) {
     const value = boLoc[key as keyof BoLocVatTu]?.trim();
@@ -179,7 +369,7 @@ export async function nhapDonViTinhHangLoat(rows: Array<{ dvt: string; ten_dvt: 
   });
 }
 
-export async function taoVatTu(input: { ma_vat_tu: string; ten_hang: string; dvt: string; quy_cach?: string }) {
+export async function taoVatTu(input: { ma_vat_tu: string; ten_hang: string; dvt: string; ma_chung_loai: string; quy_cach?: string }) {
   return api<{ item: VatTuTraCuu }>('/api/v1/vat-tu', {
     method: 'POST',
     headers: idempotencyHeaders(),
@@ -231,6 +421,30 @@ export interface NhapQuyTacNhanDienRow {
 export async function layChungLoai() {
   const result = await api<{ items: ChungLoai[] }>('/api/v1/danh-muc/chung-loai?trang=1&kich_thuoc=100');
   return result.items;
+}
+
+export interface LenhSanXuat {
+  lenh_san_xuat: string;
+  so_po: string | null;
+  ma_khach_hang: string | null;
+  ten_khach_hang_chup: string | null;
+  ma_bo_phan: string | null;
+  ten_bo_phan_chup: string | null;
+  so_so: string | null;
+  ngay_so: string | null;
+  ki_han_khach_hang: string | null;
+  muc_do_uu_tien: number | null;
+  ngay_nhan_lenh: string | null;
+  trang_thai_don: string | null;
+  ghi_chu: string | null;
+  so_dong: number;
+}
+
+export async function layDanhSachLenhSanXuat(q = '', trang = 1, kichThuoc = 25) {
+  const params = new URLSearchParams({ q, trang: String(trang), kich_thuoc: String(kichThuoc) });
+  return api<{ items: LenhSanXuat[]; tong: number; trang: number; kich_thuoc: number }>(
+    `/api/v1/lenh-san-xuat?${params.toString()}`,
+  );
 }
 
 export async function layQuyTacNhanDien() {
@@ -308,6 +522,7 @@ export interface DongNhapVatTu {
   ma_vat_tu: string;
   ten_hang: string;
   dvt: string;
+  ma_chung_loai?: string;
   quy_cach?: string;
   ghi_chu?: string;
   phan_loai?: string;
@@ -342,4 +557,125 @@ export async function nhapVatTuHangLoatTungDong(rows: DongNhapVatTu[]) {
   return api<{ so_dong: number; co_loi: number; errors: Array<{ dong: number; ma: string; loi: string }> }>('/api/v1/vat-tu/nhap-hang-loat', {
     method: 'POST', body: JSON.stringify({ rows }),
   });
+}
+
+export interface DongNhapLsx {
+  lenh_san_xuat: string;
+  ma_vach: string;
+  ma_hang: string;
+  ten_hang: string;
+  so_luong: number;
+  dvt: string;
+  so_po?: string;
+  ma_khach_hang?: string;
+  ten_khach_hang_chup?: string;
+  ma_bo_phan?: string;
+  ten_bo_phan_chup?: string;
+  ki_han_khach_hang?: string;
+  ngay_nhan_lenh?: string;
+  so_so?: string;
+  ngay_so?: string;
+  trang_thai_don?: string;
+  muc_do_uu_tien?: number;
+  ma_cong_doan?: string;
+  ma_ban_ve?: string;
+  ghi_chu?: string;
+  ghi_chu_dong?: string;
+}
+
+export interface LsxDatNgoai {
+  lenh_san_xuat: string;
+  so_po: string | null;
+  ma_khach_hang: string | null;
+  ten_khach_hang_chup: string | null;
+  ma_bo_phan: string | null;
+  ten_bo_phan_chup: string | null;
+  ki_han_khach_hang: string | null;
+  muc_do_uu_tien: number | null;
+  ngay_nhan_lenh: string | null;
+  so_so: string | null;
+  ngay_so: string | null;
+  trang_thai_don: string | null;
+  ghi_chu: string | null;
+  dong: Array<{
+    ma_vach: string;
+    ma_hang: string;
+    ten_hang: string;
+    so_luong: number;
+    dvt: string;
+    ma_cong_doan: string | null;
+    ma_ban_ve: string | null;
+    ghi_chu: string | null;
+    da_lap_bao_gia: boolean;
+  }>;
+}
+
+export async function nhapLsxDatNgoai(rows: DongNhapLsx[]) {
+  return api<{ so_dong: number; so_lsx: number; co_loi: number; errors: Array<{ dong: number; ma: string; loi: string }> }>('/api/v1/dat-ngoai/nhap-lsx', {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ rows }),
+  }, BULK_IMPORT_TIMEOUT_MS);
+}
+
+export async function layLsxDatNgoai(q = '') {
+  return api<LsxDatNgoai[]>(`/api/v1/dat-ngoai/lsx?q=${encodeURIComponent(q)}`);
+}
+
+export interface DongPhieuDatNgoai {
+  id: string;
+  ma_vach: string;
+  ma_hang: string;
+  ten_hang: string;
+  dvt: string;
+  so_luong: number;
+  don_gia: number | null;
+  ky_han: string | null;
+  ngay_nhan: string | null;
+  trang_thai: string;
+  ghi_chu: string | null;
+}
+
+export interface PhieuDatNgoai {
+  id: string;
+  lenh_san_xuat: string;
+  nguoi_lap: string;
+  ngay_lap: string;
+  ten_ncc_chup: string | null;
+  ky_han: string | null;
+  trang_thai: string;
+  can_xac_nhan_ky_thuat: boolean;
+  noi_dung_ky_thuat: string | null;
+  ghi_chu: string | null;
+  ly_do_huy: string | null;
+  tong_gia_tri: number;
+  phien_ban: number;
+  dong: DongPhieuDatNgoai[];
+  lich_su: Array<{
+    trang_thai_cu: string | null;
+    trang_thai_moi: string;
+    noi_dung: string | null;
+    nguoi_thuc_hien: string;
+    thoi_diem: string;
+  }>;
+}
+
+export interface NhaCungCapDanhMuc {
+  ma: string;
+  ma_ncc: string;
+  ten: string;
+  la_ncc_mua_hang: boolean;
+  la_ncc_gia_cong: boolean;
+  da_phe_duyet: boolean;
+  trang_thai: string;
+}
+
+export async function layPhieuDatNgoai() {
+  return api<PhieuDatNgoai[]>('/api/v1/dat-ngoai');
+}
+
+export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan_ky_thuat?: boolean; noi_dung_ky_thuat?: string; ghi_chu?: string }) {
+  return api<{ so_phieu: number }>('/api/v1/dat-ngoai', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function layNhaCungCapDanhMuc() {
+  return api<{ items: NhaCungCapDanhMuc[]; tong: number }>('/api/v1/danh-muc/nha-cung-cap?trang=1&kich_thuoc=100');
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  capMaVatTuHangLoat, DongNhapVatTu, DonViTinh, duKienMaVatTu, duKienMaVatTuHangLoat, KetQuaXemTruocNhapVatTu,
-  layDonViTinh, layQuyTacMaVatTu, layQuyTacNhanDien, nhapVatTuHangLoatTungDong,
+  capMaVatTuHangLoat, ChungLoai, DongNhapVatTu, DonViTinh, duKienMaVatTu, duKienMaVatTuHangLoat, KetQuaXemTruocNhapVatTu,
+  layChungLoai, layDonViTinh, layQuyTacMaVatTu, layQuyTacNhanDien, nhapVatTuHangLoatTungDong,
   QuyTacMaVatTu, QuyTacNhanDien, xemTruocNhapVatTu,
 } from '../api/client';
 import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from './RowSelection';
@@ -13,6 +13,7 @@ type Row = DongNhapVatTu & {
   ma_vat_lieu: string;
   loai_hinh: string;
   ma_du_kien: string;
+  tu_dong_chung_loai: boolean;
 };
 type ErrorDetail = { dong: number; ma: string; loi: string };
 type CodeModalState = { rowId: string; kho: 'TH' | 'VT' | 'TL'; ma_quy_tac: string; loai_hinh: string };
@@ -28,6 +29,15 @@ const RULE_ALIASES: Record<string, string[]> = {
   'VT-TL': ['TAM LE'], 'VT-PT': ['PHOI TAM'], 'VT-PL': ['PHOI LE'],
   'TL-MK': ['MUI KHOAN'], 'TL-MP': ['MUI PHAY'], 'TL-MR': ['MUI REAMER', 'REAMER'],
   'TL-DT': ['DAO TIEN'], 'TL-MC': ['MAM CAP'],
+};
+
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  AL_DH: ['NHOM DINH HINH'], B_XE: ['BANH XE'], BAN_LE: ['BAN LE'],
+  BOBI: ['BAC DAN', 'VONG BI'], BUL: ['BU LONG', 'BULONG'], CU: ['DONG'],
+  DCC: ['DUNG CU CAT', 'MUI KHOAN', 'MUI PHAY', 'MUI REAMER'], DCU: ['DUNG CU DO'],
+  DIEN: ['DIEN'], GCN: ['GIA CONG NGOAI'], LO_XO: ['LO XO'], OC_VIT: ['OC VIT', 'VIT'],
+  PK_AL: ['PHU KIEN NHOM'], PK_INOX: ['PHU KIEN INOX'], PK_SAT: ['PHU KIEN SAT'],
+  SAT_THEP: ['SAT THEP', 'THEP'],
 };
 
 function normalize(value: string) {
@@ -80,10 +90,23 @@ function inferShape(name: string) {
   if (hasTerm(value, 'HOP')) return 'HO';
   return '';
 }
+function inferCategory(name: string, categories: ChungLoai[]) {
+  const normalizedName = normalize(name);
+  const fallback = categories.find((category) => category.ma === 'KHAC');
+  const ranked = categories.flatMap((category) => {
+    const terms = [normalize(category.ten), ...(CATEGORY_ALIASES[category.ma] || [])]
+      .filter((term) => term.length >= 2);
+    const score = Math.max(0, ...terms.filter((term) => hasTerm(normalizedName, term)).map((term) => term.length));
+    return score ? [{ category, score }] : [];
+  }).sort((a, b) => b.score - a.score);
+  if (!ranked.length || (ranked[1] && ranked[0].score === ranked[1].score)) return fallback;
+  return ranked[0].category;
+}
 function looksLikeMaterialCode(value: string) { return /^(TH|VT|TL)-[A-Z0-9-]+$/i.test(value.trim()); }
 function toPayload(row: Row, code = row.ma_vat_tu): DongNhapVatTu {
   return { ma_vat_tu: code, ten_hang: row.ten_hang, dvt: row.dvt, quy_cach: row.quy_cach,
-    ghi_chu: row.ghi_chu, phan_loai: row.phan_loai, trang_thai: row.trang_thai };
+    ma_chung_loai: row.ma_chung_loai, ghi_chu: row.ghi_chu,
+    phan_loai: row.phan_loai, trang_thai: row.trang_thai };
 }
 
 export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
@@ -96,6 +119,7 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
   const [rules, setRules] = useState<QuyTacMaVatTu[]>([]);
   const [recognitionRules, setRecognitionRules] = useState<QuyTacNhanDien[]>([]);
   const [units, setUnits] = useState<DonViTinh[]>([]);
+  const [categories, setCategories] = useState<ChungLoai[]>([]);
   const [loadingReferences, setLoadingReferences] = useState(true);
   const [preview, setPreview] = useState<KetQuaXemTruocNhapVatTu | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,10 +145,11 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
   }
 
   useEffect(() => {
-    void Promise.all([layQuyTacMaVatTu(), layQuyTacNhanDien(), layDonViTinh()]).then(([loadedRules, loadedRecognitionRules, loadedUnits]) => {
+    void Promise.all([layQuyTacMaVatTu(), layQuyTacNhanDien(), layDonViTinh(), layChungLoai()]).then(([loadedRules, loadedRecognitionRules, loadedUnits, loadedCategories]) => {
       setRules(loadedRules);
       setRecognitionRules(loadedRecognitionRules);
       setUnits(loadedUnits);
+      setCategories(loadedCategories);
       setLoadingReferences(false);
     }).catch((reason) => {
       const value = reason instanceof Error ? reason.message : 'Không tải được quy tắc cấp mã hoặc danh mục đơn vị tính.';
@@ -149,8 +174,10 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
       const pastedUnit = cells[2] || '';
       const resolvedUnit = resolveUnit(pastedUnit, units);
       const inferred = !cells[0] ? inferRule(name, rules, recognitionRules) : undefined;
+      const inferredCategory = inferCategory(name, categories);
       return [{ id: `material-${Date.now()}-${index}`, ma_vat_tu: (cells[0] || '').toUpperCase(), ten_hang: name,
         dvt: resolvedUnit?.dvt || pastedUnit.toUpperCase(), quy_cach: cells[3] || '', ghi_chu: cells[4] || '',
+        ma_chung_loai: inferredCategory?.ma || '', tu_dong_chung_loai: true,
         phan_loai: 'THONG_DUNG_SX', trang_thai: 'HOAT_DONG', tu_dong_cap_ma: !cells[0],
         ma_quy_tac: inferred?.ma_quy_tac || '', ma_vat_lieu: '',
         loai_hinh: inferred?.can_loai_hinh ? inferShape(name) : '', ma_du_kien: '' }];
@@ -262,6 +289,10 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
         let row = resolved[index];
         if (!units.some((unit) => unit.dvt === row.dvt)) {
           localErrors.set(index, [`Đơn vị tính "${row.dvt || '(trống)'}" không có trong danh mục ĐVT. Hãy chọn lại từ danh sách.`]);
+          continue;
+        }
+        if (!categories.some((category) => category.ma === row.ma_chung_loai)) {
+          localErrors.set(index, ['Tên hàng chưa nhận diện được chủng loại. Hãy chọn chủng loại từ danh sách.']);
           continue;
         }
         if (!row.tu_dong_cap_ma) continue;
@@ -385,7 +416,7 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
         <button onClick={onClose} disabled={busy} aria-label="Đóng" className="min-w-11 min-h-11 disabled:opacity-50"><span className="material-symbols-outlined">close</span></button>
       </header>
       <div className="p-4 overflow-y-auto space-y-4">
-        <div className="p-3 bg-[#EEF0F9] border border-[#C6CCE9] text-[12px]"><strong>Thứ tự cột:</strong> Mã vật tư · Tên hàng * · Đơn vị tính * · Mô tả / Quy cách · Ghi chú. Mỗi lần nhập tối đa 500 dòng.<span className="block mt-1 text-[#59627A]"><strong>Mã vật tư không bắt buộc:</strong> để trống ô đầu tiên hoặc chỉ dán Tên hàng, hệ thống sẽ tự đối chiếu quy tắc nhận diện và mã ví dụ để lập mã. Chỉ tên mới chưa khớp quy tắc mới hiện nút chọn quy ước thủ công.</span><span className="block mt-1 text-[#59627A]"><strong>Đơn vị tính:</strong> có thể dán mã hoặc tên trong danh mục; ví dụ <strong>CAI</strong> hoặc <strong>Cái</strong> đều được quy đổi về mã <strong>CAI</strong>.</span></div>
+        <div className="p-3 bg-[#EEF0F9] border border-[#C6CCE9] text-[12px]"><strong>Thứ tự cột:</strong> Mã vật tư · Tên hàng * · Đơn vị tính * · Mô tả / Quy cách · Ghi chú. Mỗi lần nhập tối đa 500 dòng.<span className="block mt-1 text-[#59627A]"><strong>Mã vật tư không bắt buộc:</strong> để trống ô đầu tiên hoặc chỉ dán Tên hàng, hệ thống sẽ tự đối chiếu quy tắc nhận diện và mã ví dụ để lập mã. Chỉ tên mới chưa khớp quy tắc mới hiện nút chọn quy ước thủ công.</span><span className="block mt-1 text-[#59627A]"><strong>Chủng loại:</strong> tự đối chiếu theo tên vật tư; nếu không nhận diện được sẽ mặc định <strong>KHAC — Khác</strong> và vẫn có thể chọn lại.</span><span className="block mt-1 text-[#59627A]"><strong>Đơn vị tính:</strong> có thể dán mã hoặc tên trong danh mục; ví dụ <strong>CAI</strong> hoặc <strong>Cái</strong> đều được quy đổi về mã <strong>CAI</strong>.</span></div>
         {message && <div role="alert" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{message}{errorDetails.length > 0 && <ul className="list-disc pl-5 mt-2">{errorDetails.map((error, index) => <li key={`${error.dong}-${error.ma}-${index}`}>Dòng {error.dong} — {error.ma || '(tự động cấp mã)'}: {error.loi}</li>)}</ul>}</div>}
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} className="w-full p-3 border border-[#DCE1EC] rounded font-mono text-[12px]" placeholder={'\tBulong M8 x 30\tCAI\tInox 304\tGhi chú'} />
         <div className="flex gap-2"><button onClick={() => void parse()} disabled={busy || loadingReferences} className="min-h-11 px-5 border border-[#283A97] text-[#283A97] font-bold rounded disabled:opacity-50">{loadingReferences ? 'ĐANG TẢI QUY TẮC…' : reading ? 'ĐANG LẬP MÃ DỰ KIẾN…' : 'ĐỌC DỮ LIỆU'}</button><button onClick={() => void check()} disabled={!rows.length || busy || loadingReferences} className="min-h-11 px-5 bg-[#283A97] text-white font-bold rounded disabled:opacity-50">{busy && !reading ? 'ĐANG KIỂM TRA…' : 'XEM TRƯỚC & KIỂM TRA'}</button></div>
@@ -395,15 +426,16 @@ export function BulkCatalogMaterialPaste({ onClose, onImported, onError }: {
           <span className="text-[#59627A]">Hiển thị <strong>{pageStart + 1}–{Math.min(pageStart + pageSize, rows.length)}</strong> / {rows.length} dòng</span>
           <div className="flex flex-wrap items-center gap-2"><label className="flex items-center gap-2">Số dòng/trang<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-10 px-2 border border-[#DCE1EC] rounded bg-white"><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label><button type="button" onClick={() => setPage(1)} disabled={currentPage === 1} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang đầu"><span className="material-symbols-outlined">first_page</span></button><button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang trước"><span className="material-symbols-outlined">chevron_left</span></button><strong className="min-w-24 text-center">Trang {currentPage}/{totalPages}</strong><button type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={currentPage === totalPages} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang sau"><span className="material-symbols-outlined">chevron_right</span></button><button type="button" onClick={() => setPage(totalPages)} disabled={currentPage === totalPages} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang cuối"><span className="material-symbols-outlined">last_page</span></button></div>
         </div>}
-        {rows.length > 0 && <div className="overflow-x-auto border border-[#DCE1EC] rounded"><table className="w-full min-w-[1160px] text-[12px]">
-          <thead className="bg-[#F4F6FA]"><tr><th className="p-2 w-10 text-center"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả dòng vật tư" /></th><th className="p-2 text-left">MÃ VẬT TƯ</th><th className="p-2 text-left">TÊN HÀNG *</th><th className="p-2 text-left">ĐƠN VỊ TÍNH *</th><th className="p-2 text-left">MÔ TẢ / QUY CÁCH</th><th className="p-2 text-left">GHI CHÚ</th><th className="p-2 text-left">KẾT QUẢ</th><th className="w-14" /></tr></thead>
+        {rows.length > 0 && <div className="overflow-x-auto border border-[#DCE1EC] rounded"><table className="w-full min-w-[1380px] text-[12px]">
+          <thead className="bg-[#F4F6FA]"><tr><th className="p-2 w-10 text-center"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả dòng vật tư" /></th><th className="p-2 text-left">MÃ VẬT TƯ</th><th className="p-2 text-left">TÊN HÀNG *</th><th className="p-2 text-left">CHỦNG LOẠI *</th><th className="p-2 text-left">ĐƠN VỊ TÍNH *</th><th className="p-2 text-left">MÔ TẢ / QUY CÁCH</th><th className="p-2 text-left">GHI CHÚ</th><th className="p-2 text-left">KẾT QUẢ</th><th className="w-14" /></tr></thead>
           <tbody>{visibleRows.map(({ row, index }) => {
             const result = preview?.chi_tiet[index];
             const validUnit = units.some((unit) => unit.dvt === row.dvt);
             return <tr key={row.id} className={`border-t align-top ${selection.selected.has(row.id) ? 'bg-[#EEF0F9]' : ''}`}>
               <td className="p-2 text-center"><SelectionCheckbox checked={selection.selected.has(row.id)} onChange={() => selection.toggle(row.id)} label={`Chọn dòng ${row.ten_hang || row.id}`} /></td>
               <td className="p-1"><div className="flex items-center gap-1"><input readOnly={row.tu_dong_cap_ma} value={row.tu_dong_cap_ma ? row.ma_du_kien : row.ma_vat_tu} onChange={(event) => { const value = event.target.value.toUpperCase(); update(row.id, { ma_vat_tu: value, tu_dong_cap_ma: !value, ma_quy_tac: value ? '' : row.ma_quy_tac }); }} placeholder={row.ma_quy_tac ? 'Đang chờ lập mã' : 'Chưa nhận diện'} className={`w-40 h-10 px-2 border rounded font-mono ${row.tu_dong_cap_ma ? 'bg-[#F4F6FA]' : 'bg-white'}`} />{row.tu_dong_cap_ma && !row.ma_quy_tac && <button type="button" onClick={() => openCodeModal(row)} title="Chọn quy ước cấp mã" aria-label="Chọn quy ước cấp mã" className="w-10 h-10 shrink-0 rounded bg-[#283A97] text-white flex items-center justify-center"><span className="material-symbols-outlined text-[20px]">add</span></button>}</div><div className={`mt-1 text-[10px] ${row.tu_dong_cap_ma && !row.ma_quy_tac ? 'text-[#C4141F]' : 'text-[#59627A]'}`}>{row.tu_dong_cap_ma ? (row.ma_quy_tac ? `Tự nhận diện: ${row.ma_quy_tac}` : 'Tên mới — hãy chọn quy ước') : 'Mã nhập từ Excel'}</div></td>
-              <td className="p-1"><input value={row.ten_hang} onChange={(event) => { const name = event.target.value; const inferred = row.tu_dong_cap_ma ? inferRule(name, rules, recognitionRules) : undefined; update(row.id, { ten_hang: name, ma_quy_tac: row.tu_dong_cap_ma ? (inferred?.ma_quy_tac || '') : row.ma_quy_tac, loai_hinh: inferred?.can_loai_hinh ? inferShape(name) : '' }); }} className="w-64 h-10 px-2 border rounded" /></td>
+              <td className="p-1"><input value={row.ten_hang} onChange={(event) => { const name = event.target.value; const inferred = row.tu_dong_cap_ma ? inferRule(name, rules, recognitionRules) : undefined; const inferredCategory = row.tu_dong_chung_loai ? inferCategory(name, categories) : undefined; update(row.id, { ten_hang: name, ma_quy_tac: row.tu_dong_cap_ma ? (inferred?.ma_quy_tac || '') : row.ma_quy_tac, loai_hinh: inferred?.can_loai_hinh ? inferShape(name) : '', ...(row.tu_dong_chung_loai ? { ma_chung_loai: inferredCategory?.ma || '' } : {}) }); }} className="w-64 h-10 px-2 border rounded" /></td>
+              <td className="p-1"><select required value={row.ma_chung_loai || ''} onChange={(event) => update(row.id, { ma_chung_loai: event.target.value, tu_dong_chung_loai: false })} aria-label={`Chủng loại của ${row.ten_hang || `dòng ${index + 1}`}`} className={`w-52 h-10 px-2 border rounded bg-white ${row.ma_chung_loai ? 'border-[#DCE1EC]' : 'border-[#EE202E] bg-[#FDECEE]'}`}><option value="">-- Chọn chủng loại --</option>{categories.map((category) => <option key={category.ma} value={category.ma}>{category.ma} — {category.ten}</option>)}</select><p className={`mt-1 text-[10px] ${row.ma_chung_loai ? 'text-[#59627A]' : 'text-[#C4141F]'}`}>{row.ma_chung_loai ? (row.tu_dong_chung_loai ? (row.ma_chung_loai === 'KHAC' ? 'Không nhận diện — mặc định Khác' : 'Tự nhận diện theo tên') : 'Đã chọn thủ công') : 'Chưa nhận diện được'}</p></td>
               <td className="p-1"><select required value={validUnit ? row.dvt : ''} onChange={(event) => update(row.id, { dvt: event.target.value })} aria-label={`Đơn vị tính của ${row.ten_hang || `dòng ${index + 1}`}`} className={`w-40 h-10 px-2 border rounded bg-white ${validUnit ? 'border-[#DCE1EC]' : 'border-[#EE202E] bg-[#FDECEE]'}`}><option value="">-- Chọn ĐVT --</option>{units.map((unit) => <option key={unit.dvt} value={unit.dvt}>{unit.ten_dvt} ({unit.dvt})</option>)}</select>{row.dvt && !validUnit && <p className="mt-1 text-[10px] text-[#C4141F]">Giá trị dán: {row.dvt}</p>}</td>
               <td className="p-1"><input value={row.quy_cach} onChange={(event) => update(row.id, { quy_cach: event.target.value })} className="w-56 h-10 px-2 border rounded" /></td>
               <td className="p-1"><input value={row.ghi_chu} onChange={(event) => update(row.id, { ghi_chu: event.target.value })} className="w-48 h-10 px-2 border rounded" /></td>

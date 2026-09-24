@@ -11,6 +11,7 @@ from backend.api.middleware import chan_quyen
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.danh_muc import router as danh_muc_router
 from backend.api.routes.de_nghi import router as de_nghi_router
+from backend.api.routes.dat_ngoai import router as dat_ngoai_router
 from backend.config.settings import APP_NAME, API_PREFIX
 from backend.api.routes.health import router as health_router
 from backend.api.routes.quan_tri import router as quan_tri_router
@@ -52,3 +53,4 @@ app.include_router(auth_router, prefix=API_PREFIX, tags=["xác thực"])
 app.include_router(quan_tri_router, prefix=API_PREFIX, tags=["quản trị"])
 app.include_router(danh_muc_router, prefix=API_PREFIX, tags=["danh mục"])
 app.include_router(de_nghi_router, prefix=API_PREFIX, tags=["đề nghị"])
+app.include_router(dat_ngoai_router, prefix=API_PREFIX, tags=["đặt ngoài"])

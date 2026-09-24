@@ -4,7 +4,7 @@ import { INITIAL_REQUESTS } from './data/initialData';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { Toast } from './components/Toast';
-import { dangXuat, HoSo, layHoSo, layToken } from './api/client';
+import { dangXuat, HoSo, layHoSo, layToken, PHIEN_HET_HAN_EVENT } from './api/client';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -17,6 +17,7 @@ import { IqcReceiptView } from './views/IqcReceiptView';
 import { LoginView } from './views/LoginView';
 import { CatalogView } from './views/CatalogView';
 import { ComingSoonView } from './views/ComingSoonView';
+import { OutsourceView } from './views/OutsourceView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
@@ -50,6 +51,17 @@ export default function App() {
       .then(setCurrentUser)
       .catch(() => setCurrentUser(null))
       .finally(() => setDangKiemTraPhien(false));
+  }, []);
+
+  useEffect(() => {
+    const handleExpiredSession = (event: Event) => {
+      setCurrentUser(null);
+      setActiveTab('dashboard');
+      const message = (event as CustomEvent<string>).detail;
+      setToastMessage(message || 'Phiên đăng nhập đã hết. Hãy đăng nhập lại.');
+    };
+    globalThis.addEventListener(PHIEN_HET_HAN_EVENT, handleExpiredSession);
+    return () => globalThis.removeEventListener(PHIEN_HET_HAN_EVENT, handleExpiredSession);
   }, []);
 
   async function handleLogout() {
@@ -106,10 +118,11 @@ export default function App() {
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
-        canManageCompanyData={isAdmin || canView('danh_muc')}
+        canManageCompanyData={isAdmin || canView('danh_muc') || canView('quan_tri')}
         visiblePages={{
           dashboard: canView('home'),
           reports: canView('bao_cao'),
+          productionOrders: isAdmin || canView('de_nghi'),
           requests: canView('de_nghi'),
           quotes: canView('bao_gia'),
           orders: canView('don_hang'),
@@ -212,14 +225,14 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'company-data' && <CatalogView onNotify={showNotification} />}
+          {activeTab === 'company-data' && <CatalogView currentUser={currentUser} onNotify={showNotification} />}
 
           {activeTab === 'suppliers' && <ComingSoonView title="NHÀ CUNG CẤP" description="Màn hình quản lý nhà cung cấp sẽ được triển khai tại khu vực Quản trị." />}
           {activeTab === 'utilities' && <ComingSoonView title="TIỆN ÍCH" description="Các tiện ích quản trị hệ thống đang được chuẩn bị." />}
           {activeTab === 'reports' && <ComingSoonView title="BÁO CÁO" description="Báo cáo điều hành sẽ được tính trực tiếp từ dữ liệu giao dịch." />}
           {activeTab === 'purchase-orders' && <ComingSoonView title="ĐƠN HÀNG" description="Chức năng quản lý đơn đặt hàng đang được triển khai." />}
           {activeTab === 'payments' && <ComingSoonView title="THANH TOÁN" description="Chức năng theo dõi yêu cầu thanh toán đang được triển khai." />}
-          {activeTab === 'outsource' && <ComingSoonView title="ĐẶT NGOÀI" description="Chức năng Gia công ngoài sẽ được triển khai theo quy trình riêng." />}
+          {activeTab === 'outsource' && <OutsourceView onNotify={showNotification} />}
         </div>
       </main>
 

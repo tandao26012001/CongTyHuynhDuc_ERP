@@ -26,10 +26,35 @@ class KhoaBody(BaseModel):
     phien_ban: int = Field(ge=1)
 
 
+class CapNhatQuyenBody(BaseModel):
+    phien_ban: int = Field(ge=1)
+    duoc_xem: bool
+    duoc_sua: bool
+    duoc_duyet: bool
+    duoc_xuat: bool
+    pham_vi: str = Field(min_length=1, max_length=20)
+
+
 @router.get("/tai-khoan", summary="Danh sách tài khoản", response_model=PhanHoi)
-def danh_sach(request: Request, trang: int = 1, kich_thuoc: int = 20):
+def danh_sach(request: Request, trang: int = 1, kich_thuoc: int = 20, q: str = "", trang_thai: str = ""):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
-    return thanh_cong(phan_quyen_service.danh_sach_tai_khoan(trang, kich_thuoc))
+    return thanh_cong(phan_quyen_service.danh_sach_tai_khoan(trang, kich_thuoc, q, trang_thai))
+
+
+@router.get("/vai-tro", summary="Danh sách vai trò và ma trận phân quyền", response_model=PhanHoi)
+def danh_sach_vai_tro(request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
+    return thanh_cong(phan_quyen_service.danh_sach_vai_tro_va_quyen())
+
+
+@router.patch("/phan-quyen/{vai_tro}/{trang}", summary="Cập nhật một quyền của vai trò", response_model=PhanHoi)
+def cap_nhat_quyen(vai_tro: str, trang: str, body: CapNhatQuyenBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "quan_tri", "sua")
+    return thanh_cong(phan_quyen_service.cap_nhat_quyen(
+        vai_tro, trang, body.phien_ban,
+        body.model_dump(exclude={"phien_ban"}), ho_so["ma_nhan_vien"],
+    ))
 
 
 @router.post("/tai-khoan/{ma}/duyet", summary="Duyệt và gán vai trò", response_model=PhanHoi)

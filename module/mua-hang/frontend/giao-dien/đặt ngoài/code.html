@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Quản trị &amp; Theo dõi Đặt hàng ngoài / Gia công ngoài - Hệ thống Mua hàng &amp; Quản lý Sản xuất</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Roboto, Roboto Condensed, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Roboto+Condensed:wght@400;600;700&amp;family=Roboto:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-background": "#121b30",
+            "on-error-container": "#93000a",
+            "surface-dim": "#d1d9f6",
+            "tertiary-fixed": "#ffdad7",
+            "pure-white": "#FFFFFF",
+            "ink-secondary": "#59627A",
+            "red-subtle": "#FDECEE",
+            "inverse-primary": "#bac3ff",
+            "on-tertiary-container": "#ff928b",
+            "surface-bright": "#faf8ff",
+            "paper": "#F4F6FA",
+            "on-tertiary": "#ffffff",
+            "inverse-surface": "#273046",
+            "surface-container-low": "#f1f3ff",
+            "on-secondary-fixed-variant": "#2b3e99",
+            "rule": "#DCE1EC",
+            "surface-variant": "#d9e2fe",
+            "on-secondary-fixed": "#001159",
+            "blue-subtle": "#EEF0F9",
+            "on-primary-container": "#9eacff",
+            "red-tint": "#F9B9BE",
+            "on-surface-variant": "#454652",
+            "on-primary-fixed": "#00105b",
+            "red-dark": "#C4141F",
+            "outline": "#757683",
+            "surface": "#faf8ff",
+            "error-container": "#ffdad6",
+            "primary-fixed": "#dee0ff",
+            "on-tertiary-fixed-variant": "#930013",
+            "inverse-on-surface": "#edf0ff",
+            "background": "#faf8ff",
+            "on-secondary-container": "#1b2f8b",
+            "primary": "#092081",
+            "primary-fixed-dim": "#bac3ff",
+            "surface-container-high": "#e1e8ff",
+            "tertiary-fixed-dim": "#ffb3ad",
+            "on-tertiary-fixed": "#410004",
+            "rule-soft": "#EDF0F6",
+            "surface-container-highest": "#d9e2fe",
+            "outline-variant": "#c5c5d4",
+            "on-primary-fixed-variant": "#2c3d9a",
+            "error": "#ba1a1a",
+            "on-error": "#ffffff",
+            "secondary-container": "#8b9dfe",
+            "ink": "#0E1220",
+            "blue-tint": "#C6CCE9",
+            "on-secondary": "#ffffff",
+            "tertiary": "#630009",
+            "secondary-fixed-dim": "#bac3ff",
+            "blue-dark": "#1E2C75",
+            "ink-muted": "#8A93AA",
+            "secondary-fixed": "#dee1ff",
+            "surface-container": "#e9edff",
+            "on-primary": "#ffffff",
+            "on-surface": "#121b30",
+            "tertiary-container": "#8d0011",
+            "primary-container": "#283a97",
+            "surface-container-lowest": "#ffffff",
+            "secondary": "#4557b2",
+            "pure-black": "#000000",
+            "surface-tint": "#4556b4"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-lg": "1.5rem",
+            "gutter-dense": "0.5rem",
+            "gutter": "1rem",
+            "margin-mobile": "0.75rem",
+            "space-md": "1rem",
+            "margin": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-xl": "2rem",
+            "space-sm": "0.5rem"
+          },
+          "fontFamily": {
+            "headline-lg": ["Roboto", "sans-serif"],
+            "body-md": ["Roboto", "sans-serif"],
+            "headline-lg-mobile": ["Roboto", "sans-serif"],
+            "label-caps": ["Roboto Condensed", "sans-serif"],
+            "caption": ["Roboto", "sans-serif"],
+            "headline-sm": ["Roboto", "sans-serif"],
+            "headline-md": ["Roboto", "sans-serif"],
+            "data-table-header": ["Roboto Condensed", "sans-serif"],
+            "label-eyebrow": ["Roboto Condensed", "sans-serif"],
+            "data-table-cell": ["Roboto Condensed", "sans-serif"],
+            "data-tabular-code": ["JetBrains Mono", "monospace"],
+            "shopfloor-touch-primary": ["Roboto", "sans-serif"],
+            "body-sm": ["Roboto", "sans-serif"]
+          },
+          "fontSize": {
+            "headline-lg": ["23px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+            "caption": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-sm": ["15px", { "lineHeight": "22px", "fontWeight": "700" }],
+            "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "data-table-header": ["11px", { "lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+            "label-eyebrow": ["11px", { "lineHeight": "14px", "letterSpacing": "0.07em", "fontWeight": "700" }],
+            "data-table-cell": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "data-tabular-code": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+            "shopfloor-touch-primary": ["16px", { "lineHeight": "24px", "fontWeight": "700" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Industrial Functionalism CSS Overrides */
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    
+    /* Critical Row Alert */
+    .dong-canh-bao {
+      border-left: 4px solid #EE202E !important;
+      background-color: #FFF8F8 !important;
+    }
+
+    /* Utilitarian Pill Badges */
+    .pill {
+      font-family: 'Roboto Condensed', sans-serif;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border-radius: 9999px;
+      padding: 2px 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .p-ok { background-color: #EEF0F9; color: #092081; border: 1px solid #C6CCE9; }
+    .p-r { background-color: #EE202E; color: #FFFFFF; }
+    .p-warn { background-color: #FFFFFF; color: #EE202E; border: 1px solid #EE202E; }
+    .p-k { background-color: #0E1220; color: #FFFFFF; }
+    .p-info { background-color: #EDF0F6; color: #59627A; border: 1px solid #DCE1EC; }
+  </style>
+</head>
+<body class="bg-paper text-ink font-body-md antialiased min-h-screen selection:bg-blue-subtle selection:text-primary">
+<!-- Mobile Overlay Drawer Backdrop -->
+<div class="fixed inset-0 bg-ink/50 z-40 hidden transition-opacity lg:hidden" id="drawer-backdrop" onclick="toggleSidebar()"></div>
+<!-- FIXED SIDEBAR RAIL (250px) -->
+<aside class="fixed top-0 left-0 h-screen w-[250px] z-50 bg-pure-white border-r border-rule shadow-sm flex flex-col justify-between py-4 transition-transform duration-200 -translate-x-full lg:translate-x-0" id="main-sidebar">
+<div class="flex flex-col">
+<!-- Brand Logo Anchor -->
+<div class="px-5 pb-5 border-b border-rule flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded bg-primary text-pure-white flex items-center justify-center font-bold text-headline-sm shadow-sm">
+<span class="material-symbols-outlined" data-icon="precision_manufacturing">precision_manufacturing</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-primary tracking-wide">HỆ THỐNG MUA HÀNG</div>
+<div class="font-label-eyebrow text-label-eyebrow text-ink-secondary">&amp; Quản lý Sản xuất</div>
+</div>
+</div>
+<button class="lg:hidden text-ink-secondary hover:text-ink p-1" onclick="toggleSidebar()">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Module Indicator Tag -->
+<div class="px-5 pt-3 pb-2">
+<span class="font-label-eyebrow text-label-eyebrow text-ink-secondary">PHÂN HỆ GIA CÔNG NGOÀI</span>
+</div>
+<!-- Navigation Links from Shared Components JSON -->
+<nav class="flex flex-col gap-1 px-2">
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="dashboard">dashboard</span>
+<span>Tổng quan</span>
+</a>
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="inventory_2">inventory_2</span>
+<span>Đề nghị vật tư</span>
+</a>
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="request_quote">request_quote</span>
+<span>Báo giá</span>
+</a>
+<!-- ACTIVE TAB: Đơn hàng / Đặt gia công ngoài -->
+<a class="bg-blue-subtle text-primary border-l-4 border-primary font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-primary" data-icon="shopping_cart">shopping_cart</span>
+<span>Đơn hàng</span>
+</a>
+<a class="text-ink-secondary hover:bg-paper font-label-caps text-label-caps px-4 py-3 flex items-center gap-3 transition-colors active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="assignment_ind">assignment_ind</span>
+<span>Việc của tôi</span>
+</a>
+</nav>
+</div>
+<!-- Footer of Sidebar -->
+<div class="px-4 border-t border-rule pt-4 flex flex-col gap-2">
+<div class="flex items-center justify-between text-ink-secondary px-2">
+<span class="font-data-tabular-code text-[11px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+          Phiên bản v1.0
+        </span>
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Hệ thống vận hành bình thường"></span>
+</div>
+<button class="w-full h-9 rounded bg-paper hover:bg-rule-soft text-ink font-label-caps text-label-caps flex items-center justify-center gap-2 border border-rule transition-colors">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="logout">logout</span>
+<span>Đăng xuất</span>
+</button>
+</div>
+</aside>
+<!-- TOP APP BAR (58px) -->
+<header class="fixed top-0 right-0 left-0 lg:left-[250px] h-[58px] z-30 bg-pure-white border-b border-rule flex items-center justify-between px-4 lg:px-margin shadow-sm">
+<div class="flex items-center gap-3">
+<!-- Hamburger Button (Mobile/Tablet) -->
+<button aria-label="Mở menu" class="lg:hidden p-2 text-ink rounded hover:bg-paper" onclick="toggleSidebar()">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline-md text-headline-md text-ink tracking-tight">Mua hàng &amp; Quản lý Sản xuất</h1>
+<span class="hidden sm:inline-flex pill p-ok">XƯỞNG CƠ KHÍ CHÍNH XÁC #2</span>
+</div>
+</div>
+</div>
+<!-- Right Trailing Cluster -->
+<div class="flex items-center gap-2 lg:gap-4">
+<!-- Live Sync Indicator -->
+<div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-blue-subtle text-primary border border-blue-tint rounded font-data-tabular-code text-[12px]">
+<span class="material-symbols-outlined text-primary animate-spin" data-icon="sync">sync</span>
+<span>ĐỒNG BỘ: TRỰC TIẾP</span>
+</div>
+<!-- Action Button Notifications -->
+<button class="relative p-2 text-ink-secondary hover:text-primary hover:bg-blue-subtle rounded-lg transition-colors" title="Thông báo tiến độ gia công">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-dark rounded-full"></span>
+</button>
+<!-- User Profile Summary -->
+<div class="flex items-center gap-2 pl-2 border-l border-rule">
+<div class="w-8 h-8 rounded-full bg-primary text-pure-white font-headline-sm flex items-center justify-center font-bold text-xs">
+          ĐĐ
+        </div>
+<div class="hidden md:flex flex-col text-left">
+<span class="font-headline-sm text-[13px] leading-4 text-ink font-bold">Lê Văn Hùng</span>
+<span class="font-label-eyebrow text-[10px] text-ink-secondary">Trưởng Bộ phận Điều độ</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CANVAS -->
+<main class="pt-[58px] lg:pl-[250px] min-h-screen pb-12">
+<div class="p-4 lg:p-margin max-w-[1600px] mx-auto flex flex-col gap- space-md">
+<!-- Breadcrumbs & Quick Meta -->
+<div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+<div class="flex items-center gap-2 text-ink-secondary text-caption font-caption">
+<a class="hover:text-primary" href="#">Trang chủ</a>
+<span>/</span>
+<a class="hover:text-primary" href="#">Sản xuất</a>
+<span>/</span>
+<span class="text-ink font-bold">Đặt gia công ngoài</span>
+</div>
+<div class="flex items-center gap-2 text-caption text-ink-secondary">
+<span class="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
+<span>Ca làm việc: Ca 1 (07:30 - 16:30) • 26/03/2026</span>
+</div>
+</div>
+<!-- Page Header & Action Controls -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-pure-white p-4 border border-rule rounded">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-ink font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[28px]" data-icon="build_circle">build_circle</span>
+            Theo dõi Đặt hàng Ngoài / Gia công Ngoài (Subcontracting)
+          </h2>
+<p class="text-body-md text-ink-secondary mt-0.5">
+            Quản trị tiến độ, đối soát chất lượng giao nhận và kiểm soát hạn mức phê duyệt theo Lệnh Sản Xuất (LSX).
+          </p>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="h-9 px-3.5 bg-pure-white hover:bg-blue-subtle text-ink font-label-caps text-label-caps border border-rule rounded flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="file_download">file_download</span>
+<span>Xuất Excel</span>
+</button>
+<button class="h-9 px-4 bg-primary hover:bg-blue-dark text-pure-white font-label-caps text-label-caps rounded flex items-center gap-1.5 transition-colors shadow-sm active:scale-[0.98]">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span>+ TẠO ĐƠN ĐẶT GIA CÔNG</span>
+</button>
+</div>
+</div>
+<!-- FIVE BUSINESS TABS (§1 CẤU TRÚC TAB THEO HÌNH ẢNH YÊU CẦU) -->
+<div class="border-b border-rule flex items-center overflow-x-auto bg-pure-white px-2 pt-2 rounded-t">
+<!-- Tab 1: Theo dõi (Active) -->
+<button class="tab-btn px-4 py-2.5 font-label-caps text-label-caps text-primary border-b-2 border-primary flex items-center gap-2 whitespace-nowrap font-bold" id="tab-btn-theo-doi" onclick="switchTab('theo-doi')">
+<span class="material-symbols-outlined text-[18px]" data-icon="table_rows">table_rows</span>
+<span>Theo dõi</span>
+<span class="px-1.5 py-0.2 bg-blue-subtle text-primary rounded-full text-[11px] font-data-tabular-code">3 LSX</span>
+</button>
+<!-- Tab 2: Danh sách phiếu -->
+<button class="tab-btn px-4 py-2.5 font-label-caps text-label-caps text-ink-secondary hover:text-primary border-b-2 border-transparent flex items-center gap-2 whitespace-nowrap" id="tab-btn-danh-sach-phieu" onclick="switchTab('danh-sach-phieu')">
+<span class="material-symbols-outlined text-[18px]" data-icon="receipt_long">receipt_long</span>
+<span>Danh sách phiếu</span>
+<span class="px-1.5 py-0.2 bg-paper text-ink-secondary rounded-full text-[11px] font-data-tabular-code">84</span>
+</button>
+<!-- Tab 3: Báo giá (Mới) -->
+<button class="tab-btn px-4 py-2.5 font-label-caps text-label-caps text-ink-secondary hover:text-primary border-b-2 border-transparent flex items-center gap-2 whitespace-nowrap" id="tab-btn-bao-gia" onclick="switchTab('bao-gia')">
+<span class="material-symbols-outlined text-[18px]" data-icon="compare_arrows">compare_arrows</span>
+<span>Báo giá</span>
+<span class="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded-full text-[11px] font-bold">Mới</span>
+</button>
+<!-- Tab 4: Đơn đặt gia công (Mới) -->
+<button class="tab-btn px-4 py-2.5 font-label-caps text-label-caps text-ink-secondary hover:text-primary border-b-2 border-transparent flex items-center gap-2 whitespace-nowrap" id="tab-btn-don-dat-gia-cong" onclick="switchTab('don-dat-gia-cong')">
+<span class="material-symbols-outlined text-[18px]" data-icon="verified">verified</span>
+<span>Đơn đặt gia công</span>
+<span class="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded-full text-[11px] font-bold">Cấp duyệt</span>
+</button>
+<!-- Tab 5: Nhà cung cấp (Mới) -->
+<button class="tab-btn px-4 py-2.5 font-label-caps text-label-caps text-ink-secondary hover:text-primary border-b-2 border-transparent flex items-center gap-2 whitespace-nowrap" id="tab-btn-nha-cung-cap" onclick="switchTab('nha-cung-cap')">
+<span class="material-symbols-outlined text-[18px]" data-icon="factory">factory</span>
+<span>Nhà cung cấp</span>
+<span class="px-1.5 py-0.2 bg-blue-subtle text-primary rounded-full text-[11px] font-data-tabular-code">Tải CS</span>
+</button>
+</div>
+<!-- KPI METRIC CARDS (§5.1 Thẻ số liệu thống kê nhanh) -->
+<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+<!-- Card 1: Tổng lệnh -->
+<div class="bg-pure-white border border-rule rounded p-4 flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-ink-secondary">TỔNG LỆNH GIA CÔNG NGOÀI</span>
+<span class="material-symbols-outlined text-primary" data-icon="layers">layers</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-data-tabular-code text-2xl font-bold text-ink">84 <span class="text-sm font-normal text-ink-secondary">lệnh</span></span>
+<span class="pill p-ok">Hoạt động</span>
+</div>
+<div class="mt-2 pt-2 border-t border-rule-soft text-caption text-ink-secondary">
+            Phân bổ trên 12 nhà cung ứng liên kết
+          </div>
+</div>
+<!-- Card 2: Đang gia công -->
+<div class="bg-pure-white border border-rule rounded p-4 flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-ink-secondary">ĐANG GIA CÔNG TẠI NCC</span>
+<span class="material-symbols-outlined text-secondary" data-icon="precision_manufacturing">precision_manufacturing</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-data-tabular-code text-2xl font-bold text-primary">36 <span class="text-sm font-normal text-ink-secondary">đơn</span></span>
+<span class="pill p-ok">Tiến độ 85%</span>
+</div>
+<div class="mt-2 pt-2 border-t border-rule-soft text-caption text-ink-secondary">
+            21 đơn trong hạn • 8 đơn hoàn thiện thô
+          </div>
+</div>
+<!-- Card 3: Trễ tiến độ / Báo động đỏ -->
+<div class="bg-pure-white border border-red-dark/30 rounded p-4 flex flex-col justify-between shadow-sm border-l-4 border-l-red-dark">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-red-dark">TRỄ TIẾN ĐỘ / BÁO ĐỘNG</span>
+<span class="material-symbols-outlined text-red-dark" data-icon="warning">warning</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-data-tabular-code text-2xl font-bold text-red-dark">07 <span class="text-sm font-normal text-red-dark">đơn</span></span>
+<span class="pill p-r">NGHIÊM TRỌNG</span>
+</div>
+<div class="mt-2 pt-2 border-t border-red-tint/50 text-caption text-red-dark font-medium">
+            Có 2 lệnh ảnh hưởng chuyền lắp ráp chính
+          </div>
+</div>
+<!-- Card 4: Chờ nghiệm thu IQC -->
+<div class="bg-pure-white border border-rule rounded p-4 flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-ink-secondary">CHỜ NGHIỆM THU / IQC CỔNG</span>
+<span class="material-symbols-outlined text-ink" data-icon="fact_check">fact_check</span>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-data-tabular-code text-2xl font-bold text-ink">12 <span class="text-sm font-normal text-ink-secondary">lô hàng</span></span>
+<span class="pill p-info">Khu cách ly</span>
+</div>
+<div class="mt-2 pt-2 border-t border-rule-soft text-caption text-ink-secondary">
+            Đã nhập kho tạm thời chờ KCS đo kích thước
+          </div>
+</div>
+</section>
+<!-- FILTER BAR (§5.1 BỘ LỌC CHUẨN loc-bar) -->
+<section class="bg-pure-white border border-rule rounded p-3 shadow-sm flex flex-col gap-3">
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+<!-- Từ ngày -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">TỪ NGÀY</label>
+<input class="w-full h-9 px-2 text-body-sm font-data-tabular-code border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0" type="date" value="2026-03-01"/>
+</div>
+<!-- Đến ngày -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">ĐẾN NGÀY</label>
+<input class="w-full h-9 px-2 text-body-sm font-data-tabular-code border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0" type="date" value="2026-03-31"/>
+</div>
+<!-- Xưởng / Bộ phận -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">XƯỞNG / BỘ PHẬN</label>
+<select class="w-full h-9 px-2 text-body-sm border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0">
+<option>Tất cả xưởng sản xuất</option>
+<option selected="">Xưởng Cơ khí chính xác #2</option>
+<option>Xưởng Kết cấu &amp; Hàn #1</option>
+<option>Xưởng Nhiệt luyện &amp; Đúc</option>
+</select>
+</div>
+<!-- Nhà cung cấp -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">NHÀ CUNG CẤP GIA CÔNG</label>
+<select class="w-full h-9 px-2 text-body-sm border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0">
+<option>Tất cả nhà cung ứng</option>
+<option>Cơ khí Miền Nam (Trục/Tiện)</option>
+<option>Kim khí Thăng Long (Laser)</option>
+<option>Mạ An Phát (Crom cứng)</option>
+<option>Nhiệt Luyện Nam Phát</option>
+</select>
+</div>
+<!-- Trạng thái gia công -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">TRẠNG THÁI TIẾN ĐỘ</label>
+<select class="w-full h-9 px-2 text-body-sm border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0">
+<option>Tất cả trạng thái</option>
+<option>Đang giao trễ (Cảnh báo đỏ)</option>
+<option>Đúng tiến độ</option>
+<option>Chờ gửi NCC</option>
+<option>Chờ nghiệm thu IQC</option>
+</select>
+</div>
+<!-- Tìm kiếm mã -->
+<div>
+<label class="block font-label-caps text-label-caps text-ink-secondary mb-1">TÌM MÃ LSX, MÃ HÀNG, PO</label>
+<div class="relative">
+<input class="w-full h-9 pl-8 pr-2 text-body-sm font-data-tabular-code border border-rule rounded bg-pure-white text-ink focus:border-primary focus:ring-0" placeholder="Nhập mã cần tra..." type="text" value="MBC0326"/>
+<span class="material-symbols-outlined absolute left-2 top-2 text-ink-muted text-[18px]" data-icon="search">search</span>
+</div>
+</div>
+</div>
+<!-- Filter action buttons -->
+<div class="flex items-center justify-between pt-2 border-t border-rule-soft">
+<div class="text-caption text-ink-secondary">
+            Hiển thị <strong>3 lệnh sản xuất trọng điểm</strong> (Tổng 11 mã chi tiết đặt gia công ngoài)
+          </div>
+<div class="flex items-center gap-2">
+<button class="h-8 px-3 text-ink-secondary hover:text-ink font-label-caps text-label-caps border border-transparent hover:border-rule rounded transition-colors">
+              Xoá lọc
+            </button>
+<button class="h-8 px-4 bg-primary hover:bg-blue-dark text-pure-white font-label-caps text-label-caps rounded flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="filter_alt">filter_alt</span>
+<span>Áp dụng lọc</span>
+</button>
+</div>
+</div>
+</section>
+<!-- TAB VIEW 1: THEO DÕI (MẶC ĐỊNH - TREE TABLE THEO LSX) -->
+<section class="bg-pure-white border border-rule rounded shadow-sm overflow-hidden flex flex-col" id="view-theo-doi">
+<!-- Table Header Control Bar -->
+<div class="px-4 py-3 bg-paper border-b border-rule flex flex-wrap items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-ink">BẢNG TIẾN ĐỘ THEO LỆNH SẢN XUẤT (LSX)</span>
+<span class="text-caption text-ink-secondary">(Bấm mũi tên để bung/gập chi tiết từng mã hàng gia công)</span>
+</div>
+<div class="flex items-center gap-2 text-caption">
+<button class="px-2 py-1 bg-pure-white border border-rule rounded hover:bg-blue-subtle text-ink font-medium" onclick="expandAllRows()">Bung tất cả</button>
+<button class="px-2 py-1 bg-pure-white border border-rule rounded hover:bg-blue-subtle text-ink font-medium" onclick="collapseAllRows()">Thu gọn tất cả</button>
+</div>
+</div>
+<!-- Responsive Table Container -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-paper border-b border-rule text-ink-secondary font-data-table-header text-data-table-header uppercase">
+<th class="py-2.5 px-3 w-10 text-center">#</th>
+<th class="py-2.5 px-3 min-w-[200px]">LỆNH SẢN XUẤT / NỘI DUNG</th>
+<th class="py-2.5 px-3 min-w-[150px]">KHÁCH HÀNG</th>
+<th class="py-2.5 px-3 min-w-[170px]">NHÀ CUNG CẤP GIA CÔNG</th>
+<th class="py-2.5 px-3 min-w-[120px] text-center">SỐ LƯỢNG / TIẾN ĐỘ</th>
+<th class="py-2.5 px-3 min-w-[140px] text-center">HẠN GIAO / SỚM - TRỄ</th>
+<th class="py-2.5 px-3 min-w-[130px] text-center">TRẠNG THÁI</th>
+<th class="py-2.5 px-3 min-w-[160px] text-right">THAO TÁC NHANH</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-rule-soft font-body-sm text-ink">
+<!-- ================= GROUP 1: LSX #MBC0326-018 (TRỄ 2 NGÀY - DÒNG CẢNH BÁO .dong-canh-bao) ================= -->
+<tr class="dong-canh-bao hover:bg-red-subtle/50 transition-colors font-medium">
+<td class="py-3 px-3 text-center">
+<button class="w-6 h-6 rounded flex items-center justify-center hover:bg-pure-white border border-red-tint text-red-dark" onclick="toggleGroup('group-1', this)">
+<span class="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90" data-icon="chevron_right">chevron_right</span>
+</button>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-red-dark font-bold text-[13px]">#MBC0326-018</span>
+<span class="pill p-r">ƯU TIÊN 1</span>
+</div>
+<div class="font-headline-sm text-[13px] text-ink mt-0.5">
+                    Gia công tiện thô &amp; nhiệt luyện trục máy ép định hình 450T
+                  </div>
+<div class="text-[11px] text-ink-secondary mt-0.5">Xưởng Cơ khí chính xác #2 • Điều độ: Lê Văn Hùng</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-bold text-ink">Daikin Vietnam</div>
+<div class="text-[11px] text-ink-secondary font-data-tabular-code">PO-DAI-2026-88</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="domain">domain</span>
+<span class="font-bold text-ink">Cơ khí Miền Nam</span>
+</div>
+<div class="text-[11px] text-ink-secondary">Đầu mối: A. Toàn (0918.234.xxx)</div>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code font-bold">12 / 12 bộ</div>
+<div class="w-full bg-rule rounded-full h-1.5 mt-1 overflow-hidden">
+<div class="bg-red-dark h-1.5 rounded-full" style="width: 65%"></div>
+</div>
+<span class="text-[10px] text-ink-secondary">Hoàn thành 65%</span>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code text-[12px] text-ink-secondary">24/03/2026</div>
+<div class="font-data-tabular-code text-red-dark font-bold flex items-center justify-center gap-0.5 mt-0.5">
+<span class="material-symbols-outlined text-[15px]" data-icon="error">error</span>
+<span>TRỄ 2 NGÀY</span>
+</div>
+</td>
+<td class="py-3 px-3 text-center">
+<span class="pill p-r">ĐANG GIAO TRỄ</span>
+<div class="text-[10px] text-red-dark mt-1 font-semibold">Chờ thấm cacbon</div>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2.5 bg-red-dark hover:bg-red-900 text-pure-white rounded font-label-caps text-[11px] flex items-center gap-1 shadow-sm" title="Gửi điện khẩn thoại đôn đốc">
+<span class="material-symbols-outlined text-[14px]" data-icon="notification_important">notification_important</span>
+<span>Đôn đốc NCC</span>
+</button>
+<button class="h-7 px-2 bg-pure-white border border-rule hover:bg-paper text-ink rounded font-label-caps text-[11px]" title="Biên bản trễ hạn phát sinh">
+                      Lập BB
+                    </button>
+</div>
+</td>
+</tr>
+<!-- SUB-ROWS FOR GROUP 1 (Mã hàng con chi tiết) -->
+<tr class="group-1-child bg-blue-subtle/30 border-b border-rule-soft">
+<td class="py-2 px-3 text-center text-ink-muted">
+<span class="material-symbols-outlined text-[14px]" data-icon="subdirectory_arrow_right">subdirectory_arrow_right</span>
+</td>
+<td class="py-2 px-3 pl-6">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-[12px] font-bold text-primary">MH-TRUC-9015</span>
+<span class="pill p-info text-[10px]">Thép S45C</span>
+</div>
+<div class="text-[12px] text-ink">Trục truyền động chính Ø90x1500mm (Tiện thô + Tôi cao tần)</div>
+</td>
+<td class="py-2 px-3 text-caption text-ink-secondary">Cụm truyền động máy ép</td>
+<td class="py-2 px-3 text-caption">Gia công tiện: Đạt • <span class="text-red-dark font-medium">Kẹt lò tôi</span></td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px]">08 / 12 cái</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px] text-red-dark font-bold">-2 ngày</td>
+<td class="py-2 px-3 text-center"><span class="pill p-warn">Đang nhiệt luyện</span></td>
+<td class="py-2 px-3 text-right">
+<button class="text-primary hover:underline text-caption font-bold">Xem chi tiết đo KCS</button>
+</td>
+</tr>
+<tr class="group-1-child bg-blue-subtle/30 border-b border-rule-soft">
+<td class="py-2 px-3 text-center text-ink-muted">
+<span class="material-symbols-outlined text-[14px]" data-icon="subdirectory_arrow_right">subdirectory_arrow_right</span>
+</td>
+<td class="py-2 px-3 pl-6">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-[12px] font-bold text-primary">MH-BR-M4-02</span>
+<span class="pill p-info text-[10px]">Thép 40Cr</span>
+</div>
+<div class="text-[12px] text-ink">Bánh răng côn răng thẳng module m=4, Z=38 răng</div>
+</td>
+<td class="py-2 px-3 text-caption text-ink-secondary">Hộp số giảm tốc</td>
+<td class="py-2 px-3 text-caption">Phay lăn răng xong • Đang mài</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px]">12 / 12 cái</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px] text-red-dark font-bold">-1 ngày</td>
+<td class="py-2 px-3 text-center"><span class="pill p-warn">Đang mài tròn</span></td>
+<td class="py-2 px-3 text-right">
+<button class="text-primary hover:underline text-caption font-bold">Xem bản vẽ CNC</button>
+</td>
+</tr>
+<tr class="group-1-child bg-blue-subtle/30 border-b border-rule">
+<td class="py-2 px-3 text-center text-ink-muted">
+<span class="material-symbols-outlined text-[14px]" data-icon="subdirectory_arrow_right">subdirectory_arrow_right</span>
+</td>
+<td class="py-2 px-3 pl-6">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-[12px] font-bold text-primary">MH-KN-KN120</span>
+<span class="pill p-info text-[10px]">Thép C45</span>
+</div>
+<div class="text-[12px] text-ink">Khớp nối răng ống lồng tự lựa KN-120</div>
+</td>
+<td class="py-2 px-3 text-caption text-ink-secondary">Gối đỡ đàn hồi</td>
+<td class="py-2 px-3 text-caption">Gia công hoàn tất</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px]">12 / 12 bộ</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px] text-emerald-700 font-bold">Xong chờ xe</td>
+<td class="py-2 px-3 text-center"><span class="pill p-ok">Chờ vận chuyển</span></td>
+<td class="py-2 px-3 text-right">
+<button class="text-primary hover:underline text-caption font-bold">Phiếu xuất xưởng</button>
+</td>
+</tr>
+<!-- ================= GROUP 2: LSX #MBC0326-022 (ĐÚNG TIẾN ĐỘ - SỚM 1 NGÀY) ================= -->
+<tr class="hover:bg-blue-subtle/40 transition-colors">
+<td class="py-3 px-3 text-center">
+<button class="w-6 h-6 rounded flex items-center justify-center hover:bg-pure-white border border-rule text-ink-secondary" onclick="toggleGroup('group-2', this)">
+<span class="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90" data-icon="chevron_right">chevron_right</span>
+</button>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-primary font-bold text-[13px]">#MBC0326-022</span>
+<span class="pill p-ok">CHUẨN ĐỊNH MỨC</span>
+</div>
+<div class="font-headline-sm text-[13px] text-ink mt-0.5">
+                    Cắt laser CNC &amp; Chấn dập cụm khung vỏ trạm sạc điện công nghiệp
+                  </div>
+<div class="text-[11px] text-ink-secondary mt-0.5">Xưởng Kết cấu &amp; Hàn #1 • Điều độ: Trần Đình Trọng</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-bold text-ink">Panasonic Eco</div>
+<div class="text-[11px] text-ink-secondary font-data-tabular-code">PO-PANA-9011</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="domain">domain</span>
+<span class="font-bold text-ink">Kim khí Thăng Long</span>
+</div>
+<div class="text-[11px] text-ink-secondary">Đầu mối: C. Hương (0904.551.xxx)</div>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code font-bold">40 / 40 bộ</div>
+<div class="w-full bg-rule rounded-full h-1.5 mt-1 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 100%"></div>
+</div>
+<span class="text-[10px] text-emerald-700 font-semibold">100% Hoàn tất cắt chấn</span>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code text-[12px] text-ink-secondary">28/03/2026</div>
+<div class="font-data-tabular-code text-emerald-700 font-bold flex items-center justify-center gap-0.5 mt-0.5">
+<span class="material-symbols-outlined text-[15px]" data-icon="check_circle">check_circle</span>
+<span>SỚM 1 NGÀY</span>
+</div>
+</td>
+<td class="py-3 px-3 text-center">
+<span class="pill p-ok">CHỜ NGHIỆM THU</span>
+<div class="text-[10px] text-ink-secondary mt-1">Đã giao cổng bảo vệ</div>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2.5 bg-primary hover:bg-blue-dark text-pure-white rounded font-label-caps text-[11px] flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="fact_check">fact_check</span>
+<span>Nhận hàng IQC</span>
+</button>
+<button class="h-7 px-2 bg-pure-white border border-rule hover:bg-paper text-ink rounded font-label-caps text-[11px]">
+                      Xem PO
+                    </button>
+</div>
+</td>
+</tr>
+<!-- SUB-ROWS FOR GROUP 2 -->
+<tr class="group-2-child bg-blue-subtle/30 border-b border-rule-soft">
+<td class="py-2 px-3 text-center text-ink-muted">
+<span class="material-symbols-outlined text-[14px]" data-icon="subdirectory_arrow_right">subdirectory_arrow_right</span>
+</td>
+<td class="py-2 px-3 pl-6">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-[12px] font-bold text-primary">MH-VO-LAS01</span>
+<span class="pill p-info text-[10px]">Tôn tráng kẽm 2.5mm</span>
+</div>
+<div class="text-[12px] text-ink">Tấm hông bên phải có chớp tản nhiệt đột dập CNC</div>
+</td>
+<td class="py-2 px-3 text-caption text-ink-secondary">Cụm khung ngoài trạm</td>
+<td class="py-2 px-3 text-caption">Cắt chấn chuẩn R2 theo dưỡng</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px]">40 / 40 cái</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px] text-emerald-700 font-bold">Đúng hẹn</td>
+<td class="py-2 px-3 text-center"><span class="pill p-ok">Đã kiểm sơ bộ</span></td>
+<td class="py-2 px-3 text-right">
+<button class="text-primary hover:underline text-caption font-bold">Biên bản bàn giao</button>
+</td>
+</tr>
+<!-- ================= GROUP 3: LSX #MBC0326-031 (ĐANG NHIỆT LUYỆN / MẠ CROM) ================= -->
+<tr class="hover:bg-blue-subtle/40 transition-colors">
+<td class="py-3 px-3 text-center">
+<button class="w-6 h-6 rounded flex items-center justify-center hover:bg-pure-white border border-rule text-ink-secondary" onclick="toggleGroup('group-3', this)">
+<span class="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90" data-icon="chevron_right">chevron_right</span>
+</button>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-primary font-bold text-[13px]">#MBC0326-031</span>
+<span class="pill p-info">BÌNH THƯỜNG</span>
+</div>
+<div class="font-headline-sm text-[13px] text-ink mt-0.5">
+                    Xi mạ crom cứng chống mài mòn ty ben thuỷ lực xilanh nâng hạ
+                  </div>
+<div class="text-[11px] text-ink-secondary mt-0.5">Xưởng Thuỷ lực • Điều độ: Hoàng Quốc Việt</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-bold text-ink">VinFast Auto</div>
+<div class="text-[11px] text-ink-secondary font-data-tabular-code">PO-VF-4420-LH</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="domain">domain</span>
+<span class="font-bold text-ink">Mạ Kỹ Thuật Cao An Phát</span>
+</div>
+<div class="text-[11px] text-ink-secondary">Đầu mối: Kỹ sư Q. Huy</div>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code font-bold">18 / 24 cây</div>
+<div class="w-full bg-rule rounded-full h-1.5 mt-1 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 75%"></div>
+</div>
+<span class="text-[10px] text-ink-secondary">Đã xong bể mạ lần 2</span>
+</td>
+<td class="py-3 px-3 text-center">
+<div class="font-data-tabular-code text-[12px] text-ink-secondary">30/03/2026</div>
+<div class="font-data-tabular-code text-primary font-bold flex items-center justify-center gap-0.5 mt-0.5">
+<span class="material-symbols-outlined text-[15px]" data-icon="schedule">schedule</span>
+<span>CÒN 4 NGÀY</span>
+</div>
+</td>
+<td class="py-3 px-3 text-center">
+<span class="pill p-info">ĐANG XI MẠ</span>
+<div class="text-[10px] text-ink-secondary mt-1">Độ dày lớp mạ 50µm</div>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2.5 bg-paper hover:bg-blue-subtle text-primary border border-rule rounded font-label-caps text-[11px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span>
+<span>Xem tiến độ</span>
+</button>
+<button class="h-7 px-2 bg-pure-white border border-rule hover:bg-paper text-ink rounded font-label-caps text-[11px]">
+                      Nhật trình
+                    </button>
+</div>
+</td>
+</tr>
+<!-- SUB-ROWS FOR GROUP 3 -->
+<tr class="group-3-child bg-blue-subtle/30 border-b border-rule-soft">
+<td class="py-2 px-3 text-center text-ink-muted">
+<span class="material-symbols-outlined text-[14px]" data-icon="subdirectory_arrow_right">subdirectory_arrow_right</span>
+</td>
+<td class="py-2 px-3 pl-6">
+<div class="flex items-center gap-2">
+<span class="font-data-tabular-code text-[12px] font-bold text-primary">MH-TY-BEN-80</span>
+<span class="pill p-info text-[10px]">Thép 20MnV6 Mạ Crom</span>
+</div>
+<div class="text-[12px] text-ink">Ty ben Ø80 x dài 2200mm yêu cầu độ bóng gương Ra 0.2</div>
+</td>
+<td class="py-2 px-3 text-caption text-ink-secondary">Chuyền ép dập khung gầm</td>
+<td class="py-2 px-3 text-caption">18 cây đã mài bóng • 6 cây đang ở bể mạ điện hoá</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px]">18 / 24 cây</td>
+<td class="py-2 px-3 text-center font-data-tabular-code text-[12px] text-primary">Trong hạn</td>
+<td class="py-2 px-3 text-center"><span class="pill p-info">Bể mạ số 4</span></td>
+<td class="py-2 px-3 text-right">
+<button class="text-primary hover:underline text-caption font-bold">Biên bản đo bề dày mạ</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Pagination Footer -->
+<div class="p-3 bg-paper border-t border-rule flex flex-wrap items-center justify-between gap-3 text-caption text-ink-secondary">
+<div class="flex items-center gap-2">
+<span>Hiển thị</span>
+<select class="h-7 px-2 bg-pure-white border border-rule rounded text-caption font-data-tabular-code">
+<option>10 LSX / trang</option>
+<option>25 LSX / trang</option>
+<option>50 LSX / trang</option>
+</select>
+<span>Tổng cộng <strong>3</strong> nhóm lệnh sản xuất đặt ngoài</span>
+</div>
+<div class="flex items-center gap-1 font-data-tabular-code">
+<button class="w-7 h-7 bg-pure-white border border-rule rounded flex items-center justify-center text-ink-muted hover:text-ink disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="w-7 h-7 bg-primary text-pure-white rounded font-bold">1</button>
+<button class="w-7 h-7 bg-pure-white border border-rule rounded flex items-center justify-center text-ink hover:bg-paper">2</button>
+<button class="w-7 h-7 bg-pure-white border border-rule rounded flex items-center justify-center text-ink hover:bg-paper">
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+<!-- TAB VIEW 2: DANH SÁCH PHIẾU (ẨN MẶC ĐỊNH, CÓ Ô ĐẾM TRẠNG THÁI) -->
+<section class="hidden flex flex-col gap-4" id="view-danh-sach-phieu">
+<!-- Sub-status Counters Grid -->
+<div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+<div class="bg-pure-white p-3 border border-rule rounded text-center">
+<span class="text-caption text-ink-secondary font-bold">TỔNG PHIẾU</span>
+<div class="font-data-tabular-code text-xl font-bold text-ink mt-1">84</div>
+</div>
+<div class="bg-pure-white p-3 border border-rule rounded text-center">
+<span class="text-caption text-ink-secondary font-bold">CHỜ GỬI NCC</span>
+<div class="font-data-tabular-code text-xl font-bold text-ink-muted mt-1">09</div>
+</div>
+<div class="bg-pure-white p-3 border border-rule rounded text-center">
+<span class="text-caption text-primary font-bold">ĐANG GIA CÔNG</span>
+<div class="font-data-tabular-code text-xl font-bold text-primary mt-1">36</div>
+</div>
+<div class="bg-pure-white p-3 border border-rule rounded text-center">
+<span class="text-caption text-amber-700 font-bold">CHỜ IQC</span>
+<div class="font-data-tabular-code text-xl font-bold text-amber-700 mt-1">12</div>
+</div>
+<div class="bg-pure-white p-3 border border-rule rounded text-center">
+<span class="text-caption text-emerald-700 font-bold">ĐÃ HOÀN TẤT</span>
+<div class="font-data-tabular-code text-xl font-bold text-emerald-700 mt-1">20</div>
+</div>
+<div class="bg-pure-white p-3 border border-red-dark rounded text-center bg-red-subtle/40">
+<span class="text-caption text-red-dark font-bold">TRỄ TIẾN ĐỘ</span>
+<div class="font-data-tabular-code text-xl font-bold text-red-dark mt-1">07</div>
+</div>
+</div>
+<!-- Table of Slips -->
+<div class="bg-pure-white border border-rule rounded shadow-sm overflow-x-auto">
+<table class="w-full text-left border-collapse font-body-sm">
+<thead>
+<tr class="bg-paper border-b border-rule font-data-table-header text-data-table-header uppercase text-ink-secondary">
+<th class="p-3">SỐ PHIẾU GIA CÔNG</th>
+<th class="p-3">NGÀY TẠO</th>
+<th class="p-3">LỆNH SẢN XUẤT</th>
+<th class="p-3">NHÀ CUNG CẤP</th>
+<th class="p-3">CÔNG ĐOẠN ĐẶT NGOÀI</th>
+<th class="p-3 text-center">HẠN TRẢ HÀNG</th>
+<th class="p-3 text-center">TRẠNG THÁI</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-rule-soft font-data-table-cell">
+<tr class="hover:bg-blue-subtle/50">
+<td class="p-3 font-data-tabular-code font-bold text-primary">PGC-2026-0089</td>
+<td class="p-3 font-data-tabular-code">20/03/2026</td>
+<td class="p-3 font-data-tabular-code text-ink font-bold">#MBC0326-018</td>
+<td class="p-3">Công ty Cơ khí Miền Nam</td>
+<td class="p-3">Tiện thô CNC &amp; Thấm Nitơ</td>
+<td class="p-3 text-center font-data-tabular-code text-red-dark font-bold">24/03/2026 (Quá 2 ngày)</td>
+<td class="p-3 text-center"><span class="pill p-r">Đang trễ</span></td>
+</tr>
+<tr class="hover:bg-blue-subtle/50">
+<td class="p-3 font-data-tabular-code font-bold text-primary">PGC-2026-0092</td>
+<td class="p-3 font-data-tabular-code">22/03/2026</td>
+<td class="p-3 font-data-tabular-code text-ink font-bold">#MBC0326-022</td>
+<td class="p-3">Kim khí Thăng Long</td>
+<td class="p-3">Cắt laser Fiber tôn kẽm 2.5mm</td>
+<td class="p-3 text-center font-data-tabular-code text-emerald-700">28/03/2026 (Đúng hạn)</td>
+<td class="p-3 text-center"><span class="pill p-ok">Chờ IQC</span></td>
+</tr>
+<tr class="hover:bg-blue-subtle/50">
+<td class="p-3 font-data-tabular-code font-bold text-primary">PGC-2026-0095</td>
+<td class="p-3 font-data-tabular-code">25/03/2026</td>
+<td class="p-3 font-data-tabular-code text-ink font-bold">#MBC0326-031</td>
+<td class="p-3">Mạ An Phát</td>
+<td class="p-3">Xi mạ crom bóng ty xilanh thủy lực</td>
+<td class="p-3 text-center font-data-tabular-code">30/03/2026 (Còn 4 ngày)</td>
+<td class="p-3 text-center"><span class="pill p-info">Đang gia công</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- TAB VIEW 3: BÁO GIÁ ĐẶT GIA CÔNG (MỚI - MA TRẬN SO SÁNH GIÁ) -->
+<section class="hidden flex flex-col gap-4" id="view-bao-gia">
+<div class="bg-pure-white p-4 border border-rule rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-ink">MA TRẬN HỎI GIÁ &amp; SO SÁNH NHIỀU NHÀ CUNG ỨNG</h3>
+<p class="text-caption text-ink-secondary">Tái sử dụng cơ chế ma trận so sánh của phân hệ Mua hàng để chọn đơn vị gia công tối ưu chi phí &amp; thời gian giao hàng.</p>
+</div>
+<button class="h-8 px-3 bg-primary text-pure-white font-label-caps text-label-caps rounded flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="post_add">post_add</span>
+<span>+ Tạo yêu cầu báo giá (RFQ)</span>
+</button>
+</div>
+<div class="bg-pure-white border border-rule rounded shadow-sm overflow-x-auto p-4">
+<div class="mb-3 flex items-center justify-between border-b border-rule pb-2">
+<div>
+<span class="font-data-tabular-code font-bold text-primary text-[14px]">RFQ-OUT-2026-044</span>: Gia công phay CNC cụm đế máy đúc nhôm A380 (SL: 20 bộ)
+            </div>
+<span class="pill p-ok">ĐÃ ĐỦ 3 BÁO GIÁ ĐỂ CHỐT</span>
+</div>
+<table class="w-full text-left border border-rule font-body-sm">
+<thead class="bg-paper font-data-table-header uppercase text-ink-secondary border-b border-rule">
+<tr>
+<th class="p-2.5 border-r border-rule">TIÊU CHÍ SO SÁNH</th>
+<th class="p-2.5 border-r border-rule bg-blue-subtle/50 text-primary">
+<div class="font-bold text-[12px]">NCC 1: CƠ KHÍ THÀNH ĐẠT</div>
+<span class="text-[10px] text-ink-secondary">Được đề xuất chọn ★</span>
+</th>
+<th class="p-2.5 border-r border-rule">
+<div class="font-bold text-[12px]">NCC 2: CƠ KHÍ BẮCHỢP</div>
+<span class="text-[10px] text-ink-secondary">Giá cao hơn</span>
+</th>
+<th class="p-2.5">
+<div class="font-bold text-[12px]">NCC 3: CÔNG NGHIỆP PHÚ KHANG</div>
+<span class="text-[10px] text-ink-secondary">Thời gian dài</span>
+</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-rule font-data-table-cell">
+<tr>
+<td class="p-2.5 font-bold bg-paper/50 border-r border-rule">Đơn giá gia công / bộ</td>
+<td class="p-2.5 border-r border-rule font-data-tabular-code font-bold text-primary bg-blue-subtle/30">4.250.000 đ</td>
+<td class="p-2.5 border-r border-rule font-data-tabular-code">4.600.000 đ</td>
+<td class="p-2.5 font-data-tabular-code">4.180.000 đ (Rẻ nhất)</td>
+</tr>
+<tr>
+<td class="p-2.5 font-bold bg-paper/50 border-r border-rule">Thời gian giao hàng (Lead-time)</td>
+<td class="p-2.5 border-r border-rule font-data-tabular-code font-bold text-emerald-700 bg-blue-subtle/30">05 ngày (Đạt yêu cầu)</td>
+<td class="p-2.5 border-r border-rule font-data-tabular-code">06 ngày</td>
+<td class="p-2.5 font-data-tabular-code text-red-dark font-bold">12 ngày (Quá chậm)</td>
+</tr>
+<tr>
+<td class="p-2.5 font-bold bg-paper/50 border-r border-rule">Dung sai &amp; Chứng chỉ KCS</td>
+<td class="p-2.5 border-r border-rule bg-blue-subtle/30">Đo máy CMM kèm phiếu kết quả</td>
+<td class="p-2.5 border-r border-rule">Đo thước Panme cơ bản</td>
+<td class="p-2.5">Cam kết theo bản vẽ</td>
+</tr>
+<tr>
+<td class="p-2.5 font-bold bg-paper/50 border-r border-rule">Hành động phê duyệt</td>
+<td class="p-2.5 border-r border-rule bg-blue-subtle/30">
+<button class="h-7 px-3 bg-primary hover:bg-blue-dark text-pure-white rounded font-label-caps text-xs">CHỌN NCC NÀY</button>
+</td>
+<td class="p-2.5 border-r border-rule">
+<button class="h-7 px-2.5 border border-rule hover:bg-paper rounded font-label-caps text-xs text-ink-secondary">Lưu dự phòng</button>
+</td>
+<td class="p-2.5">
+<button class="h-7 px-2.5 border border-rule hover:bg-paper rounded font-label-caps text-xs text-ink-secondary">Loại trừ</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- TAB VIEW 4: ĐƠN ĐẶT GIA CÔNG (MỚI - CẤP DUYỆT THEO HẠN MỨC) -->
+<section class="hidden flex flex-col gap-4" id="view-don-dat-gia-cong">
+<div class="bg-pure-white p-4 border border-rule rounded">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-ink">QUẢN LÝ ĐƠN ĐẶT GIA CÔNG &amp; PHÂN CẤP DUYỆT HẠN MỨC</h3>
+<p class="text-caption text-ink-secondary">Hạn mức Xưởng: Dưới 50 triệu VNĐ (Quản đốc ký duyệt). Vượt trên 50 triệu VNĐ: Bắt buộc trình Tổng Giám Đốc ký điện tử.</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="pill p-warn">Hạn mức hiện hành: 50.000.000 VNĐ</span>
+</div>
+</div>
+</div>
+<div class="bg-pure-white border border-rule rounded shadow-sm overflow-x-auto">
+<table class="w-full text-left border-collapse font-body-sm">
+<thead>
+<tr class="bg-paper border-b border-rule font-data-table-header uppercase text-ink-secondary">
+<th class="p-3">SỐ ĐƠN GIA CÔNG (PO)</th>
+<th class="p-3">ĐƠN VỊ THỰC HIỆN</th>
+<th class="p-3">HẠNG MỤC CÔNG ĐOẠN</th>
+<th class="p-3 text-right">GIÁ TRỊ HỢP ĐỒNG</th>
+<th class="p-3 text-center">CẤP PHÊ DUYỆT BẮT BUỘC</th>
+<th class="p-3 text-center">TRẠNG THÁI DUYỆT</th>
+<th class="p-3 text-right">THAO TÁC</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-rule-soft font-data-table-cell">
+<tr class="hover:bg-blue-subtle/50">
+<td class="p-3 font-data-tabular-code font-bold text-primary">PO-OUT-2026-0312</td>
+<td class="p-3 font-medium">Công ty Nhiệt Luyện Nam Phát</td>
+<td class="p-3">Nhiệt luyện thể tích trục dẫn động</td>
+<td class="p-3 text-right font-data-tabular-code font-bold text-ink">28.400.000 đ</td>
+<td class="p-3 text-center"><span class="pill p-ok">Cấp Quản Đốc Xưởng</span></td>
+<td class="p-3 text-center"><span class="pill p-ok">ĐÃ DUYỆT KÝ</span></td>
+<td class="p-3 text-right">
+<button class="h-7 px-2 border border-rule rounded hover:bg-paper font-label-caps text-xs">Xem lệnh</button>
+</td>
+</tr>
+<tr class="hover:bg-blue-subtle/50 bg-amber-50/40">
+<td class="p-3 font-data-tabular-code font-bold text-primary">PO-OUT-2026-0315</td>
+<td class="p-3 font-medium">Khuôn mẫu Chính xác Nam Anh</td>
+<td class="p-3">Cắt dây EDM lòng khuôn dập ô tô</td>
+<td class="p-3 text-right font-data-tabular-code font-bold text-red-dark">142.500.000 đ</td>
+<td class="p-3 text-center"><span class="pill p-warn">Vượt hạn mức → Trình TGĐ</span></td>
+<td class="p-3 text-center"><span class="pill p-info">Chờ TGĐ phê duyệt</span></td>
+<td class="p-3 text-right">
+<button class="h-7 px-2.5 bg-primary text-pure-white rounded font-label-caps text-xs hover:bg-blue-dark">Trình ký ngay</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- TAB VIEW 5 / KHỐI BỔ TRỢ: NHÀ CUNG CẤP & ĐÁNH GIÁ TẢI CÔNG SUẤT (§1 TAB NHÀ CUNG CẤP MỚI) -->
+<section class="space-y-4" id="view-nha-cung-cap">
+<div class="bg-pure-white p-4 border border-rule rounded flex flex-col md:flex-row md:items-center justify-between gap-3">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-ink flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="analytics">analytics</span>
+              DANH MỤC NĂNG LỰC NHÀ CUNG CẤP GIA CÔNG (GÓC NHÌN ĐIỀU ĐỘ &amp; KINH DOANH)
+            </h3>
+<p class="text-caption text-ink-secondary">
+              Đánh giá xem nhà cung ứng đặt được những công đoạn nào, sản lượng 3 tháng qua và cảnh báo nguy cơ quá tải tiến độ.
+            </p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-caption text-ink-secondary">Cập nhật lúc: 08:30 hôm nay</span>
+</div>
+</div>
+<!-- Supplier Capacity Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- NCC 1: Nhiệt Luyện Nam Phát (Cảnh báo quá tải) -->
+<div class="bg-pure-white border border-red-dark/40 rounded p-4 shadow-sm flex flex-col justify-between border-t-4 border-t-red-dark">
+<div>
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-[15px] font-bold text-ink">Công ty Nhiệt Luyện Nam Phát</h4>
+<span class="font-label-eyebrow text-ink-secondary">MÃ NCC: NCC-NL-004</span>
+</div>
+<span class="pill p-r">QUÁ TẢI (88%)</span>
+</div>
+<!-- Metrics -->
+<div class="mt-3 grid grid-cols-2 gap-2 p-2 bg-paper rounded border border-rule-soft">
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">3 THÁNG GẦN ĐÂY</span>
+<span class="font-data-tabular-code font-bold text-ink text-sm">18 Đơn gia công</span>
+</div>
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">TỶ LỆ ĐÚNG HẸN</span>
+<span class="font-data-tabular-code font-bold text-red-dark text-sm">74.2% (Báo động)</span>
+</div>
+</div>
+<!-- Specialization tags -->
+<div class="mt-3">
+<span class="text-[11px] font-bold text-ink-secondary uppercase block mb-1">CÔNG ĐOẠN ĐẶT ĐƯỢC:</span>
+<div class="flex flex-wrap gap-1">
+<span class="pill p-info">Thấm Nitơ lỏng</span>
+<span class="pill p-info">Tôi cao tần trục lớn</span>
+<span class="pill p-info">Thấm Carbon sâu</span>
+<span class="pill p-info">Ủ khử ứng suất</span>
+</div>
+</div>
+<!-- Workload Progress Bar -->
+<div class="mt-3">
+<div class="flex justify-between text-caption mb-1">
+<span class="font-semibold text-red-dark">Tải công suất lò xử lý nhiệt:</span>
+<span class="font-data-tabular-code font-bold text-red-dark">88% (Nguy cơ nghẽn)</span>
+</div>
+<div class="w-full bg-rule rounded-full h-2 overflow-hidden">
+<div class="bg-red-dark h-2 rounded-full" style="width: 88%"></div>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="mt-4 pt-3 border-t border-rule flex items-center justify-between">
+<span class="text-[11px] text-red-dark font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="block">block</span>
+                Tạm dừng cấp thêm đơn mới
+              </span>
+<button class="h-7 px-2.5 bg-paper hover:bg-rule text-ink font-label-caps text-xs rounded border border-rule">
+                Xem 5 đơn đang kẹt
+              </button>
+</div>
+</div>
+<!-- NCC 2: Cơ khí Chính xác Thành Đạt (Sẵn sàng nhận tải) -->
+<div class="bg-pure-white border border-rule rounded p-4 shadow-sm flex flex-col justify-between border-t-4 border-t-primary">
+<div>
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-[15px] font-bold text-ink">Cơ khí Chính xác Thành Đạt</h4>
+<span class="font-label-eyebrow text-ink-secondary">MÃ NCC: NCC-CK-019</span>
+</div>
+<span class="pill p-ok">SẴN SÀNG (45%)</span>
+</div>
+<!-- Metrics -->
+<div class="mt-3 grid grid-cols-2 gap-2 p-2 bg-paper rounded border border-rule-soft">
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">3 THÁNG GẦN ĐÂY</span>
+<span class="font-data-tabular-code font-bold text-ink text-sm">24 Đơn gia công</span>
+</div>
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">TỶ LỆ ĐÚNG HẸN</span>
+<span class="font-data-tabular-code font-bold text-emerald-700 text-sm">98.5% (Tốt)</span>
+</div>
+</div>
+<!-- Specialization tags -->
+<div class="mt-3">
+<span class="text-[11px] font-bold text-ink-secondary uppercase block mb-1">CÔNG ĐOẠN ĐẶT ĐƯỢC:</span>
+<div class="flex flex-wrap gap-1">
+<span class="pill p-info">Tiện CNC 4 trục lớn</span>
+<span class="pill p-info">Phay giường 3m</span>
+<span class="pill p-info">Khoan taro cụm đế</span>
+<span class="pill p-info">Doa lỗ chuẩn H7</span>
+</div>
+</div>
+<!-- Workload Progress Bar -->
+<div class="mt-3">
+<div class="flex justify-between text-caption mb-1">
+<span class="font-semibold text-primary">Tải công suất trung tâm phay tiện:</span>
+<span class="font-data-tabular-code font-bold text-primary">45% (Dư công suất)</span>
+</div>
+<div class="w-full bg-rule rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-2 rounded-full" style="width: 45%"></div>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="mt-4 pt-3 border-t border-rule flex items-center justify-between">
+<span class="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                Ưu tiên phân bổ đơn mới
+              </span>
+<button class="h-7 px-2.5 bg-primary text-pure-white hover:bg-blue-dark font-label-caps text-xs rounded">
+                Giao việc ngay
+              </button>
+</div>
+</div>
+<!-- NCC 3: Mạ Kỹ Thuật Cao An Phát (Tải trung bình) -->
+<div class="bg-pure-white border border-rule rounded p-4 shadow-sm flex flex-col justify-between border-t-4 border-t-secondary">
+<div>
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-[15px] font-bold text-ink">Mạ Kỹ Thuật Cao An Phát</h4>
+<span class="font-label-eyebrow text-ink-secondary">MÃ NCC: NCC-MA-007</span>
+</div>
+<span class="pill p-info">ỔN ĐỊNH (62%)</span>
+</div>
+<!-- Metrics -->
+<div class="mt-3 grid grid-cols-2 gap-2 p-2 bg-paper rounded border border-rule-soft">
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">3 THÁNG GẦN ĐÂY</span>
+<span class="font-data-tabular-code font-bold text-ink text-sm">31 Đơn gia công</span>
+</div>
+<div>
+<span class="text-[11px] text-ink-secondary block font-label-caps">TỶ LỆ ĐÚNG HẸN</span>
+<span class="font-data-tabular-code font-bold text-primary text-sm">94.0% (Chuẩn)</span>
+</div>
+</div>
+<!-- Specialization tags -->
+<div class="mt-3">
+<span class="text-[11px] font-bold text-ink-secondary uppercase block mb-1">CÔNG ĐOẠN ĐẶT ĐƯỢC:</span>
+<div class="flex flex-wrap gap-1">
+<span class="pill p-info">Xi mạ crom cứng</span>
+<span class="pill p-info">Mạ kẽm nhúng nóng</span>
+<span class="pill p-info">Nhuộm đen kim loại</span>
+<span class="pill p-info">Anode hoá nhôm</span>
+</div>
+</div>
+<!-- Workload Progress Bar -->
+<div class="mt-3">
+<div class="flex justify-between text-caption mb-1">
+<span class="font-semibold text-ink-secondary">Tải công suất bể mạ điện phân:</span>
+<span class="font-data-tabular-code font-bold text-ink">62% (Bình thường)</span>
+</div>
+<div class="w-full bg-rule rounded-full h-2 overflow-hidden">
+<div class="bg-secondary h-2 rounded-full" style="width: 62%"></div>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="mt-4 pt-3 border-t border-rule flex items-center justify-between">
+<span class="text-[11px] text-ink-secondary font-medium">Nhận đơn giao sau 48h</span>
+<button class="h-7 px-2.5 bg-paper hover:bg-rule text-ink font-label-caps text-xs rounded border border-rule">
+                Xem hồ sơ năng lực
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- STANDBY EMPTY-STATE CONTAINER DEMO (§3 Chuẩn UI: Có dữ liệu, empty state và loading state) -->
+<section class="hidden bg-pure-white border border-dashed border-rule rounded p-8 text-center" id="demo-empty-state">
+<div class="w-12 h-12 mx-auto rounded-full bg-paper text-ink-secondary flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-[28px]" data-icon="inbox">inbox</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-ink font-bold">Chưa có lệnh đặt ngoài nào trong khoảng này</h4>
+<p class="text-body-sm text-ink-secondary max-w-md mx-auto mt-1">
+          Không tìm thấy đơn hàng hoặc mã hàng đặt ngoài phù hợp với bộ lọc hiện tại. Thử chọn lại khoảng ngày hoặc thiết lập lại bộ lọc.
+        </p>
+<button class="mt-4 h-9 px-4 bg-primary text-pure-white font-label-caps text-label-caps rounded" onclick="resetFilters()">
+          Thiết lập lại bộ lọc mặc định
+        </button>
+</section>
+</div>
+</main>
+<!-- JAVASCRIPT MICRO-INTERACTIONS & ACCORDION BEHAVIOR -->
+<script>
+    // Toggle Mobile Sidebar Drawer
+    function toggleSidebar() {
+      const sidebar = document.getElementById('main-sidebar');
+      const backdrop = document.getElementById('drawer-backdrop');
+      const isHidden = sidebar.classList.contains('-translate-x-full');
+      
+      if (isHidden) {
+        sidebar.classList.remove('-translate-x-full');
+        backdrop.classList.remove('hidden');
+      } else {
+        sidebar.classList.add('-translate-x-full');
+        backdrop.classList.add('hidden');
+      }
+    }
+
+    // Tab Switching Mechanism according to Requirements
+    function switchTab(tabKey) {
+      const allTabs = ['theo-doi', 'danh-sach-phieu', 'bao-gia', 'don-dat-gia-cong', 'nha-cung-cap'];
+      
+      allTabs.forEach(key => {
+        const viewEl = document.getElementById(`view-${key}`);
+        const btnEl = document.getElementById(`tab-btn-${key}`);
+        
+        if (viewEl) {
+          if (key === tabKey || (tabKey === 'theo-doi' && key === 'nha-cung-cap')) {
+            // In full view, tab "theo-doi" also shows bottom supplier analytics for rich context
+            if (key === tabKey) viewEl.classList.remove('hidden');
+            if (tabKey === 'theo-doi' && key === 'nha-cung-cap') viewEl.classList.remove('hidden');
+          } else {
+            viewEl.classList.add('hidden');
+          }
+        }
+        
+        if (btnEl) {
+          if (key === tabKey) {
+            btnEl.classList.remove('text-ink-secondary', 'border-transparent');
+            btnEl.classList.add('text-primary', 'border-primary', 'font-bold');
+          } else {
+            btnEl.classList.add('text-ink-secondary', 'border-transparent');
+            btnEl.classList.remove('text-primary', 'border-primary', 'font-bold');
+          }
+        }
+      });
+    }
+
+    // Toggle Single Group Accordion (Tree-table)
+    function toggleGroup(groupId, buttonEl) {
+      const childRows = document.querySelectorAll(`.${groupId}-child`);
+      const icon = buttonEl.querySelector('.material-symbols-outlined');
+      
+      let isCollapsed = false;
+      childRows.forEach(row => {
+        if (row.classList.contains('hidden')) {
+          row.classList.remove('hidden');
+          isCollapsed = false;
+        } else {
+          row.classList.add('hidden');
+          isCollapsed = true;
+        }
+      });
+
+      if (isCollapsed) {
+        icon.classList.remove('rotate-90');
+      } else {
+        icon.classList.add('rotate-90');
+      }
+    }
+
+    // Expand All Groups
+    function expandAllRows() {
+      ['group-1', 'group-2', 'group-3'].forEach(groupId => {
+        document.querySelectorAll(`.${groupId}-child`).forEach(row => row.classList.remove('hidden'));
+      });
+      document.querySelectorAll('tbody tr button span.material-symbols-outlined').forEach(icon => {
+        if (icon.getAttribute('data-icon') === 'chevron_right') {
+          icon.classList.add('rotate-90');
+        }
+      });
+    }
+
+    // Collapse All Groups
+    function collapseAllRows() {
+      ['group-1', 'group-2', 'group-3'].forEach(groupId => {
+        document.querySelectorAll(`.${groupId}-child`).forEach(row => row.classList.add('hidden'));
+      });
+      document.querySelectorAll('tbody tr button span.material-symbols-outlined').forEach(icon => {
+        if (icon.getAttribute('data-icon') === 'chevron_right') {
+          icon.classList.remove('rotate-90');
+        }
+      });
+    }
+
+    function resetFilters() {
+      switchTab('theo-doi');
+      alert('Đã tải lại toàn bộ tiến độ đặt ngoài cơ khí.');
+    }
+  </script>
+</body></html>

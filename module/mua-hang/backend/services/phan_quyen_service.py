@@ -1,7 +1,7 @@
 """Kiểm quyền tập trung và quản trị tài khoản."""
 
 from backend.data import auth_repo
-from backend.services.errors import KhongCoQuyen, KhongTimThay, XungDot
+from backend.services.errors import KhongCoQuyen, KhongTimThay, ThieuDuLieu, XungDot
 
 
 def kiem_quyen(ho_so: dict, trang: str, hanh_dong: str, conn=None) -> str:
@@ -16,11 +16,44 @@ def kiem_quyen(ho_so: dict, trang: str, hanh_dong: str, conn=None) -> str:
     return quyen["pham_vi"]
 
 
-def danh_sach_tai_khoan(trang: int, kich_thuoc: int) -> dict:
+def danh_sach_tai_khoan(trang: int, kich_thuoc: int, tu_khoa: str = "", trang_thai: str = "") -> dict:
     kich_thuoc = min(max(kich_thuoc, 1), 100)
     trang = max(trang, 1)
-    rows, total = auth_repo.danh_sach_tai_khoan((trang - 1) * kich_thuoc, kich_thuoc)
+    trang_thai = str(trang_thai or "").strip().upper()
+    if trang_thai not in ("", "CHO_DUYET", "HOAT_DONG", "KHOA"):
+        raise ThieuDuLieu("Trạng thái tài khoản không hợp lệ")
+    rows, total = auth_repo.danh_sach_tai_khoan(
+        (trang - 1) * kich_thuoc, kich_thuoc, str(tu_khoa or "").strip(), trang_thai
+    )
     return {"items": [dict(r) for r in rows], "tong": total, "trang": trang, "kich_thuoc": kich_thuoc}
+
+
+def danh_sach_vai_tro_va_quyen() -> dict:
+    vai_tro_rows, quyen_rows = auth_repo.danh_sach_vai_tro_va_quyen()
+    quyen_theo_vai_tro = {}
+    for row in quyen_rows:
+        quyen_theo_vai_tro.setdefault(row["vai_tro"], []).append(dict(row))
+    return {
+        "items": [
+            {**dict(row), "quyen": quyen_theo_vai_tro.get(row["ma"], [])}
+            for row in vai_tro_rows
+        ]
+    }
+
+
+def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguoi_sua: str) -> dict:
+    if du_lieu["pham_vi"] not in ("toan_bo", "bo_phan", "ca_nhan"):
+        raise ThieuDuLieu("Phạm vi quyền không hợp lệ")
+    if any(du_lieu[key] for key in ("duoc_sua", "duoc_duyet", "duoc_xuat")):
+        du_lieu["duoc_xem"] = True
+    if vai_tro == "ADMIN" and trang == "quan_tri" and not (
+        du_lieu["duoc_xem"] and du_lieu["duoc_sua"]
+    ):
+        raise KhongCoQuyen("Không thể tắt quyền quản trị cốt lõi của vai trò ADMIN.", "KHONG_THE_TAT_QUYEN_ADMIN")
+    row = auth_repo.cap_nhat_quyen(vai_tro, trang, phien_ban, du_lieu, nguoi_sua)
+    if not row:
+        raise XungDot("Quyền vừa được cập nhật. Hãy tải lại rồi thực hiện lại.")
+    return dict(row)
 
 
 def duyet_tai_khoan(ma: str, vai_tro: str, phien_ban: int, nguoi_duyet: str) -> None:

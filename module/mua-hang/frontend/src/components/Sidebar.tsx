@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      label: 'GIA CÔNG NGOÀI',
+      label: 'KINH DOANH',
       items: [
         { tab: 'outsource', label: 'Đặt ngoài', icon: 'logout', visible: visiblePages.outsource },
       ],

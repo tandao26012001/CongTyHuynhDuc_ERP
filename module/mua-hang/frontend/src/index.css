@@ -64,7 +64,7 @@
 
 .shared-filter-fields {
   display: grid;
-  grid-template-columns: minmax(190px, 1.35fr) repeat(4, minmax(140px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   align-items: end;
   gap: 10px;
 }

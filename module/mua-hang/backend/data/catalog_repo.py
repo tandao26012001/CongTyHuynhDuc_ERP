@@ -131,11 +131,60 @@ def danh_sach_vat_tu(bo_loc: dict, offset: int, limit: int):
         ).fetchone()["n"]
         rows = conn.execute(
             f"""SELECT v.id,v.ma_vat_tu,v.ten_hang,v.dvt,v.ma_chung_loai,
-                       v.phan_loai,v.kho,v.loai_phoi,v.quy_cach,v.ghi_chu,
+                       cl.ten AS ten_chung_loai,v.phan_loai,v.kho,v.loai_phoi,v.quy_cach,v.ghi_chu,
                        v.trang_thai,v.phien_ban,{ton_sql} AS ton_kho
                 FROM vat_tu v
+                LEFT JOIN chung_loai cl ON cl.ma_chung_loai=v.ma_chung_loai
                 WHERE {dieu_kien}
                 ORDER BY v.ma_vat_tu,v.ten_hang,v.id
+                LIMIT %s OFFSET %s""",
+            (*params, limit, offset),
+        ).fetchall()
+        return rows, total
+
+
+def danh_sach_lenh_san_xuat(tu_khoa: str, offset: int, limit: int):
+    """Đọc danh sách lệnh sản xuất để hiển thị tại dữ liệu công ty."""
+    with get_conn() as conn:
+        bang = conn.execute(
+            """SELECT to_regclass('mua_hang.lenh_san_xuat') AS lenh,
+                      to_regclass('mua_hang.lsx_dong') AS dong"""
+        ).fetchone()
+        if not bang["lenh"]:
+            return [], 0
+        co_dong = bool(bang["dong"])
+        dieu_kien = """(
+            %s = ''
+            OR lower(coalesce(l.lenh_san_xuat, '')) LIKE %s
+            OR lower(coalesce(l.so_po, '')) LIKE %s
+            OR lower(coalesce(l.ma_khach_hang, '')) LIKE %s
+            OR lower(coalesce(l.ten_khach_hang_chup, '')) LIKE %s
+            OR lower(coalesce(l.ma_bo_phan, '')) LIKE %s
+            OR lower(coalesce(l.ten_bo_phan_chup, '')) LIKE %s
+            OR lower(coalesce(l.trang_thai_don, '')) LIKE %s
+        )"""
+        mau_tim = f"%{tu_khoa}%"
+        params = (tu_khoa, mau_tim, mau_tim, mau_tim, mau_tim, mau_tim, mau_tim, mau_tim)
+        total = conn.execute(
+            f"SELECT count(*) AS n FROM lenh_san_xuat l WHERE {dieu_kien}", params
+        ).fetchone()["n"]
+        cot_so_dong = "count(d.ma_vach)::int" if co_dong else "0::int"
+        noi_dong = (
+            "LEFT JOIN lsx_dong d ON d.lenh_san_xuat=l.lenh_san_xuat"
+            if co_dong else ""
+        )
+        rows = conn.execute(
+            f"""SELECT l.lenh_san_xuat,l.so_po,l.ma_khach_hang,l.ten_khach_hang_chup,
+                       l.ma_bo_phan,l.ten_bo_phan_chup,l.so_so,l.ngay_so,l.ki_han_khach_hang,
+                       l.muc_do_uu_tien,l.ngay_nhan_lenh,l.trang_thai_don,l.ghi_chu,
+                       {cot_so_dong} AS so_dong
+                FROM lenh_san_xuat l
+                {noi_dong}
+                WHERE {dieu_kien}
+                GROUP BY l.lenh_san_xuat,l.so_po,l.ma_khach_hang,l.ten_khach_hang_chup,
+                         l.ma_bo_phan,l.ten_bo_phan_chup,l.so_so,l.ngay_so,l.ki_han_khach_hang,
+                         l.muc_do_uu_tien,l.ngay_nhan_lenh,l.trang_thai_don,l.ghi_chu
+                ORDER BY l.ngay_nhan_lenh DESC NULLS LAST,l.lenh_san_xuat
                 LIMIT %s OFFSET %s""",
             (*params, limit, offset),
         ).fetchall()
@@ -529,21 +578,81 @@ DANH_MUC_SQL = {
     "don-vi-tinh": "SELECT dvt ma,ten_dvt ten,so_le,trang_thai,phien_ban FROM don_vi_tinh",
     "chung-loai": "SELECT ma_chung_loai ma,ten,thu_tu,phien_ban FROM chung_loai",
     "bo-phan": "SELECT ma_bo_phan ma,ten,loai,thu_tu,trang_thai,phien_ban FROM bo_phan",
-    "nhan-vien": "SELECT ma_nhan_vien ma,ho_va_ten ten,ma_bo_phan,chuc_vu,trang_thai,phien_ban FROM nhan_vien",
+    "nhan-vien": """SELECT nv.ma_nhan_vien ma,nv.ho_va_ten ten,nv.ma_bo_phan,
+                              bp.ten ten_bo_phan,nv.chuc_vu,nv.ngay_vao_lam,
+                              nv.trang_thai,nv.ghi_chu,nv.phien_ban
+                       FROM nhan_vien nv LEFT JOIN bo_phan bp ON bp.ma_bo_phan=nv.ma_bo_phan""",
     "nha-cung-cap": "SELECT id ma,ma_ncc,ten,la_ncc_mua_hang,la_ncc_gia_cong,da_phe_duyet,trang_thai FROM nha_cung_cap",
 }
 
 
-def lay_danh_muc(ma: str, offset: int, limit: int):
-    sql = DANH_MUC_SQL[ma]
+def lay_danh_muc(ma: str, offset: int, limit: int, bo_loc: dict | None = None):
     with get_conn() as conn:
-        rows = conn.execute(f"{sql} ORDER BY 1 OFFSET %s LIMIT %s", (offset, limit)).fetchall()
+        sql = DANH_MUC_SQL[ma]
+        params: list = []
+        where = ""
+        bo_loc = bo_loc or {}
+        if ma == "nha-cung-cap":
+            co_cot_moi = conn.execute(
+                """SELECT EXISTS(
+                     SELECT 1 FROM information_schema.columns
+                     WHERE table_schema='mua_hang' AND table_name='nha_cung_cap'
+                       AND column_name='id'
+                   ) AS co"""
+            ).fetchone()["co"]
+            if not co_cot_moi:
+                sql = '''SELECT "ID" ma,"MA_NCC" ma_ncc,"TEN" ten,
+                                false AS la_ncc_mua_hang,
+                                false AS la_ncc_gia_cong,
+                                false AS da_phe_duyet,
+                                coalesce("TRANG_THAI",'HOAT_DONG') trang_thai
+                         FROM nha_cung_cap'''
+        if ma == "nhan-vien":
+            conditions = []
+            q = str(bo_loc.get("q") or "").strip().lower()
+            if q:
+                conditions.append(
+                    "lower(concat_ws(' ',nv.ma_nhan_vien,nv.ho_va_ten,nv.chuc_vu,bp.ten)) LIKE %s"
+                )
+                params.append(f"%{q}%")
+            if bo_loc.get("trang_thai"):
+                conditions.append("nv.trang_thai=%s")
+                params.append(bo_loc["trang_thai"])
+            if bo_loc.get("ma_bo_phan"):
+                conditions.append("nv.ma_bo_phan=%s")
+                params.append(bo_loc["ma_bo_phan"])
+            if conditions:
+                where = " WHERE " + " AND ".join(conditions)
+        elif ma == "bo-phan":
+            conditions = []
+            q = str(bo_loc.get("q") or "").strip().lower()
+            if q:
+                conditions.append("lower(concat_ws(' ',ma_bo_phan,ten,loai)) LIKE %s")
+                params.append(f"%{q}%")
+            if bo_loc.get("trang_thai"):
+                conditions.append("trang_thai=%s")
+                params.append(bo_loc["trang_thai"])
+            if conditions:
+                where = " WHERE " + " AND ".join(conditions)
+        rows = conn.execute(
+            f"{sql}{where} ORDER BY 1 OFFSET %s LIMIT %s", (*params, offset, limit)
+        ).fetchall()
         table = {
             "don-vi-tinh": "don_vi_tinh", "chung-loai": "chung_loai",
             "bo-phan": "bo_phan", "nhan-vien": "nhan_vien",
             "nha-cung-cap": "nha_cung_cap",
         }[ma]
-        total = conn.execute(f"SELECT count(*) n FROM {table}").fetchone()["n"]
+        if ma == "nhan-vien":
+            total = conn.execute(
+                f"SELECT count(*) n FROM nhan_vien nv LEFT JOIN bo_phan bp "
+                f"ON bp.ma_bo_phan=nv.ma_bo_phan{where}", params,
+            ).fetchone()["n"]
+        elif ma == "bo-phan":
+            total = conn.execute(
+                f"SELECT count(*) n FROM bo_phan{where}", params,
+            ).fetchone()["n"]
+        else:
+            total = conn.execute(f"SELECT count(*) n FROM {table}").fetchone()["n"]
         return rows, total
 
 

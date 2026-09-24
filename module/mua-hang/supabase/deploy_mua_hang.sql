@@ -17,4 +17,11 @@ BEGIN;
 \ir migrations/028_quy_tac_nhan_dien_theo_mau_excel.sql
 \ir migrations/029_tach_bang_don_vi_tinh.sql
 \ir migrations/030_tach_bang_vat_tu.sql
+\ir migrations/031_bo_sung_bang_lenh_san_xuat.sql
+\ir migrations/032_luong_kinh_doanh_dat_ngoai.sql
+\ir migrations/033_dong_bo_truong_lsx_dat_ngoai.sql
+\ir migrations/034_sua_hop_dong_import_lsx_excel.sql
+\ir migrations/035_quan_ly_tai_khoan_va_phan_quyen.sql
+\ir migrations/036_danh_muc_nhan_vien.sql
+\ir migrations/017_seed_phan_quyen.sql
 COMMIT;

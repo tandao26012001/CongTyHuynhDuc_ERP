@@ -113,12 +113,14 @@ def danh_sach_loai() -> list[dict]:
     return [{"ma": ma, "ten": ten} for ma, ten in DANH_MUC.items()]
 
 
-def lay_danh_muc(ma: str, trang: int, kich_thuoc: int) -> dict:
+def lay_danh_muc(ma: str, trang: int, kich_thuoc: int, bo_loc: dict | None = None) -> dict:
     if ma not in DANH_MUC:
         raise KhongTimThay("Danh mục không tồn tại.", "KHONG_TIM_THAY_DANH_MUC")
     trang = max(trang, 1)
     kich_thuoc = min(max(kich_thuoc, 1), 100)
-    rows, total = catalog_repo.lay_danh_muc(ma, (trang - 1) * kich_thuoc, kich_thuoc)
+    rows, total = catalog_repo.lay_danh_muc(
+        ma, (trang - 1) * kich_thuoc, kich_thuoc, bo_loc or {},
+    )
     return {
         "ma": ma, "ten": DANH_MUC[ma], "items": [dict(r) for r in rows],
         "tong": total, "trang": trang, "kich_thuoc": kich_thuoc,
@@ -153,12 +155,27 @@ def danh_sach_vat_tu(bo_loc: dict | None = None, trang: int = 1, kich_thuoc: int
         "ma_vat_tu": str(bo_loc.get("ma_vat_tu", "")).strip().lower(),
         "ten_hang": _khong_dau(bo_loc.get("ten_hang", "")),
         "dvt": str(bo_loc.get("dvt", "")).strip().upper(),
+        "ma_chung_loai": str(bo_loc.get("ma_chung_loai", "")).strip().upper(),
         "trang_thai": str(bo_loc.get("trang_thai", "")).strip().upper(),
     }
     trang = max(trang, 1)
     kich_thuoc = min(max(kich_thuoc, 1), 100)
     rows, total = catalog_repo.danh_sach_vat_tu(
         bo_loc_chuan, (trang - 1) * kich_thuoc, kich_thuoc
+    )
+    return {
+        "items": [dict(row) for row in rows],
+        "tong": total,
+        "trang": trang,
+        "kich_thuoc": kich_thuoc,
+    }
+
+
+def danh_sach_lenh_san_xuat(tu_khoa: str = "", trang: int = 1, kich_thuoc: int = 25) -> dict:
+    trang = max(trang, 1)
+    kich_thuoc = min(max(kich_thuoc, 1), 100)
+    rows, total = catalog_repo.danh_sach_lenh_san_xuat(
+        str(tu_khoa or "").strip().lower(), (trang - 1) * kich_thuoc, kich_thuoc
     )
     return {
         "items": [dict(row) for row in rows],
@@ -463,7 +480,14 @@ def _chuan_danh_muc(ma: str, du_lieu: dict) -> dict:
 
 
 def _trang_thai(value, tap_hop: set[str]) -> str:
-    result = str(value).strip().upper()
+    # Cho phép người dùng nhập nhãn tiếng Việt từ Excel, không bắt buộc nhớ mã DB.
+    result = re.sub(r"[^a-z0-9]+", "_", _khong_dau(str(value))).strip("_").upper()
+    result = {
+        "DANG_HOAT_DONG": "HOAT_DONG",
+        "DANG_LAM": "HOAT_DONG",
+        "NGUNG_HOAT_DONG": "NGUNG",
+        "TAM_NGUNG": "TAM_NGHI" if "TAM_NGHI" in tap_hop else "TAM_NGUNG",
+    }.get(result, result)
     if result not in tap_hop:
         raise ThieuDuLieu("Trạng thái không hợp lệ.", "SAI_TRANG_THAI")
     return result

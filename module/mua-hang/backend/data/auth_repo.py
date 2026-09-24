@@ -17,6 +17,13 @@ def _co_mo_hinh_chuan(conn) -> bool:
     ).fetchone()["co"]
 
 
+def _co_ma_tran_quyen(conn) -> bool:
+    return conn.execute(
+        "SELECT to_regclass('mua_hang.vai_tro') IS NOT NULL "
+        "AND to_regclass('mua_hang.phan_quyen') IS NOT NULL AS co"
+    ).fetchone()["co"]
+
+
 def _bam_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -146,11 +153,11 @@ def lay_quyen(vai_tro: str, conn=None):
     sql = """SELECT trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,pham_vi
              FROM phan_quyen WHERE vai_tro=%s ORDER BY trang"""
     if conn is not None:
-        if not _co_mo_hinh_chuan(conn):
+        if not _co_ma_tran_quyen(conn):
             return []
         return conn.execute(sql, (vai_tro,)).fetchall()
     with get_conn() as ket_noi:
-        if not _co_mo_hinh_chuan(ket_noi):
+        if not _co_ma_tran_quyen(ket_noi):
             return []
         return ket_noi.execute(sql, (vai_tro,)).fetchall()
 
@@ -186,20 +193,63 @@ def cap_nhat_hash_dang_nhap(ma_tai_khoan: str, mat_khau_hash: str) -> None:
         )
 
 
-def danh_sach_tai_khoan(offset: int, limit: int):
+def danh_sach_tai_khoan(offset: int, limit: int, tu_khoa: str = "", trang_thai: str = ""):
     with get_conn() as conn:
+        mau = f"%{tu_khoa.lower()}%"
+        if not _co_mo_hinh_chuan(conn):
+            dieu_kien = """(%s='' OR lower(concat_ws(' ',"MA_TAI_KHOAN","HO_TEN","MA_BO_PHAN","VAI_TRO")) LIKE %s)
+                              AND (%s='' OR CASE WHEN "DANG_HOAT_DONG" THEN 'HOAT_DONG' ELSE 'KHOA' END=%s)"""
+            params = (tu_khoa, mau, trang_thai, trang_thai)
+            rows = conn.execute(
+                f"""SELECT "MA_TAI_KHOAN" AS ma_tai_khoan,
+                           "ID" AS ma_nhan_vien,"HO_TEN" AS ho_va_ten,
+                           "MA_BO_PHAN" AS ma_bo_phan,"VAI_TRO" AS vai_tro,
+                           CASE WHEN "DANG_HOAT_DONG" THEN 'HOAT_DONG' ELSE 'KHOA' END AS trang_thai,
+                           NULL::timestamptz AS lan_dang_nhap_cuoi,
+                           "NGAY_TAO" AS ngay_tao,1 AS phien_ban
+                    FROM tai_khoan WHERE {dieu_kien}
+                    ORDER BY "NGAY_TAO" DESC OFFSET %s LIMIT %s""",
+                (*params, offset, limit),
+            ).fetchall()
+            total = conn.execute(
+                f"SELECT count(*) AS n FROM tai_khoan WHERE {dieu_kien}", params
+            ).fetchone()["n"]
+            return rows, total
         rows = conn.execute(
             """SELECT ma_tai_khoan,ma_nhan_vien,ho_va_ten,ma_bo_phan,vai_tro,
-                      trang_thai,lan_dang_nhap_cuoi,phien_ban
-               FROM tai_khoan ORDER BY ngay_tao DESC OFFSET %s LIMIT %s""",
-            (offset, limit),
+                      trang_thai,lan_dang_nhap_cuoi,ngay_tao,phien_ban
+               FROM tai_khoan
+               WHERE (%s='' OR lower(concat_ws(' ',ma_tai_khoan,ma_nhan_vien,ho_va_ten,ma_bo_phan,vai_tro)) LIKE %s)
+                 AND (%s='' OR trang_thai=%s)
+               ORDER BY ngay_tao DESC OFFSET %s LIMIT %s""",
+            (tu_khoa, mau, trang_thai, trang_thai, offset, limit),
         ).fetchall()
-        total = conn.execute("SELECT count(*) AS n FROM tai_khoan").fetchone()["n"]
+        total = conn.execute(
+            """SELECT count(*) AS n FROM tai_khoan
+               WHERE (%s='' OR lower(concat_ws(' ',ma_tai_khoan,ma_nhan_vien,ho_va_ten,ma_bo_phan,vai_tro)) LIKE %s)
+                 AND (%s='' OR trang_thai=%s)""",
+            (tu_khoa, mau, trang_thai, trang_thai),
+        ).fetchone()["n"]
         return rows, total
 
 
 def cap_nhat_tai_khoan(ma: str, phien_ban: int, nguoi_sua: str, vai_tro=None, khoa=False):
     with get_conn() as conn:
+        if not _co_mo_hinh_chuan(conn):
+            if khoa:
+                row = conn.execute(
+                    """UPDATE tai_khoan SET "DANG_HOAT_DONG"=false,"NGAY_SUA"=now()
+                       WHERE "MA_TAI_KHOAN"=%s RETURNING "MA_TAI_KHOAN" AS ma_tai_khoan""",
+                    (ma,),
+                ).fetchone()
+                if row:
+                    conn.execute('DELETE FROM phien WHERE "MA_TAI_KHOAN"=%s', (ma,))
+                return row
+            return conn.execute(
+                """UPDATE tai_khoan SET "VAI_TRO"=%s,"DANG_HOAT_DONG"=true,"NGAY_SUA"=now()
+                   WHERE "MA_TAI_KHOAN"=%s RETURNING "MA_TAI_KHOAN" AS ma_tai_khoan""",
+                (vai_tro, ma),
+            ).fetchone()
         if khoa:
             row = conn.execute(
                 """UPDATE tai_khoan SET trang_thai='KHOA',nguoi_sua=%s
@@ -218,4 +268,36 @@ def cap_nhat_tai_khoan(ma: str, phien_ban: int, nguoi_sua: str, vai_tro=None, kh
 
 def vai_tro_ton_tai(ma: str) -> bool:
     with get_conn() as conn:
+        if not _co_ma_tran_quyen(conn):
+            return ma.upper() == "ADMIN"
         return conn.execute("SELECT 1 FROM vai_tro WHERE ma=%s", (ma,)).fetchone() is not None
+
+
+def danh_sach_vai_tro_va_quyen():
+    with get_conn() as conn:
+        if not _co_ma_tran_quyen(conn):
+            return [], []
+        vai_tro = conn.execute(
+            "SELECT ma,ten,thu_tu,mo_ta FROM vai_tro ORDER BY thu_tu NULLS LAST,ma"
+        ).fetchall()
+        quyen = conn.execute(
+            """SELECT vai_tro,trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
+                      pham_vi,phien_ban
+               FROM phan_quyen ORDER BY vai_tro,trang"""
+        ).fetchall()
+        return vai_tro, quyen
+
+
+def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):
+    with get_conn() as conn:
+        return conn.execute(
+            """UPDATE phan_quyen SET
+                 duoc_xem=%s,duoc_sua=%s,duoc_duyet=%s,duoc_xuat=%s,pham_vi=%s,
+                 ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
+               WHERE vai_tro=%s AND trang=%s AND phien_ban=%s
+               RETURNING vai_tro,trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
+                         pham_vi,phien_ban""",
+            (du_lieu["duoc_xem"], du_lieu["duoc_sua"], du_lieu["duoc_duyet"],
+             du_lieu["duoc_xuat"], du_lieu["pham_vi"], nguoi_sua,
+             vai_tro, trang, phien_ban),
+        ).fetchone()

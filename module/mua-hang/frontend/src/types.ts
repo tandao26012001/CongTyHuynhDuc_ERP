@@ -1,4 +1,4 @@
-export type NavigationTab = 'dashboard' | 'reports' | 'requests' | 'create-request' | 'request-detail' | 'quotes' | 'purchase-orders' | 'orders' | 'payments' | 'my-tasks' | 'company-data' | 'suppliers' | 'utilities' | 'outsource';
+export type NavigationTab = 'dashboard' | 'reports' | 'production-orders' | 'requests' | 'create-request' | 'request-detail' | 'quotes' | 'purchase-orders' | 'orders' | 'payments' | 'my-tasks' | 'company-data' | 'suppliers' | 'utilities' | 'outsource';
 
 export interface MaterialItem {
   id: string;
