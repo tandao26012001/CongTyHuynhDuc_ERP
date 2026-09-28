@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from backend.data import dat_ngoai_repo
 from backend.data.db import get_conn
+from backend.services import catalog_service
 from backend.services import phan_quyen_service
 from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
 
@@ -19,7 +20,7 @@ CHUYEN_TRANG_THAI = {
     "DA_DAT": {"DANG_LAM", "HUY"},
     "DANG_LAM": {"DA_NHAN", "HUY"},
     "DA_NHAN": {"HOAN_THANH", "HUY"},
-    "HOAN_THANH": set(),
+    "HOAN_THANH": {"HUY"},
     "HUY": set(),
 }
 
@@ -190,6 +191,32 @@ def danh_sach(ho_so: dict) -> list[dict]:
     return [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()]
 
 
+def hang_doi_xac_nhan_ky_thuat(ho_so: dict) -> list[dict]:
+    phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "xem")
+    return [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()
+            if row["trang_thai"] == "CHO_XAC_NHAN_KY_THUAT"]
+
+
+def nha_cung_cap_co_the_chon(ho_so: dict) -> list[dict]:
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    danh_muc = catalog_service.lay_danh_muc("nha-cung-cap", 1, 100)
+    return [item for item in danh_muc["items"]
+            if item.get("la_ncc_gia_cong") and item.get("trang_thai") == "HOAT_DONG"]
+
+
+def chon_nha_cung_cap(id_phieu: str, id_ncc: str, phien_ban: int, ho_so: dict) -> dict:
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    ncc = catalog_service.lay_nha_cung_cap(id_ncc)
+    if not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG":
+        raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
+    row = dat_ngoai_repo.chon_nha_cung_cap(
+        id_phieu, phien_ban, id_ncc, ncc.get("ma_ncc"), ncc.get("ten"), ho_so["ma_nhan_vien"],
+    )
+    if not row:
+        raise XungDot("Phiếu không còn ở bước Đang xử lý / Báo giá hoặc vừa được cập nhật. Hãy tải lại.", "PHIEU_VUA_CAP_NHAT")
+    return row
+
+
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, ho_so: dict) -> dict:
     phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     if not str(du_lieu.get("ten_ncc") or "").strip():
@@ -211,16 +238,19 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
     if not phieu:
         raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
     hien_tai = phieu["trang_thai"]
-    if trang_thai_moi not in CHUYEN_TRANG_THAI.get(hien_tai, set()):
+    la_huy = trang_thai_moi == "HUY"
+    if hien_tai == "HUY" or (not la_huy and trang_thai_moi not in CHUYEN_TRANG_THAI.get(hien_tai, set())):
         raise XungDot(f"Không thể chuyển từ {hien_tai} sang {trang_thai_moi}.", "CHUYEN_TRANG_THAI_KHONG_HOP_LE")
-    if trang_thai_moi == "DA_DUYET":
+    if la_huy:
+        phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    elif trang_thai_moi == "DA_DUYET":
         phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "duyet")
     elif hien_tai == "CHO_XAC_NHAN_KY_THUAT" and trang_thai_moi == "DANG_BAO_GIA":
         phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "sua")
     else:
         phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    if trang_thai_moi == "HUY" and not str(noi_dung or "").strip():
-        raise ThieuDuLieu("Phải nhập lý do huỷ.")
+    if la_huy and not str(noi_dung or "").strip():
+        raise ThieuDuLieu("Phải nhập lý do huỷ.", "THIEU_LY_DO_HUY")
     row = dat_ngoai_repo.chuyen_trang_thai(
         id_phieu, phien_ban, trang_thai_moi, noi_dung, ho_so["ma_nhan_vien"]
     )

@@ -26,6 +26,12 @@ class KhoaBody(BaseModel):
     phien_ban: int = Field(ge=1)
 
 
+class CapNhatTaiKhoanBody(BaseModel):
+    ma_bo_phan: str = Field(min_length=1, max_length=10)
+    vai_tro: str = Field(min_length=1, max_length=40)
+    phien_ban: int = Field(ge=1)
+
+
 class CapNhatQuyenBody(BaseModel):
     phien_ban: int = Field(ge=1)
     duoc_xem: bool
@@ -73,3 +79,12 @@ def khoa(ma: str, body: KhoaBody, request: Request):
         ma, body.phien_ban, ho_so["ma_nhan_vien"], ho_so["ma_tai_khoan"]
     )
     return thanh_cong({"ma_tai_khoan": ma, "trang_thai": "KHOA"})
+
+
+@router.patch("/tai-khoan/{ma}", summary="Cập nhật chức vụ và bộ phận tài khoản", response_model=PhanHoi)
+def cap_nhat_tai_khoan(ma: str, body: CapNhatTaiKhoanBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "quan_tri", "sua")
+    return thanh_cong(phan_quyen_service.cap_nhat_thong_tin_tai_khoan(
+        ma, body.ma_bo_phan, body.vai_tro, body.phien_ban, ho_so["ma_nhan_vien"],
+    ))

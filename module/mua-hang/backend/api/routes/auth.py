@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from backend.api.envelope import thanh_cong
@@ -17,8 +17,7 @@ class PhanHoi(BaseModel):
 
 
 class DangKyBody(BaseModel):
-    ma_tai_khoan: str = Field(min_length=3, max_length=60)
-    ma_nhan_vien: str = Field(min_length=1, max_length=20)
+    ho_va_ten: str = Field(min_length=3, max_length=120)
     mat_khau: str = Field(min_length=8, max_length=128)
 
 
@@ -34,7 +33,12 @@ class DoiMatKhauBody(BaseModel):
 
 @router.post("/dang-ky", summary="Đăng ký tài khoản chờ duyệt", response_model=PhanHoi)
 def dang_ky(body: DangKyBody):
-    return thanh_cong(auth_service.dang_ky(body.ma_tai_khoan, body.ma_nhan_vien, body.mat_khau))
+    return thanh_cong(auth_service.dang_ky(body.ho_va_ten, body.mat_khau))
+
+
+@router.get("/dang-ky/nhan-vien", summary="Đối chiếu họ tên nhân viên để đăng ký", response_model=PhanHoi)
+def tim_nhan_vien_dang_ky(ho_va_ten: str = Query(min_length=3, max_length=120)):
+    return thanh_cong(auth_service.tim_nhan_vien_dang_ky(ho_va_ten))
 
 
 @router.post("/dang-nhap", summary="Đăng nhập và tạo phiên", response_model=PhanHoi)

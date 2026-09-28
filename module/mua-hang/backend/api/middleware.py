@@ -9,6 +9,7 @@ from backend.services.errors import LoiNghiepVu
 
 CONG_KHAI = {
     "/health", "/api/v1/health", "/api/v1/dang-nhap", "/api/v1/dang-ky",
+    "/api/v1/dang-ky/nhan-vien",
     "/docs", "/redoc", "/openapi.json",
 }
 

@@ -32,9 +32,9 @@ def lay_tham_chieu_chuan_vat_tu() -> dict:
         }
         if rut_gon:
             rows = conn.execute(
-                '''SELECT "ID" AS id,"MA" AS ma,"MA_LOAI" AS loai
+                '''SELECT id,ma,ma_loai AS loai
                    FROM danh_muc_dong
-                   WHERE "MA_LOAI" IN ('VT','CL') AND "TRANG_THAI"='DANG_SU_DUNG' '''
+                   WHERE ma_loai IN ('VT','CL') AND trang_thai='DANG_SU_DUNG' '''
             ).fetchall()
             chung_loai = {row["ma"] for row in rows if row["loai"] == "CL"}
             vat_tu = {
@@ -72,17 +72,17 @@ def tim_vat_tu(tu_khoa: str, gioi_han: int):
         if not conn.execute("SELECT to_regclass('mua_hang.vat_tu') IS NOT NULL AS co").fetchone()["co"]:
             like = f"%{tu_khoa}%"
             return conn.execute(
-                '''SELECT "ID" AS id, "MA" AS ma_vat_tu, "TEN" AS ten_hang,
-                          coalesce("DU_LIEU"->>'don_vi','') AS dvt,
+                '''SELECT id, ma AS ma_vat_tu, ten AS ten_hang,
+                          coalesce(du_lieu->>'don_vi','') AS dvt,
                           NULL::text AS ma_chung_loai, NULL::text AS phan_loai,
-                          "DU_LIEU"->>'kho' AS kho, NULL::text AS quy_cach,
-                          CASE WHEN "TRANG_THAI"='DANG_SU_DUNG' THEN 'HOAT_DONG' ELSE "TRANG_THAI" END AS trang_thai,
-                          CASE WHEN "DU_LIEU" ? 'ton_kho' THEN ("DU_LIEU"->>'ton_kho')::numeric ELSE NULL END AS ton_kho,
-                          CASE WHEN lower("MA")=lower(%s) THEN 1.0 ELSE 0.8 END AS diem
+                          du_lieu->>'kho' AS kho, NULL::text AS quy_cach,
+                          CASE WHEN trang_thai='DANG_SU_DUNG' THEN 'HOAT_DONG' ELSE trang_thai END AS trang_thai,
+                          CASE WHEN du_lieu ? 'ton_kho' THEN (du_lieu->>'ton_kho')::numeric ELSE NULL END AS ton_kho,
+                          CASE WHEN lower(ma)=lower(%s) THEN 1.0 ELSE 0.8 END AS diem
                    FROM danh_muc_dong
-                   WHERE "MA_LOAI"='VT' AND "TRANG_THAI"='DANG_SU_DUNG'
-                     AND ("MA" ILIKE %s OR "TEN" ILIKE %s)
-                   ORDER BY diem DESC,"TEN" LIMIT %s''',
+                   WHERE ma_loai='VT' AND trang_thai='DANG_SU_DUNG'
+                     AND (ma ILIKE %s OR ten ILIKE %s)
+                   ORDER BY diem DESC,ten LIMIT %s''',
                 (tu_khoa, like, like, gioi_han),
             ).fetchall()
         co_ton = conn.execute(
@@ -347,13 +347,13 @@ def nhap_vat_tu_hang_loat_tung_dong(danh_sach: list[dict], nguoi_tao: str):
                        dong integer,id text,ma text,ten text,du_lieu jsonb
                      )
                    ), da_them AS (
-                     INSERT INTO danh_muc_dong("ID","MA_LOAI","MA","TEN","DU_LIEU")
+                     INSERT INTO danh_muc_dong(id,ma_loai,ma,ten,du_lieu)
                      SELECT id,'VT',ma,ten,du_lieu FROM dau_vao
-                     ON CONFLICT ("MA_LOAI","MA") DO NOTHING
-                     RETURNING "ID" AS id,"MA" AS ma_vat_tu,"TEN" AS ten_hang,
-                               "DU_LIEU"->>'don_vi' AS dvt,
-                               "DU_LIEU"->>'quy_cach' AS quy_cach,
-                               "TRANG_THAI" AS trang_thai
+                     ON CONFLICT (ma_loai,ma) DO NOTHING
+                     RETURNING id,ma AS ma_vat_tu,ten AS ten_hang,
+                               du_lieu->>'don_vi' AS dvt,
+                               du_lieu->>'quy_cach' AS quy_cach,
+                               trang_thai
                    )
                    SELECT d.dong,t.id,t.ma_vat_tu,t.ten_hang,t.dvt,t.quy_cach,t.trang_thai
                    FROM dau_vao d JOIN da_them t ON t.id=d.id ORDER BY d.dong''',
@@ -527,7 +527,7 @@ def xoa_vat_tu(id_vat_tu: str) -> bool:
                 "DELETE FROM vat_tu WHERE id=%s RETURNING id", (id_vat_tu,)
             ).fetchone() is not None
         return conn.execute(
-            '''DELETE FROM danh_muc_dong WHERE "MA_LOAI"='VT' AND "ID"=%s RETURNING "ID"''',
+            "DELETE FROM danh_muc_dong WHERE ma_loai='VT' AND id=%s RETURNING id",
             (id_vat_tu,),
         ).fetchone() is not None
 
@@ -584,6 +584,62 @@ DANH_MUC_SQL = {
                        FROM nhan_vien nv LEFT JOIN bo_phan bp ON bp.ma_bo_phan=nv.ma_bo_phan""",
     "nha-cung-cap": "SELECT id ma,ma_ncc,ten,la_ncc_mua_hang,la_ncc_gia_cong,da_phe_duyet,trang_thai FROM nha_cung_cap",
 }
+
+
+def danh_sach_nha_cung_cap(offset: int, limit: int):
+    with get_conn() as conn:
+        co_cot_id_chuan = conn.execute(
+            """SELECT EXISTS(
+                 SELECT 1 FROM pg_attribute
+                 WHERE attrelid=to_regclass('nha_cung_cap')
+                   AND attname='id' AND attnum > 0 AND NOT attisdropped
+               ) AS co"""
+        ).fetchone()["co"]
+        if co_cot_id_chuan:
+            items = conn.execute(
+                """SELECT id ma,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,email,
+                          la_ncc_mua_hang,la_ncc_gia_cong,da_phe_duyet,ngay_phe_duyet,
+                          trang_thai,ghi_chu,phien_ban
+                   FROM nha_cung_cap ORDER BY ten,id OFFSET %s LIMIT %s""",
+                (offset, limit),
+            ).fetchall()
+        else:
+            # Một số CSDL đang chạy bảng danh mục legacy với tên cột viết HOA.
+            # Lấy giá trị từ những cột legacy đang có, thay vì trả NULL/false
+            # cố định khiến người dùng tưởng thao tác sửa không được lưu.
+            cot_hien_co = {
+                row["attname"] for row in conn.execute(
+                    """SELECT attname FROM pg_attribute
+                       WHERE attrelid=to_regclass('nha_cung_cap')
+                         AND attnum > 0 AND NOT attisdropped"""
+                ).fetchall()
+            }
+            select = [
+                sql.SQL('"ID" AS ma'), sql.SQL('"MA_NCC" AS ma_ncc'), sql.SQL('"TEN" AS ten'),
+            ]
+            for alias, column, default in (
+                ("mst", "MST", "NULL::text"), ("dia_chi", "DIA_CHI", "NULL::text"),
+                ("nguoi_lien_he", "NGUOI_LIEN_HE", "NULL::text"), ("sdt", "SDT", "NULL::text"),
+                ("email", "EMAIL", "NULL::text"), ("la_ncc_mua_hang", "LA_NCC_MUA_HANG", "false"),
+                ("la_ncc_gia_cong", "LA_NCC_GIA_CONG", "false"), ("da_phe_duyet", "DA_PHE_DUYET", "false"),
+                ("ngay_phe_duyet", "NGAY_PHE_DUYET", "NULL::date"),
+                ("ghi_chu", "GHI_CHU", "NULL::text"), ("phien_ban", "PHIEN_BAN", "1"),
+            ):
+                expression = sql.Identifier(column) if column in cot_hien_co else sql.SQL(default)
+                select.append(sql.SQL("{} AS {}").format(expression, sql.Identifier(alias)))
+            status = (
+                sql.SQL("coalesce(\"TRANG_THAI\",'HOAT_DONG')")
+                if "TRANG_THAI" in cot_hien_co else sql.SQL("'HOAT_DONG'")
+            )
+            select.append(sql.SQL("{} AS trang_thai").format(status))
+            items = conn.execute(
+                sql.SQL('SELECT {} FROM nha_cung_cap ORDER BY "TEN","ID" OFFSET %s LIMIT %s').format(
+                    sql.SQL(",").join(select)
+                ),
+                (offset, limit),
+            ).fetchall()
+        total = conn.execute("SELECT count(*) n FROM nha_cung_cap").fetchone()["n"]
+        return items, total
 
 
 def lay_danh_muc(ma: str, offset: int, limit: int, bo_loc: dict | None = None):
@@ -658,8 +714,51 @@ def lay_danh_muc(ma: str, offset: int, limit: int, bo_loc: dict | None = None):
 
 def lay_nha_cung_cap(id_ncc: str):
     with get_conn() as conn:
+        co_cot_id_chuan = conn.execute(
+            """SELECT EXISTS(
+                 SELECT 1 FROM pg_attribute
+                 WHERE attrelid=to_regclass('nha_cung_cap')
+                   AND attname='id' AND attnum > 0 AND NOT attisdropped
+               ) AS co"""
+        ).fetchone()["co"]
+        if not co_cot_id_chuan:
+            cot_hien_co = {
+                row["attname"] for row in conn.execute(
+                    """SELECT attname FROM pg_attribute
+                       WHERE attrelid=to_regclass('nha_cung_cap')
+                         AND attnum > 0 AND NOT attisdropped"""
+                ).fetchall()
+            }
+            anh_xa = {
+                "ma_ncc": "MA_NCC", "ten": "TEN", "mst": "MST", "dia_chi": "DIA_CHI",
+                "nguoi_lien_he": "NGUOI_LIEN_HE", "sdt": "SDT",
+                "fax": "FAX", "email": "EMAIL", "mat_hang": "MAT_HANG",
+                "la_ncc_mua_hang": "LA_NCC_MUA_HANG", "la_ncc_gia_cong": "LA_NCC_GIA_CONG",
+                "co_hoa_don": "CO_HOA_DON", "cong_no": "CONG_NO", "tien_mat": "TIEN_MAT",
+                "nganh_nghe": "NGANH_NGHE", "ma_loai_gia_cong": "MA_LOAI_GIA_CONG",
+                "vung": "VUNG", "so_km": "SO_KM", "ky_han_quy_dinh": "KY_HAN_QUY_DINH",
+                "da_phe_duyet": "DA_PHE_DUYET", "ngay_phe_duyet": "NGAY_PHE_DUYET",
+                "phan_loai_ncc": "PHAN_LOAI_NCC", "trang_thai": "TRANG_THAI",
+                "ghi_chu": "GHI_CHU", "phien_ban": "PHIEN_BAN",
+            }
+            select = [sql.SQL('"ID" AS id')]
+            for alias, column in anh_xa.items():
+                if column in cot_hien_co:
+                    select.append(sql.SQL("{} AS {}").format(sql.Identifier(column), sql.Identifier(alias)))
+            for alias, column, default in (
+                ("la_ncc_mua_hang", "LA_NCC_MUA_HANG", "true"),
+                ("la_ncc_gia_cong", "LA_NCC_GIA_CONG", "false"),
+                ("da_phe_duyet", "DA_PHE_DUYET", "false"),
+                ("phien_ban", "PHIEN_BAN", "1"),
+            ):
+                if column not in cot_hien_co:
+                    select.append(sql.SQL("{} AS {}").format(sql.SQL(default), sql.Identifier(alias)))
+            return conn.execute(
+                sql.SQL("SELECT {} FROM nha_cung_cap WHERE \"ID\"=%s").format(sql.SQL(",").join(select)),
+                (id_ncc,),
+            ).fetchone()
         return conn.execute(
-            """SELECT id,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,sdt_2,fax,email,
+            """SELECT id,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,fax,email,
                       mat_hang,la_ncc_mua_hang,la_ncc_gia_cong,co_hoa_don,cong_no,
                       tien_mat,nganh_nghe,ma_loai_gia_cong,vung,so_km,ky_han_quy_dinh,
                       da_phe_duyet,ngay_phe_duyet,phan_loai_ncc,trang_thai,ghi_chu,phien_ban
@@ -726,16 +825,16 @@ def tim_trung_vat_tu_hang_loat(rows: list[dict]) -> dict[int, list[dict]]:
                        ten_khong_dau text, bo_qua_id text
                      )
                    )
-                   SELECT d.dong,v."ID" AS id,v."MA" AS ma_vat_tu,v."TEN" AS ten_hang,
-                          CASE WHEN d.ma_vat_tu IS NOT NULL AND upper(v."MA")=upper(d.ma_vat_tu)
+                   SELECT d.dong,v.id,v.ma AS ma_vat_tu,v.ten AS ten_hang,
+                          CASE WHEN d.ma_vat_tu IS NOT NULL AND upper(v.ma)=upper(d.ma_vat_tu)
                                THEN 'MA_CHINH_XAC' ELSE 'TEN_CHINH_XAC' END AS loai_trung,
                           1.0::real AS diem
                    FROM dau_vao d
-                   JOIN danh_muc_dong v ON v."MA_LOAI"='VT'
-                    AND (d.bo_qua_id IS NULL OR v."ID"::text<>d.bo_qua_id)
-                    AND ((d.ma_vat_tu IS NOT NULL AND upper(v."MA")=upper(d.ma_vat_tu))
-                         OR lower(v."TEN")=lower(d.ten_hang))
-                   ORDER BY d.dong,v."ID"''',
+                   JOIN danh_muc_dong v ON v.ma_loai='VT'
+                    AND (d.bo_qua_id IS NULL OR v.id::text<>d.bo_qua_id)
+                    AND ((d.ma_vat_tu IS NOT NULL AND upper(v.ma)=upper(d.ma_vat_tu))
+                         OR lower(v.ten)=lower(d.ten_hang))
+                   ORDER BY d.dong,v.id''',
                 (Jsonb(payload),),
             ).fetchall()
             result = {row["dong"]: [] for row in payload}
@@ -785,7 +884,36 @@ def tim_trung_nha_cung_cap(
     ma_ncc: str | None, ten_khong_dau: str, mst: str | None, bo_qua_id: str | None = None
 ):
     with get_conn() as conn:
+        co_cot_id_chuan = conn.execute(
+            """SELECT EXISTS(
+                 SELECT 1 FROM pg_attribute
+                 WHERE attrelid=to_regclass('nha_cung_cap')
+                   AND attname='id' AND attnum > 0 AND NOT attisdropped
+               ) AS co"""
+        ).fetchone()["co"]
         nguong = nguong_trung_ten_conn(conn)
+        if not co_cot_id_chuan:
+            # Một số CSDL cũ dùng cột viết HOA; không truy vấn các cột schema
+            # mới (id/mst/ten_khong_dau) cho tới khi được chuẩn hóa bằng migration.
+            return conn.execute(
+                '''SELECT "ID" AS id,"MA_NCC" AS ma_ncc,"TEN" AS ten,
+                          NULL::text AS mst,
+                          CASE WHEN %s::text IS NOT NULL AND upper("MA_NCC")=upper(%s)
+                               THEN 'MA_CHINH_XAC'
+                               WHEN lower("TEN")=lower(%s) THEN 'TEN_CHINH_XAC'
+                               ELSE 'TEN_GAN_GIONG' END AS loai_trung,
+                          extensions.similarity(lower("TEN"),lower(%s)) AS diem
+                   FROM nha_cung_cap
+                   WHERE (%s::text IS NULL OR "ID"::text<>%s) AND (
+                     (%s::text IS NOT NULL AND upper("MA_NCC")=upper(%s))
+                     OR lower("TEN")=lower(%s)
+                     OR extensions.similarity(lower("TEN"),lower(%s)) >= %s
+                   )
+                   ORDER BY diem DESC,"TEN","ID" LIMIT 10''',
+                (ma_ncc, ma_ncc, ten_khong_dau, ten_khong_dau,
+                 bo_qua_id, bo_qua_id, ma_ncc, ma_ncc, ten_khong_dau,
+                 ten_khong_dau, nguong),
+            ).fetchall()
         return conn.execute(
             """SELECT id,ma_ncc,ten,mst,
                       CASE WHEN ma_ncc IS NOT NULL AND upper(ma_ncc)=upper(%s)
@@ -951,6 +1079,22 @@ def trung_danh_muc(ma: str, du_lieu: dict) -> bool:
         return conn.execute(query, tham_so).fetchone() is not None
 
 
+def lay_tham_chieu_nhap_nhan_vien() -> tuple[set[str], set[str]]:
+    """Tai bo phan va ma nhan vien hien co trong mot ket noi cho nhap lo."""
+    with get_conn() as conn:
+        bo_phan = {
+            row["ma_bo_phan"] for row in conn.execute(
+                "SELECT ma_bo_phan FROM bo_phan"
+            ).fetchall()
+        }
+        nhan_vien = {
+            row["ma_nhan_vien"] for row in conn.execute(
+                "SELECT ma_nhan_vien FROM nhan_vien"
+            ).fetchall()
+        }
+    return bo_phan, nhan_vien
+
+
 THAM_CHIEU = {
     "dvt": ("don_vi_tinh", "dvt"),
     "chung_loai": ("chung_loai", "ma_chung_loai"),
@@ -976,7 +1120,7 @@ def gia_tri_ton_tai(loai: str, gia_tri: str | None) -> bool:
         with get_conn() as conn:
             return conn.execute(
                 '''SELECT 1 FROM danh_muc_dong
-                   WHERE "MA_LOAI"=%s AND ("MA"=%s OR "ID"=%s) AND "TRANG_THAI"='DANG_SU_DUNG' ''',
+                   WHERE ma_loai=%s AND (ma=%s OR id=%s) AND trang_thai='DANG_SU_DUNG' ''',
                 (ma_loai, gia_tri, gia_tri),
             ).fetchone() is not None
     bang, cot = THAM_CHIEU[loai]
@@ -1008,12 +1152,12 @@ def tao_vat_tu(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str):
     if la_schema_rut_gon():
         with get_conn() as conn:
             row = conn.execute(
-                '''INSERT INTO danh_muc_dong("ID","MA_LOAI","MA","TEN","DU_LIEU")
+                '''INSERT INTO danh_muc_dong(id,ma_loai,ma,ten,du_lieu)
                    VALUES(%s,'VT',%s,%s,%s)
-                   ON CONFLICT ("ID") DO UPDATE SET "ID"=excluded."ID"
-                   RETURNING "ID" AS id,"MA" AS ma_vat_tu,"TEN" AS ten_hang,
-                             "DU_LIEU"->>'don_vi' AS dvt,"DU_LIEU"->>'quy_cach' AS quy_cach,
-                             "TRANG_THAI" AS trang_thai''',
+                   ON CONFLICT (id) DO UPDATE SET id=excluded.id
+                   RETURNING id,ma AS ma_vat_tu,ten AS ten_hang,
+                             du_lieu->>'don_vi' AS dvt,du_lieu->>'quy_cach' AS quy_cach,
+                             trang_thai''',
                 (f"VT-{khoa}", du_lieu["ma_vat_tu"], du_lieu["ten_hang"], Jsonb({
                     "don_vi": du_lieu["dvt"], "quy_cach": du_lieu.get("quy_cach"),
                     "nguoi_tao": nguoi_tao,
@@ -1044,9 +1188,78 @@ def cap_nhat_vat_tu(id_vat_tu: str, du_lieu: dict, phien_ban: int, nguoi_sua: st
 
 
 def _tao_nha_cung_cap(conn, du_lieu: dict, nguoi_tao: str):
+    co_cot_id_chuan = conn.execute(
+        """SELECT EXISTS(
+             SELECT 1 FROM pg_attribute
+             WHERE attrelid=to_regclass('nha_cung_cap')
+               AND attname='id' AND attnum > 0 AND NOT attisdropped
+           ) AS co"""
+    ).fetchone()["co"]
+    if not co_cot_id_chuan:
+        # Tương thích bảng NCC cũ có tên cột viết HOA. Tạo mã dựa trên ID
+        # cũ, đồng thời chỉ ghi các trường mà bảng đó thực sự có.
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ("ID:nha_cung_cap",))
+        cot_hien_co = {
+            row["attname"] for row in conn.execute(
+                """SELECT attname FROM pg_attribute
+                   WHERE attrelid=to_regclass('nha_cung_cap')
+                     AND attnum > 0 AND NOT attisdropped"""
+            ).fetchall()
+        }
+        if not {"ID", "MA_NCC", "TEN"}.issubset(cot_hien_co):
+            raise RuntimeError("Bảng nhà cung cấp không khớp schema chuẩn hoặc schema legacy được hỗ trợ.")
+        row = conn.execute(
+            '''SELECT coalesce(max((substring("ID" from '[0-9]+$'))::integer),0)+1 AS n
+               FROM nha_cung_cap WHERE "ID" ~ %s''',
+            (r"^NCC-[0-9]+$",),
+        ).fetchone()
+        id_moi = f"NCC-{row['n']:05d}"
+        ma_ncc = du_lieu.get("ma_ncc") or id_moi
+        while not du_lieu.get("ma_ncc") and conn.execute(
+            'SELECT EXISTS(SELECT 1 FROM nha_cung_cap WHERE "MA_NCC"=%s) AS co',
+            (ma_ncc,),
+        ).fetchone()["co"]:
+            so_thu_tu = int(id_moi.rsplit("-", 1)[1]) + 1
+            id_moi = f"NCC-{so_thu_tu:05d}"
+            ma_ncc = id_moi
+
+        gia_tri = {"ID": id_moi, "MA_NCC": ma_ncc, "TEN": du_lieu["ten"]}
+        # Những trường đã tồn tại trên một số biến thể legacy được lưu luôn;
+        # các trường không có trong bảng được bỏ qua, không làm mất dữ liệu cũ.
+        for ten_cot in (
+            "TEN_KHONG_DAU", "MST", "DIA_CHI", "NGUOI_LIEN_HE", "SDT", "EMAIL",
+            "LA_NCC_MUA_HANG", "LA_NCC_GIA_CONG", "DA_PHE_DUYET", "TRANG_THAI",
+            "GHI_CHU", "NGUOI_TAO",
+        ):
+            khoa = ten_cot.lower()
+            if ten_cot in cot_hien_co and khoa in du_lieu:
+                # Cột địa chỉ của một số bảng legacy là NOT NULL, dù form
+                # hiện tại cho phép bỏ trống địa chỉ.
+                gia_tri[ten_cot] = (du_lieu[khoa] or "") if ten_cot == "DIA_CHI" else du_lieu[khoa]
+        if "TEN_KHONG_DAU" in cot_hien_co:
+            gia_tri["TEN_KHONG_DAU"] = du_lieu.get("ten_khong_dau") or du_lieu["ten"].lower()
+        if "NGUOI_TAO" in cot_hien_co:
+            gia_tri["NGUOI_TAO"] = nguoi_tao
+        if "TRANG_THAI" in cot_hien_co:
+            gia_tri["TRANG_THAI"] = du_lieu.get("trang_thai", "HOAT_DONG")
+        cot = list(gia_tri)
+        query = sql.SQL("INSERT INTO nha_cung_cap ({}) VALUES ({}) RETURNING *").format(
+            sql.SQL(",").join(map(sql.Identifier, cot)),
+            sql.SQL(",").join(sql.Placeholder() for _ in cot),
+        )
+        return conn.execute(query, [gia_tri[key] for key in cot]).fetchone()
+
     id_moi = _id_moi(conn, "nha_cung_cap", "NCC", 5)
+    while conn.execute(
+        "SELECT EXISTS(SELECT 1 FROM nha_cung_cap WHERE ma_ncc=%s) AS co",
+        (id_moi,),
+    ).fetchone()["co"]:
+        so_thu_tu = int(id_moi.rsplit("-", 1)[1]) + 1
+        id_moi = f"NCC-{so_thu_tu:05d}"
+    ma_ncc = du_lieu.get("ma_ncc") or id_moi
+    du_lieu = {**du_lieu, "ma_ncc": ma_ncc}
     cot = [
-        "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt", "sdt_2",
+        "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt",
         "fax", "email", "mat_hang", "la_ncc_mua_hang", "la_ncc_gia_cong", "co_hoa_don",
         "cong_no", "tien_mat", "nganh_nghe", "ma_loai_gia_cong", "vung", "so_km",
         "ky_han_quy_dinh", "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
@@ -1071,7 +1284,7 @@ def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str):
 
 def cap_nhat_nha_cung_cap(id_ncc: str, du_lieu: dict, phien_ban: int, nguoi_sua: str):
     cot_hop_le = {
-        "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt", "sdt_2",
+        "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt",
         "fax", "email", "mat_hang", "la_ncc_mua_hang", "la_ncc_gia_cong", "co_hoa_don",
         "cong_no", "tien_mat", "nganh_nghe", "ma_loai_gia_cong", "vung", "so_km",
         "ky_han_quy_dinh", "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
@@ -1081,6 +1294,54 @@ def cap_nhat_nha_cung_cap(id_ncc: str, du_lieu: dict, phien_ban: int, nguoi_sua:
     gan.append(sql.SQL("nguoi_sua={}").format(sql.Placeholder()))
     query = sql.SQL("UPDATE nha_cung_cap SET {} WHERE id=%s AND phien_ban=%s RETURNING *").format(sql.SQL(",").join(gan))
     with get_conn() as conn:
+        cot_id_chuan = conn.execute(
+            """SELECT EXISTS(
+                 SELECT 1 FROM pg_attribute
+                 WHERE attrelid=to_regclass('nha_cung_cap')
+                   AND attname='id' AND attnum > 0 AND NOT attisdropped
+               ) AS co"""
+        ).fetchone()["co"]
+        if not cot_id_chuan:
+            cot_hien_co = {
+                row["attname"] for row in conn.execute(
+                    """SELECT attname FROM pg_attribute
+                       WHERE attrelid=to_regclass('nha_cung_cap')
+                         AND attnum > 0 AND NOT attisdropped"""
+                ).fetchall()
+            }
+            anh_xa = {key: key.upper() for key in cot_hop_le}
+            cot = [key for key in cot if anh_xa[key] in cot_hien_co]
+            cot_text_bat_buoc = {
+                row["attname"] for row in conn.execute(
+                    """SELECT a.attname FROM pg_attribute a
+                       JOIN pg_type t ON t.oid=a.atttypid
+                       WHERE a.attrelid=to_regclass('nha_cung_cap')
+                         AND a.attnum > 0 AND NOT a.attisdropped
+                         AND a.attnotnull AND t.typcategory='S'"""
+                ).fetchall()
+            }
+            gia_tri_cap_nhat = {
+                key: ("" if du_lieu[key] is None and anh_xa[key] in cot_text_bat_buoc else du_lieu[key])
+                for key in cot
+            }
+            if "NGUOI_SUA" in cot_hien_co:
+                cot.append("nguoi_sua")
+                gan = [sql.SQL("{}={}").format(sql.Identifier(anh_xa[key]), sql.Placeholder()) for key in cot[:-1]]
+                gan.append(sql.SQL('"NGUOI_SUA"=%s'))
+            else:
+                gan = [sql.SQL("{}={}").format(sql.Identifier(anh_xa[key]), sql.Placeholder()) for key in cot]
+            if not gan:
+                raise RuntimeError("Bảng NCC legacy không có cột trạng thái để lưu thao tác loại bỏ.")
+            if "PHIEN_BAN" in cot_hien_co:
+                where = sql.SQL('"ID"=%s AND "PHIEN_BAN"=%s')
+                params = (*[gia_tri_cap_nhat[key] for key in cot if key != "nguoi_sua"], nguoi_sua) if "NGUOI_SUA" in cot_hien_co else tuple(gia_tri_cap_nhat[key] for key in cot)
+                params = (*params, id_ncc, phien_ban)
+            else:
+                where = sql.SQL('"ID"=%s')
+                params = (*[gia_tri_cap_nhat[key] for key in cot if key != "nguoi_sua"], nguoi_sua) if "NGUOI_SUA" in cot_hien_co else tuple(gia_tri_cap_nhat[key] for key in cot)
+                params = (*params, id_ncc)
+            query = sql.SQL("UPDATE nha_cung_cap SET {} WHERE {} RETURNING *").format(sql.SQL(",").join(gan), where)
+            return conn.execute(query, params).fetchone()
         return conn.execute(query, (*[du_lieu[key] for key in cot], nguoi_sua, id_ncc, phien_ban)).fetchone()
 
 

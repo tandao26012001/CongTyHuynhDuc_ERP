@@ -18,6 +18,7 @@ import { LoginView } from './views/LoginView';
 import { CatalogView } from './views/CatalogView';
 import { ComingSoonView } from './views/ComingSoonView';
 import { OutsourceView } from './views/OutsourceView';
+import { SupplierManagementView } from './views/SupplierManagementView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
@@ -69,6 +70,31 @@ export default function App() {
     setCurrentUser(null);
     setActiveTab('dashboard');
   }
+
+  useEffect(() => {
+    if (!currentUser || currentUser.vai_tro.trim().toUpperCase() === 'ADMIN') return;
+    const pageForTab: Partial<Record<NavigationTab, string>> = {
+      dashboard: 'home', reports: 'bao_cao', 'production-orders': 'de_nghi',
+      requests: 'de_nghi', 'create-request': 'de_nghi', 'request-detail': 'de_nghi',
+      quotes: 'bao_gia', 'purchase-orders': 'don_hang', orders: 'giao_nhan',
+      payments: 'thanh_toan', 'my-tasks': 'cong_viec', suppliers: 'ncc',
+      utilities: 'tien_ich', outsource: 'dat_ngoai',
+    };
+    const access = (page: string) =>
+      (currentUser.quyen?.[page] as { xem?: boolean } | undefined)?.xem === true;
+    const activePage = pageForTab[activeTab];
+    const activeAllowed = activeTab === 'company-data'
+      ? access('danh_muc') || access('quan_tri')
+      : !!activePage && access(activePage);
+    if (activeAllowed) return;
+    const nextTab: NavigationTab | undefined = [
+      ['outsource', 'dat_ngoai'], ['requests', 'de_nghi'], ['quotes', 'bao_gia'],
+      ['orders', 'giao_nhan'], ['dashboard', 'home'], ['my-tasks', 'cong_viec'],
+      ['reports', 'bao_cao'], ['purchase-orders', 'don_hang'], ['payments', 'thanh_toan'],
+      ['suppliers', 'ncc'], ['utilities', 'tien_ich'], ['company-data', 'danh_muc'],
+    ].find(([, page]) => access(page))?.[0] as NavigationTab | undefined;
+    if (nextTab) setActiveTab(nextTab);
+  }, [currentUser, activeTab]);
 
   const handleCreateNewRequest = (newReq: MaterialRequest) => {
     setRequests((prev) => [newReq, ...prev]);
@@ -140,6 +166,7 @@ export default function App() {
         activeTab={activeTab}
         currentUser={currentUser}
         onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        onNavigate={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
       />
 
       {/* Main Content Area */}
@@ -171,6 +198,7 @@ export default function App() {
               }}
               onNotify={showNotification}
               onTasksCountChange={setPendingTasksCount}
+              currentUser={currentUser}
             />
           )}
 
@@ -227,12 +255,12 @@ export default function App() {
 
           {activeTab === 'company-data' && <CatalogView currentUser={currentUser} onNotify={showNotification} />}
 
-          {activeTab === 'suppliers' && <ComingSoonView title="NHÀ CUNG CẤP" description="Màn hình quản lý nhà cung cấp sẽ được triển khai tại khu vực Quản trị." />}
+          {activeTab === 'suppliers' && <SupplierManagementView onNotify={showNotification} canEdit={isAdmin || (currentUser.quyen?.ncc as { sua?: boolean } | undefined)?.sua === true} />}
           {activeTab === 'utilities' && <ComingSoonView title="TIỆN ÍCH" description="Các tiện ích quản trị hệ thống đang được chuẩn bị." />}
           {activeTab === 'reports' && <ComingSoonView title="BÁO CÁO" description="Báo cáo điều hành sẽ được tính trực tiếp từ dữ liệu giao dịch." />}
           {activeTab === 'purchase-orders' && <ComingSoonView title="ĐƠN HÀNG" description="Chức năng quản lý đơn đặt hàng đang được triển khai." />}
           {activeTab === 'payments' && <ComingSoonView title="THANH TOÁN" description="Chức năng theo dõi yêu cầu thanh toán đang được triển khai." />}
-          {activeTab === 'outsource' && <OutsourceView onNotify={showNotification} />}
+          {activeTab === 'outsource' && <OutsourceView onNotify={showNotification} currentUser={currentUser} />}
         </div>
       </main>
 

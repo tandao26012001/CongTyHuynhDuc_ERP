@@ -7,7 +7,7 @@ import unicodedata
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from psycopg.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
+from psycopg.errors import CheckViolation, ForeignKeyViolation, NotNullViolation, UniqueViolation
 
 from backend.data import catalog_repo
 from backend.services.errors import KhongTimThay, LoiNghiepVu, ThieuDuLieu, XungDot
@@ -169,6 +169,14 @@ def danh_sach_vat_tu(bo_loc: dict | None = None, trang: int = 1, kich_thuoc: int
         "trang": trang,
         "kich_thuoc": kich_thuoc,
     }
+
+
+def danh_sach_nha_cung_cap(trang: int, kich_thuoc: int) -> dict:
+    trang = max(trang, 1)
+    kich_thuoc = min(max(kich_thuoc, 1), 100)
+    items, total = catalog_repo.danh_sach_nha_cung_cap((trang - 1) * kich_thuoc, kich_thuoc)
+    return {"items": [dict(item) for item in items], "tong": total,
+            "trang": trang, "kich_thuoc": kich_thuoc}
 
 
 def danh_sach_lenh_san_xuat(tu_khoa: str = "", trang: int = 1, kich_thuoc: int = 25) -> dict:
@@ -430,10 +438,8 @@ def nhap_don_vi_tinh_hang_loat(
         result["errors"] = errors + result["errors"]
         result["co_loi"] = len(result["errors"])
         return result
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
-
-
 def tim_nha_cung_cap(tu_khoa: str, gioi_han: int = 20) -> list[dict]:
     q = _khong_dau(tu_khoa)
     if len(q) < 2:
@@ -441,7 +447,7 @@ def tim_nha_cung_cap(tu_khoa: str, gioi_han: int = 20) -> list[dict]:
     return [dict(r) for r in catalog_repo.tim_nha_cung_cap(q, min(max(gioi_han, 1), 50))]
 
 
-def _chuan_danh_muc(ma: str, du_lieu: dict) -> dict:
+def _chuan_danh_muc(ma: str, du_lieu: dict, bo_qua_kiem_tra_bo_phan=False) -> dict:
     if ma not in DANH_MUC_CO_THE_GHI:
         raise KhongTimThay("Loại danh mục không hỗ trợ ghi.", "DANH_MUC_CHI_DOC")
     if ma == "don-vi-tinh":
@@ -466,7 +472,7 @@ def _chuan_danh_muc(ma: str, du_lieu: dict) -> dict:
             "trang_thai": _trang_thai(du_lieu.get("trang_thai", "HOAT_DONG"), {"HOAT_DONG", "NGUNG"}),
         }
     ma_bp = _chuoi(du_lieu.get("ma_bo_phan"), "Mã bộ phận", 10, False)
-    if ma_bp and not catalog_repo.gia_tri_ton_tai("bo_phan", ma_bp):
+    if ma_bp and not bo_qua_kiem_tra_bo_phan and not catalog_repo.gia_tri_ton_tai("bo_phan", ma_bp):
         raise ThieuDuLieu("Mã bộ phận không tồn tại.", "THAM_CHIEU_KHONG_TON_TAI")
     return {
         "ma_nhan_vien": _ma(du_lieu.get("ma_nhan_vien") or du_lieu.get("ma"), "Mã nhân viên", 20),
@@ -529,7 +535,8 @@ def _chuan_vat_tu(du_lieu: dict, tham_chieu: dict | None = None) -> dict:
 
 
 def _chuan_ncc(du_lieu: dict) -> dict:
-    ma = _ma(du_lieu.get("ma_ncc"), "Mã nhà cung cấp", 40)
+    gia_tri_ma = du_lieu.get("ma_ncc")
+    ma = _ma(gia_tri_ma, "Mã nhà cung cấp", 40) if gia_tri_ma and str(gia_tri_ma).strip() else None
     ten = _chuoi(du_lieu.get("ten"), "Tên nhà cung cấp", 300)
     mst = _chuoi(du_lieu.get("mst"), "Mã số thuế", 20, False)
     if mst and not RE_MST.fullmatch(mst):
@@ -557,7 +564,6 @@ def _chuan_ncc(du_lieu: dict) -> dict:
         "dia_chi": _chuoi(du_lieu.get("dia_chi"), "Địa chỉ", 2000, False),
         "nguoi_lien_he": _chuoi(du_lieu.get("nguoi_lien_he"), "Người liên hệ", 120, False),
         "sdt": _chuoi(du_lieu.get("sdt"), "Số điện thoại", 40, False),
-        "sdt_2": _chuoi(du_lieu.get("sdt_2"), "Số điện thoại 2", 40, False),
         "fax": _chuoi(du_lieu.get("fax"), "Fax", 40, False),
         "email": _chuoi(du_lieu.get("email"), "Email", 120, False),
         "mat_hang": _chuoi(du_lieu.get("mat_hang"), "Mặt hàng", 2000, False),
@@ -603,6 +609,15 @@ def _loi_csdl(exc):
         raise ThieuDuLieu("Danh mục tham chiếu không tồn tại.", "THAM_CHIEU_KHONG_TON_TAI") from None
     if isinstance(exc, CheckViolation):
         raise ThieuDuLieu("Dữ liệu không thỏa quy tắc danh mục.", "SAI_DU_LIEU_DANH_MUC") from None
+    if isinstance(exc, NotNullViolation):
+        cot = getattr(getattr(exc, "diag", None), "column_name", None)
+        ten_truong = {
+            "DIA_CHI": "Địa chỉ", "TEN": "Tên nhà cung cấp", "MA_NCC": "Mã nhà cung cấp",
+            "MST": "Mã số thuế", "NGUOI_LIEN_HE": "Người liên hệ", "SDT": "Số điện thoại",
+            "EMAIL": "Email", "dia_chi": "Địa chỉ", "ten": "Tên nhà cung cấp",
+            "ma_ncc": "Mã nhà cung cấp", "mst": "Mã số thuế",
+        }.get(cot, cot.replace("_", " ").capitalize() if cot else "Trường bắt buộc")
+        raise ThieuDuLieu(f"{ten_truong} là trường bắt buộc, vui lòng nhập đầy đủ.", "THIEU_TRUONG_BAT_BUOC") from None
     raise exc
 
 
@@ -624,7 +639,7 @@ def tao_danh_muc(ma: str, du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: s
     chuan = _chuan_danh_muc(ma, du_lieu)
     try:
         return catalog_repo.tao_danh_muc(ma, chuan, nguoi_tao, tai_khoan, khoa)
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
 
 
@@ -640,7 +655,7 @@ def cap_nhat_danh_muc(ma: str, id_ban_ghi: str, du_lieu: dict, phien_ban: int, n
     chuan = _chuan_danh_muc(ma, du_lieu_day_du)
     try:
         row = catalog_repo.cap_nhat_danh_muc(ma, id_ban_ghi, chuan, phien_ban, nguoi_sua)
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
     if not row:
         if not catalog_repo.ton_tai_danh_muc(ma, id_ban_ghi):
@@ -670,7 +685,7 @@ def tao_vat_tu(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str, xac_nha
         result = catalog_repo.tao_vat_tu(chuan, nguoi_tao, tai_khoan, khoa)
         result["canh_bao_trung"] = canh_bao
         return result
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
 
 
@@ -690,7 +705,7 @@ def cap_nhat_vat_tu(id_vat_tu: str, du_lieu: dict, phien_ban: int, nguoi_sua: st
         chuan.pop("ma_vat_tu")
     try:
         row = catalog_repo.cap_nhat_vat_tu(id_vat_tu, chuan, phien_ban, nguoi_sua)
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
     if not row:
         if not catalog_repo.lay_vat_tu(id_vat_tu):
@@ -714,7 +729,7 @@ def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str, x
         result = catalog_repo.tao_nha_cung_cap(chuan, nguoi_tao, tai_khoan, khoa)
         result["canh_bao_trung"] = canh_bao
         return result
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
 
 
@@ -729,7 +744,7 @@ def cap_nhat_nha_cung_cap(id_ncc: str, du_lieu: dict, phien_ban: int, nguoi_sua:
         return {"da_luu": False, "can_xac_nhan": True, "canh_bao_trung": canh_bao}
     try:
         row = catalog_repo.cap_nhat_nha_cung_cap(id_ncc, chuan, phien_ban, nguoi_sua)
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
     if not row:
         if not catalog_repo.lay_nha_cung_cap(id_ncc):
@@ -799,12 +814,22 @@ def xem_truoc_nhap_hang_loat(loai: str, rows: list[dict]) -> dict:
         raise ThieuDuLieu("Mỗi lần chỉ được nhập tối đa 500 dòng.", "VUOT_GIOI_HAN_NHAP")
     if loai == "vat-tu":
         return _xem_truoc_vat_tu_hang_loat(rows)
+    tham_chieu_nhan_vien = None
+    if loai == "nhan-vien":
+        bo_phan_hien_co, nhan_vien_hien_co = catalog_repo.lay_tham_chieu_nhap_nhan_vien()
+        tham_chieu_nhan_vien = (bo_phan_hien_co, nhan_vien_hien_co)
     ket_qua, danh_sach_chuan = [], []
     da_gap = {}
     for stt, row in enumerate(rows, 1):
         loi, canh_bao, chuan = [], [], None
         try:
-            chuan = _chuan_theo_loai(loai, row)
+            if loai == "nhan-vien":
+                chuan = _chuan_danh_muc(loai, row, bo_qua_kiem_tra_bo_phan=True)
+                bo_phan_hien_co, nhan_vien_hien_co = tham_chieu_nhan_vien
+                if chuan["ma_bo_phan"] and chuan["ma_bo_phan"] not in bo_phan_hien_co:
+                    loi.append("Mã bộ phận không tồn tại.")
+            else:
+                chuan = _chuan_theo_loai(loai, row)
             if loai == "vat-tu":
                 trung = kiem_tra_trung_vat_tu(chuan)
                 chan, canh_bao = _tach_trung(trung, loai)
@@ -820,7 +845,12 @@ def xem_truoc_nhap_hang_loat(loai: str, rows: list[dict]) -> dict:
             else:
                 khoa_chinh = catalog_repo.DANH_MUC_GHI[loai][1]
                 khoa = (chuan[khoa_chinh], chuan["ten"] if loai == "chung-loai" else None)
-                if catalog_repo.trung_danh_muc(loai, chuan):
+                bi_trung = (
+                    chuan["ma_nhan_vien"] in tham_chieu_nhan_vien[1]
+                    if loai == "nhan-vien"
+                    else catalog_repo.trung_danh_muc(loai, chuan)
+                )
+                if bi_trung:
                     loi.append("Mã hoặc tên danh mục đã tồn tại")
             for gia_tri in khoa:
                 if gia_tri and (loai, gia_tri) in da_gap:
@@ -855,5 +885,6 @@ def xac_nhan_nhap_hang_loat(
         return catalog_repo.nhap_hang_loat(
             loai, xem_truoc["du_lieu_chuan_hoa"], nguoi_tao, tai_khoan, khoa
         )
-    except (UniqueViolation, ForeignKeyViolation, CheckViolation) as exc:
+    except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:
         _loi_csdl(exc)
+

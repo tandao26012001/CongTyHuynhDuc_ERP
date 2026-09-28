@@ -1,16 +1,53 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ApprovalTask, NavigationTab } from '../types';
 import { INITIAL_APPROVAL_TASKS } from '../data/initialData';
 import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox } from '../components/RowSelection';
+import { HoSo, layHangDoiKyThuatDatNgoai, PhieuDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
 
 interface MyTasksViewProps {
   onNavigate: (tab: NavigationTab) => void;
   onNotify: (msg: string) => void;
   onTasksCountChange?: (count: number) => void;
+  currentUser: HoSo;
 }
 
-export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, onTasksCountChange }) => {
+export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, onTasksCountChange, currentUser }) => {
   const [tasks, setTasks] = useState<ApprovalTask[]>(INITIAL_APPROVAL_TASKS);
+  const [technicalQueue, setTechnicalQueue] = useState<PhieuDatNgoai[]>([]);
+  const [technicalError, setTechnicalError] = useState('');
+  const [processingTechnical, setProcessingTechnical] = useState<string | null>(null);
+  const technicalPermission = currentUser.quyen?.xac_nhan_kt as { xem?: boolean; sua?: boolean } | undefined;
+  const canReviewTechnical = technicalPermission?.xem === true && technicalPermission.sua === true;
+
+  async function loadTechnicalQueue() {
+    if (!canReviewTechnical) return;
+    try {
+      setTechnicalQueue(await layHangDoiKyThuatDatNgoai());
+      setTechnicalError('');
+    } catch (reason) {
+      setTechnicalError(reason instanceof Error ? reason.message : 'Không tải được hàng đợi kỹ thuật.');
+    }
+  }
+
+  useEffect(() => {
+    if (!canReviewTechnical) return;
+    void loadTechnicalQueue();
+    const timer = globalThis.setInterval(() => void loadTechnicalQueue(), 30_000);
+    return () => globalThis.clearInterval(timer);
+  }, [canReviewTechnical]);
+
+  async function confirmOutsourceTechnical(request: PhieuDatNgoai) {
+    setProcessingTechnical(request.id);
+    try {
+      await xacNhanKyThuatDatNgoai(request);
+      await loadTechnicalQueue();
+      onNotify(`Đã xác nhận kỹ thuật phiếu ${request.id}; phiếu đã được gỡ khỏi việc cần xử lý.`);
+    } catch (reason) {
+      onNotify(reason instanceof Error ? reason.message : 'Không xác nhận được phiếu.');
+    } finally {
+      setProcessingTechnical(null);
+    }
+  }
   const [activeSubTab, setActiveSubTab] = useState<'pending' | 'supplement' | 'history'>('pending');
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [filterType, setFilterType] = useState('ALL');
@@ -124,6 +161,19 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, 
 
   return (
     <div className="space-y-6 pb-20">
+      {canReviewTechnical && <section className="bg-white border border-[#DCE1EC] rounded shadow-sm overflow-hidden">
+        <header className="p-4 bg-[#EEF0F9] border-b flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold text-[15px]">PHIẾU ĐẶT NGOÀI CHỜ KỸ THUẬT</h2><p className="text-[12px] text-[#59627A]">Hàng đợi chung cho tài khoản được cấp quyền xác nhận kỹ thuật.</p></div>
+          <span className="pill p-info px-3 py-1">{technicalQueue.length} đang chờ</span>
+        </header>
+        {technicalError && <div role="alert" className="p-3 text-[12px] text-[#C4141F]">{technicalError}</div>}
+        {technicalQueue.length === 0 ? <p className="p-5 text-[13px] text-[#59627A]">Không có phiếu nào đang chờ xác nhận kỹ thuật.</p> : <div className="divide-y">
+          {technicalQueue.map((request) => <article key={request.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+            <div><strong className="font-mono text-[#283A97]">{request.id}</strong><span className="mx-2 text-[#8A93AA]">·</span><span className="font-mono">LSX {request.lenh_san_xuat}</span><p className="mt-1 text-[12px] text-[#59627A]">{request.noi_dung_ky_thuat || 'Yêu cầu xác nhận kỹ thuật'} · {request.dong.length} mã hàng · Người lập: {request.nguoi_lap}</p></div>
+            <button type="button" disabled={processingTechnical === request.id} onClick={() => void confirmOutsourceTechnical(request)} className="min-h-10 px-4 rounded bg-emerald-700 text-white font-bold disabled:opacity-50">{processingTechnical === request.id ? 'ĐANG XỬ LÝ…' : 'XÁC NHẬN KỸ THUẬT'}</button>
+          </article>)}
+        </div>}
+      </section>}
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: Pending */}

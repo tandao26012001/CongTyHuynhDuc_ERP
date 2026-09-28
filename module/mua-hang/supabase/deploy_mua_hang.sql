@@ -23,5 +23,14 @@ BEGIN;
 \ir migrations/034_sua_hop_dong_import_lsx_excel.sql
 \ir migrations/035_quan_ly_tai_khoan_va_phan_quyen.sql
 \ir migrations/036_danh_muc_nhan_vien.sql
+\ir migrations/037_cho_phep_tai_khoan_cho_duyet.sql
+\ir migrations/038_chuyen_tai_khoan_legacy_sang_chuan.sql
 \ir migrations/017_seed_phan_quyen.sql
+\ir migrations/039_gioi_han_quyen_nv_kinh_doanh.sql
+\ir migrations/040_chuyen_quan_ly_ncc_ve_mua_hang.sql
+\ir migrations/041_chuan_hoa_nha_cung_cap_legacy.sql
+\ir migrations/042_chuan_hoa_cot_de_nghi_danh_muc_dong.sql
+\ir migrations/043_chuan_hoa_cot_bang_legacy.sql
+\ir migrations/044_sua_trigger_tai_khoan_legacy.sql
+\ir migrations/045_loai_bo_cot_legacy_tai_khoan.sql
 COMMIT;

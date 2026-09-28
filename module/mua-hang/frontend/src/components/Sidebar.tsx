@@ -30,7 +30,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'QUẢN TRỊ',
       items: [
         { tab: 'company-data', label: 'Dữ liệu gốc', icon: 'database', visible: canManageCompanyData },
-        { tab: 'suppliers', label: 'Nhà cung cấp', icon: 'storefront', visible: visiblePages.suppliers },
         { tab: 'utilities', label: 'Tiện ích', icon: 'tune', visible: visiblePages.utilities },
       ],
     },
@@ -46,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'MUA HÀNG',
       items: [
         { tab: 'requests', label: 'Đề nghị mua hàng', icon: 'assignment_add', visible: visiblePages.requests, activeTabs: ['requests', 'create-request', 'request-detail'] },
+        { tab: 'suppliers', label: 'Nhà cung cấp', icon: 'storefront', visible: visiblePages.suppliers },
         { tab: 'quotes', label: 'Báo giá', icon: 'sell', visible: visiblePages.quotes },
         { tab: 'purchase-orders', label: 'Đơn hàng', icon: 'shopping_cart', visible: visiblePages.orders },
         { tab: 'orders', label: 'Giao nhận', icon: 'inventory_2', visible: visiblePages.deliveries },

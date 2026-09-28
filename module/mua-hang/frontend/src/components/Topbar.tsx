@@ -1,18 +1,30 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationTab } from '../types';
-import { HoSo } from '../api/client';
+import { HoSo, layHangDoiKyThuatDatNgoai, PhieuDatNgoai } from '../api/client';
 
 interface TopbarProps {
   activeTab: NavigationTab;
   currentUser: HoSo;
   onToggleMobileMenu: () => void;
+  onNavigate: (tab: NavigationTab) => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({
   activeTab,
   currentUser,
-  onToggleMobileMenu
+  onToggleMobileMenu,
+  onNavigate,
 }) => {
+  const [technicalQueue, setTechnicalQueue] = useState<PhieuDatNgoai[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const hasTechnicalPermission = (currentUser.quyen?.xac_nhan_kt as { xem?: boolean } | undefined)?.xem === true;
+  useEffect(() => {
+    if (!hasTechnicalPermission) return;
+    const load = () => void layHangDoiKyThuatDatNgoai().then(setTechnicalQueue).catch(() => setTechnicalQueue([]));
+    load();
+    const timer = globalThis.setInterval(load, 30_000);
+    return () => globalThis.clearInterval(timer);
+  }, [hasTechnicalPermission]);
   const avatar = (currentUser.ho_va_ten || currentUser.ma_tai_khoan)
     .split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase();
   const getPageTitle = () => {
@@ -91,17 +103,22 @@ export const Topbar: React.FC<TopbarProps> = ({
         </div>
 
         {/* Notifications */}
+        <div className="relative">
         <button
           aria-label="Thông báo"
-          onClick={() => alert('Thông báo mới: Có 1 đề nghị vật tư sắp đến hạn xử lý (<4h)!')}
+          onClick={() => setShowNotifications((open) => !open)}
           className="relative p-1.5 text-[#59627A] hover:bg-[#EEF0F9] hover:text-[#283A97] rounded-lg transition-colors"
           title="Thông báo hệ thống"
         >
           <span className="material-symbols-outlined text-[22px]">notifications</span>
-          <span className="absolute top-1 right-1 w-4 h-4 bg-[#EE202E] text-white text-[10px] font-bold rounded-full flex items-center justify-center font-mono">
-            3
-          </span>
+          {technicalQueue.length > 0 && <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-[#EE202E] text-white text-[10px] font-bold rounded-full flex items-center justify-center font-mono">{technicalQueue.length}</span>}
         </button>
+        {showNotifications && <div className="absolute right-0 top-11 z-50 w-[min(90vw,360px)] bg-white border border-[#DCE1EC] rounded shadow-xl">
+          <div className="p-3 border-b font-bold text-[12px]">THÔNG BÁO {technicalQueue.length ? `· ${technicalQueue.length} VIỆC KỸ THUẬT` : ''}</div>
+          {technicalQueue.length === 0 ? <p className="p-4 text-[12px] text-[#59627A]">Không có phiếu kỹ thuật đang chờ.</p> : <div className="max-h-64 overflow-y-auto">{technicalQueue.map((item) => <button key={item.id} type="button" onClick={() => { setShowNotifications(false); onNavigate('my-tasks'); }} className="w-full p-3 text-left border-b last:border-b-0 hover:bg-[#F4F6FA]"><strong className="block font-mono text-[#283A97]">{item.id} · LSX {item.lenh_san_xuat}</strong><span className="block mt-1 text-[11px] text-[#59627A]">{item.noi_dung_ky_thuat || 'Chờ xác nhận kỹ thuật'} · {item.dong.length} mã hàng</span></button>)}</div>}
+          {technicalQueue.length > 0 && <button type="button" onClick={() => { setShowNotifications(false); onNavigate('my-tasks'); }} className="w-full p-3 text-center text-[12px] font-bold text-[#283A97]">MỞ VIỆC CỦA TÔI</button>}
+        </div>}
+        </div>
 
         <div className="h-6 w-[1px] bg-[#DCE1EC] hidden sm:block"></div>
 

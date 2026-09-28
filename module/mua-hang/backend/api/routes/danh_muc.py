@@ -90,13 +90,12 @@ class DuKienMaVatTuHangLoatBody(BaseModel):
 
 
 class NhaCungCapBody(BaseModel):
-    ma_ncc: str
+    ma_ncc: str | None = None
     ten: str
     mst: str | None = None
     dia_chi: str | None = None
     nguoi_lien_he: str | None = None
     sdt: str | None = None
-    sdt_2: str | None = None
     fax: str | None = None
     email: str | None = None
     mat_hang: str | None = None
@@ -126,7 +125,6 @@ class SuaNhaCungCapBody(BaseModel):
     dia_chi: str | None = None
     nguoi_lien_he: str | None = None
     sdt: str | None = None
-    sdt_2: str | None = None
     fax: str | None = None
     email: str | None = None
     mat_hang: str | None = None
@@ -423,6 +421,12 @@ def sua_vat_tu(id_vat_tu: str, body: SuaVatTuBody, request: Request):
 def tim_ncc(request: Request, q: str, gioi_han: int = 20):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
     return thanh_cong(catalog_service.tim_nha_cung_cap(q, gioi_han))
+
+
+@router.get("/nha-cung-cap", summary="Danh sách nhà cung cấp", response_model=PhanHoi)
+def danh_sach_ncc(request: Request, trang: int = 1, kich_thuoc: int = 25):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.danh_sach_nha_cung_cap(trang, kich_thuoc))
 
 
 @router.post("/nha-cung-cap/kiem-tra-trung", summary="Cảnh báo NCC trùng mã/MST/tên", response_model=PhanHoi)

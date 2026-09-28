@@ -71,6 +71,11 @@ class CapNhatBaoGiaIn(BaseModel):
     dong: list[GiaDongIn] = Field(min_length=1)
 
 
+class ChonNhaCungCapIn(BaseModel):
+    id_ncc: str = Field(min_length=1, max_length=20)
+    phien_ban: int = Field(ge=1)
+
+
 class ChuyenTrangThaiIn(BaseModel):
     phien_ban: int = Field(ge=1)
     trang_thai: str
@@ -101,6 +106,23 @@ def tao_bao_gia(body: TaoBaoGiaIn, request: Request):
 @router.get('/dat-ngoai', summary='Danh sách phiếu theo luồng đặt ngoài', response_model=PhanHoi)
 def danh_sach(request: Request):
     return thanh_cong(dat_ngoai_service.danh_sach(lay_ho_so(request)))
+
+
+@router.get('/dat-ngoai/nha-cung-cap', summary='Danh sách nhà cung cấp gia công cho phiếu đặt ngoài', response_model=PhanHoi)
+def danh_sach_nha_cung_cap_dat_ngoai(request: Request):
+    return thanh_cong(dat_ngoai_service.nha_cung_cap_co_the_chon(lay_ho_so(request)))
+
+
+@router.patch('/dat-ngoai/{id_phieu}/nha-cung-cap', summary='Chọn nhà cung cấp cho phiếu đặt ngoài', response_model=PhanHoi)
+def chon_nha_cung_cap_dat_ngoai(id_phieu: str, body: ChonNhaCungCapIn, request: Request):
+    return thanh_cong(dat_ngoai_service.chon_nha_cung_cap(
+        id_phieu, body.id_ncc, body.phien_ban, lay_ho_so(request)
+    ))
+
+
+@router.get('/dat-ngoai/hang-doi-ky-thuat', summary='Phiếu đặt ngoài chờ kỹ thuật xác nhận', response_model=PhanHoi)
+def hang_doi_ky_thuat(request: Request):
+    return thanh_cong(dat_ngoai_service.hang_doi_xac_nhan_ky_thuat(lay_ho_so(request)))
 
 
 @router.patch('/dat-ngoai/{id_phieu}/bao-gia', summary='Điền báo giá và chuyển chờ duyệt', response_model=PhanHoi)

@@ -82,7 +82,29 @@ export async function dangNhap(maTaiKhoan: string, matKhau: string) {
     body: JSON.stringify({ ma_tai_khoan: maTaiKhoan, mat_khau: matKhau }),
   });
   luuToken(data.token);
-  return data.ho_so;
+  try {
+    return await layHoSo();
+  } catch (error) {
+    luuToken('');
+    throw error;
+  }
+}
+
+export async function timNhanVienDangKy(hoVaTen: string) {
+  const params = new URLSearchParams({ ho_va_ten: hoVaTen });
+  return api<{ ma_nhan_vien: string; ho_va_ten: string }>(`/api/v1/dang-ky/nhan-vien?${params.toString()}`);
+}
+
+export async function dangKyTaiKhoan(hoVaTen: string, matKhau: string) {
+  return api<{ ma_tai_khoan: string; ma_nhan_vien: string; ho_va_ten: string; trang_thai: string }>(
+    '/api/v1/dang-ky', { method: 'POST', body: JSON.stringify({ ho_va_ten: hoVaTen, mat_khau: matKhau }) },
+  );
+}
+
+export async function doiMatKhau(matKhauCu: string, matKhauMoi: string) {
+  return api<{ da_doi_mat_khau: boolean; can_dang_nhap_lai: boolean }>('/api/v1/doi-mat-khau', {
+    method: 'POST', body: JSON.stringify({ mat_khau_cu: matKhauCu, mat_khau_moi: matKhauMoi }),
+  });
 }
 
 export async function layHoSo() {
@@ -195,14 +217,14 @@ export async function suaNhanVien(ma: string, input: DuLieuNhanVien, phienBan: n
 export async function xemTruocNhapNhanVien(rows: DuLieuNhanVien[]) {
   return api<KetQuaXemTruocNhapVatTu>('/api/v1/danh-muc/nhap-hang-loat/xem-truoc', {
     method: 'POST', body: JSON.stringify({ loai: 'nhan-vien', rows }),
-  });
+  }, BULK_IMPORT_TIMEOUT_MS);
 }
 
 export async function xacNhanNhapNhanVien(rows: DuLieuNhanVien[], maXacNhan: string) {
   return api<{ so_dong: number; items: NhanVienDanhMuc[] }>('/api/v1/danh-muc/nhap-hang-loat/xac-nhan', {
     method: 'POST', headers: idempotencyHeaders(),
     body: JSON.stringify({ loai: 'nhan-vien', rows, ma_xac_nhan: maXacNhan, xac_nhan_canh_bao: false }),
-  });
+  }, BULK_IMPORT_TIMEOUT_MS);
 }
 
 export interface TaiKhoanQuanTri {
@@ -210,6 +232,7 @@ export interface TaiKhoanQuanTri {
   ma_nhan_vien: string;
   ho_va_ten: string;
   ma_bo_phan: string;
+  ten_bo_phan?: string | null;
   vai_tro: string | null;
   trang_thai: 'CHO_DUYET' | 'HOAT_DONG' | 'KHOA';
   lan_dang_nhap_cuoi: string | null;
@@ -255,6 +278,13 @@ export async function khoaTaiKhoan(ma: string, phienBan: number) {
   return api<{ ma_tai_khoan: string; trang_thai: string }>(`/api/v1/tai-khoan/${encodeURIComponent(ma)}/khoa`, {
     method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ phien_ban: phienBan }),
   });
+}
+
+export async function capNhatTaiKhoanQuanTri(ma: string, maBoPhan: string, vaiTro: string, phienBan: number) {
+  return api<{ ma_tai_khoan: string; ma_bo_phan: string; vai_tro: string; trang_thai: string }>(
+    `/api/v1/tai-khoan/${encodeURIComponent(ma)}`,
+    { method: 'PATCH', body: JSON.stringify({ ma_bo_phan: maBoPhan, vai_tro: vaiTro, phien_ban: phienBan }) },
+  );
 }
 
 export async function layVaiTroVaPhanQuyen() {
@@ -318,9 +348,13 @@ export async function layDanhSachVatTu(trang = 1, kichThuoc = 25, boLoc: BoLocVa
     const value = boLoc[key as keyof BoLocVatTu]?.trim();
     if (value) params.set(apiKey, value);
   }
-  return api<{ items: VatTuTraCuu[]; tong: number; trang: number; kich_thuoc: number }>(
+  const result = await api<{ items: VatTuTraCuu[]; tong: number; trang: number; kich_thuoc: number } | null>(
     `/api/v1/vat-tu?${params.toString()}`,
   );
+  if (!result || !Array.isArray(result.items) || typeof result.tong !== 'number') {
+    throw new ApiError('Máy chủ trả về danh sách vật tư không hợp lệ. Kiểm tra API GET /api/v1/vat-tu rồi tải lại.', 'VAT_TU_DANH_SACH_RONG', 502);
+  }
+  return result;
 }
 
 export async function layDonViTinh() {
@@ -419,7 +453,10 @@ export interface NhapQuyTacNhanDienRow {
 }
 
 export async function layChungLoai() {
-  const result = await api<{ items: ChungLoai[] }>('/api/v1/danh-muc/chung-loai?trang=1&kich_thuoc=100');
+  const result = await api<{ items: ChungLoai[] } | null>('/api/v1/danh-muc/chung-loai?trang=1&kich_thuoc=100');
+  if (!result || !Array.isArray(result.items)) {
+    throw new ApiError('Máy chủ trả về danh sách chủng loại không hợp lệ. Kiểm tra API GET /api/v1/danh-muc/chung-loai.', 'CHUNG_LOAI_DANH_SACH_RONG', 502);
+  }
   return result.items;
 }
 
@@ -636,6 +673,7 @@ export interface DongPhieuDatNgoai {
 
 export interface PhieuDatNgoai {
   id: string;
+  id_ncc: string | null;
   lenh_san_xuat: string;
   nguoi_lap: string;
   ngay_lap: string;
@@ -662,14 +700,64 @@ export interface NhaCungCapDanhMuc {
   ma: string;
   ma_ncc: string;
   ten: string;
+  mst?: string | null;
+  dia_chi?: string | null;
+  nguoi_lien_he?: string | null;
+  sdt?: string | null;
+  email?: string | null;
+  ghi_chu?: string | null;
+  ngay_phe_duyet?: string | null;
   la_ncc_mua_hang: boolean;
   la_ncc_gia_cong: boolean;
   da_phe_duyet: boolean;
   trang_thai: string;
+  phien_ban?: number;
 }
+
+export interface DuLieuNhaCungCap {
+  ma_ncc?: string;
+  ten: string;
+  mst?: string;
+  dia_chi?: string;
+  nguoi_lien_he?: string;
+  sdt?: string;
+  email?: string;
+  la_ncc_mua_hang: boolean;
+  la_ncc_gia_cong: boolean;
+  da_phe_duyet: boolean;
+  trang_thai: string;
+  ghi_chu?: string;
+  xac_nhan_trung?: boolean;
+}
+
+export interface NhaCungCapQuanLy extends NhaCungCapDanhMuc { phien_ban: number }
 
 export async function layPhieuDatNgoai() {
   return api<PhieuDatNgoai[]>('/api/v1/dat-ngoai');
+}
+
+export async function layNhaCungCapDatNgoai() {
+  return api<NhaCungCapDanhMuc[]>('/api/v1/dat-ngoai/nha-cung-cap');
+}
+
+export async function chonNhaCungCapDatNgoai(phieu: PhieuDatNgoai, idNcc: string) {
+  return api<PhieuDatNgoai>(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/nha-cung-cap`, {
+    method: 'PATCH', body: JSON.stringify({ id_ncc: idNcc, phien_ban: phieu.phien_ban }),
+  });
+}
+
+export async function layHangDoiKyThuatDatNgoai() {
+  return api<PhieuDatNgoai[]>('/api/v1/dat-ngoai/hang-doi-ky-thuat');
+}
+
+export async function xacNhanKyThuatDatNgoai(phieu: PhieuDatNgoai, noiDung?: string) {
+  return chuyenTrangThaiDatNgoai(phieu, 'DANG_BAO_GIA', noiDung);
+}
+
+export async function chuyenTrangThaiDatNgoai(phieu: PhieuDatNgoai, trangThai: string, noiDung?: string) {
+  return api<PhieuDatNgoai>(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/chuyen-trang-thai`, {
+    method: 'POST', body: JSON.stringify({ phien_ban: phieu.phien_ban, trang_thai: trangThai, noi_dung: noiDung }),
+  });
 }
 
 export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan_ky_thuat?: boolean; noi_dung_ky_thuat?: string; ghi_chu?: string }) {
@@ -677,5 +765,27 @@ export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan
 }
 
 export async function layNhaCungCapDanhMuc() {
-  return api<{ items: NhaCungCapDanhMuc[]; tong: number }>('/api/v1/danh-muc/nha-cung-cap?trang=1&kich_thuoc=100');
+  return layDanhSachNhaCungCap(1, 100);
+}
+
+export async function layDanhSachNhaCungCap(trang = 1, kichThuoc = 25) {
+  const params = new URLSearchParams({ trang: String(trang), kich_thuoc: String(kichThuoc) });
+  const result = await api<{ items: NhaCungCapQuanLy[]; tong: number; trang: number; kich_thuoc: number } | null>(`/api/v1/nha-cung-cap?${params}`);
+  if (!result || !Array.isArray(result.items) || typeof result.tong !== 'number') {
+    throw new ApiError('Máy chủ trả về danh sách nhà cung cấp không hợp lệ. Hãy khởi động lại backend và thử tải lại.', 'NCC_DANH_SACH_RONG', 502);
+  }
+  return result;
+}
+
+export async function taoNhaCungCap(duLieu: DuLieuNhaCungCap) {
+  return api<{ da_luu: boolean; can_xac_nhan?: boolean; canh_bao_trung?: unknown[]; item?: NhaCungCapQuanLy }>(
+    '/api/v1/nha-cung-cap', { method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify(duLieu) },
+  );
+}
+
+export async function suaNhaCungCap(id: string, duLieu: Partial<DuLieuNhaCungCap>, phienBan: number) {
+  return api<{ da_luu: boolean; can_xac_nhan?: boolean; canh_bao_trung?: unknown[]; item?: NhaCungCapQuanLy }>(
+    `/api/v1/nha-cung-cap/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify({ ...duLieu, phien_ban: phienBan }) },
+  );
 }

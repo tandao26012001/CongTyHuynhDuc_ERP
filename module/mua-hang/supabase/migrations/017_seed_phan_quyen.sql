@@ -88,9 +88,7 @@ WITH cap(vai_tro,ds_trang,xem,sua,duyet,xuat,pham_vi) AS (VALUES
  ('TBP_KINH_DOANH','dat_ngoai',true,true,true,false,'toan_bo'),
  ('TBP_KINH_DOANH','dieu_xe',true,true,false,false,'toan_bo'),
 
- ('NV_KINH_DOANH','home,cong_viec',true,false,false,false,'ca_nhan'),
- ('NV_KINH_DOANH','de_nghi,xac_nhan_kt,bao_gia,don_hang,giao_nhan,ncc,danh_muc,tien_ich',true,false,false,false,'ca_nhan'),
- ('NV_KINH_DOANH','dat_ngoai,dieu_xe',true,true,false,false,'ca_nhan'),
+ ('NV_KINH_DOANH','dat_ngoai',true,true,false,true,'ca_nhan'),
 
  ('KE_TOAN','home,de_nghi,bao_gia,don_hang,giao_nhan,dat_ngoai,ncc,danh_muc,tien_ich',true,false,false,false,'toan_bo'),
  ('KE_TOAN','thanh_toan',true,true,false,false,'toan_bo'),
@@ -104,6 +102,14 @@ WITH cap(vai_tro,ds_trang,xem,sua,duyet,xuat,pham_vi) AS (VALUES
 UPDATE mua_hang.phan_quyen p SET
   duoc_xem=mo.xem,duoc_sua=mo.sua,duoc_duyet=mo.duyet,duoc_xuat=mo.xuat,pham_vi=mo.pham_vi
 FROM mo WHERE p.vai_tro=mo.vai_tro AND p.trang=mo.trang;
+
+-- NV kinh doanh chi duoc vao phan he Dat ngoai.
+UPDATE mua_hang.phan_quyen
+SET duoc_xem=false,duoc_sua=false,duoc_duyet=false,duoc_xuat=false,pham_vi='ca_nhan'
+WHERE vai_tro='NV_KINH_DOANH';
+UPDATE mua_hang.phan_quyen
+SET duoc_xem=true,duoc_sua=true,duoc_duyet=false,duoc_xuat=true,pham_vi='ca_nhan'
+WHERE vai_tro='NV_KINH_DOANH' AND trang='dat_ngoai';
 
 INSERT INTO mua_hang.tham_so_he_thong(ma,gia_tri,kieu,mo_ta,nhom)
 VALUES('HD_PHIEN_HET_HAN_PHUT','480','INTEGER','Thời hạn phiên đăng nhập, mặc định 8 giờ','BAO_MAT')

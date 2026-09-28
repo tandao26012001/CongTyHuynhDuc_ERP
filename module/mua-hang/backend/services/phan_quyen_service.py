@@ -56,11 +56,30 @@ def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguo
     return dict(row)
 
 
-def duyet_tai_khoan(ma: str, vai_tro: str, phien_ban: int, nguoi_duyet: str) -> None:
+def duyet_tai_khoan(ma: str, vai_tro: str, phien_ban: int, nguoi_duyet: str) -> dict:
     if not auth_repo.vai_tro_ton_tai(vai_tro):
         raise KhongTimThay("Vai trò không tồn tại.", "KHONG_TIM_THAY_VAI_TRO")
     if not auth_repo.cap_nhat_tai_khoan(ma, phien_ban, nguoi_duyet, vai_tro=vai_tro):
         _bao_loi_cap_nhat(ma)
+    return {"ma_tai_khoan": ma, "trang_thai": "HOAT_DONG"}
+
+
+def cap_nhat_thong_tin_tai_khoan(
+    ma: str, ma_bo_phan: str, vai_tro: str, phien_ban: int, nguoi_sua: str,
+) -> dict:
+    if not auth_repo.vai_tro_ton_tai(vai_tro):
+        raise KhongTimThay("Chức vụ không tồn tại.", "KHONG_TIM_THAY_VAI_TRO")
+    ket_qua = auth_repo.cap_nhat_thong_tin_tai_khoan(
+        ma, ma_bo_phan.strip(), vai_tro, phien_ban, nguoi_sua,
+    )
+    if ket_qua == "BO_PHAN_KHONG_HOP_LE":
+        raise KhongTimThay("Bộ phận không tồn tại hoặc đã ngừng hoạt động.", "KHONG_TIM_THAY_BO_PHAN")
+    if ket_qua == "KHONG_CO_HO_SO_NHAN_VIEN":
+        raise KhongTimThay("Không tìm thấy hồ sơ nhân viên để cập nhật bộ phận.", "KHONG_TIM_THAY_NHAN_VIEN")
+    if ket_qua != "OK":
+        _bao_loi_cap_nhat(ma)
+    return {"ma_tai_khoan": ma, "ma_bo_phan": ma_bo_phan.strip(), "vai_tro": vai_tro,
+            "trang_thai": "HOAT_DONG"}
 
 
 def khoa_tai_khoan(ma: str, phien_ban: int, nguoi_khoa: str, tai_khoan_hien_tai: str) -> None:

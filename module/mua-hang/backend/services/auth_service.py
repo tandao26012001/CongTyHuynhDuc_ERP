@@ -1,6 +1,5 @@
 """Xác thực và vòng đời phiên; không phụ thuộc HTTP."""
 
-import re
 import secrets
 import hashlib
 import hmac
@@ -9,19 +8,7 @@ import bcrypt
 
 from backend.config.settings import BCRYPT_ROUNDS, PBKDF2_LEGACY_ROUNDS
 from backend.data import auth_repo
-from backend.services.errors import ChuaDangNhap, LoiNghiepVu, ThieuDuLieu, XungDot
-
-RE_TAI_KHOAN = re.compile(r"^[A-Za-z0-9._-]{3,60}$")
-
-
-def _kiem_tra_dau_vao(ma_tai_khoan: str, mat_khau: str) -> tuple[str, str]:
-    ma = ma_tai_khoan.strip()
-    if not RE_TAI_KHOAN.fullmatch(ma):
-        raise ThieuDuLieu("Tên đăng nhập phải dài 3–60 ký tự và chỉ gồm chữ, số, . _ -")
-    if len(mat_khau) < 8:
-        raise ThieuDuLieu("Mật khẩu phải có ít nhất 8 ký tự")
-    return ma, mat_khau
-
+from backend.services.errors import ChuaDangNhap, KhongCoQuyen, LoiNghiepVu, ThieuDuLieu, XungDot
 
 def _bam(mat_khau: str) -> str:
     return bcrypt.hashpw(
@@ -43,20 +30,41 @@ def _kiem_mat_khau(mat_khau: str, gia_tri_bam: str) -> bool:
     return False
 
 
-def dang_ky(ma_tai_khoan: str, ma_nhan_vien: str, mat_khau: str) -> dict:
-    ma, mat_khau = _kiem_tra_dau_vao(ma_tai_khoan, mat_khau)
-    ma_nv = ma_nhan_vien.strip()
-    if not ma_nv or len(ma_nv) > 20:
-        raise ThieuDuLieu("Mã nhân viên không hợp lệ")
-    ma_kq, row = auth_repo.dang_ky(ma, ma_nv, _bam(mat_khau))
+def tim_nhan_vien_dang_ky(ho_va_ten: str) -> dict:
+    ten = " ".join(ho_va_ten.split())
+    if len(ten) < 3 or len(ten) > 120:
+        raise ThieuDuLieu("Họ và tên phải có từ 3 đến 120 ký tự.")
+    ma_kq, row = auth_repo.tim_nhan_vien_dang_ky(ten)
     if ma_kq == "KHONG_HO_TRO":
         raise LoiNghiepVu("Hệ thống hiện chưa mở đăng ký trực tuyến. Hãy liên hệ Quản trị.", ma_kq)
-    if ma_kq == "KHONG_CO_NHAN_VIEN":
-        raise LoiNghiepVu("Mã nhân viên không có trong danh sách. Hãy liên hệ Nhân sự.", ma_kq)
-    if ma_kq == "NHAN_VIEN_KHONG_HOAT_DONG":
-        raise LoiNghiepVu("Nhân viên không ở trạng thái hoạt động.", ma_kq)
+    if ma_kq == "KHONG_TIM_THAY":
+        raise LoiNghiepVu("Không tìm thấy nhân viên đang hoạt động có họ tên khớp chính xác.", ma_kq)
+    if ma_kq == "TRUNG_HO_TEN":
+        raise XungDot("Có nhiều nhân viên trùng họ tên. Hãy liên hệ Quản trị để đăng ký.", ma_kq)
+    if ma_kq == "THIEU_BO_PHAN":
+        raise LoiNghiepVu("Hồ sơ nhân viên chưa có mã bộ phận. Hãy liên hệ Nhân sự.", ma_kq)
+    if ma_kq == "DA_CO_TAI_KHOAN":
+        raise XungDot("Nhân viên này đã có tài khoản hoặc đang chờ duyệt.", "TAI_KHOAN_DA_TON_TAI")
+    return {"ma_nhan_vien": row["ma_nhan_vien"], "ho_va_ten": row["ho_va_ten"]}
+
+
+def dang_ky(ho_va_ten: str, mat_khau: str) -> dict:
+    ten = " ".join(ho_va_ten.split())
+    if len(ten) < 3 or len(ten) > 120:
+        raise ThieuDuLieu("Họ và tên phải có từ 3 đến 120 ký tự.")
+    if len(mat_khau) < 8 or len(mat_khau) > 128:
+        raise ThieuDuLieu("Mật khẩu phải có từ 8 đến 128 ký tự.")
+    ma_kq, row = auth_repo.dang_ky(ten, _bam(mat_khau))
+    if ma_kq == "KHONG_HO_TRO":
+        raise LoiNghiepVu("Hệ thống hiện chưa mở đăng ký trực tuyến. Hãy liên hệ Quản trị.", ma_kq)
+    if ma_kq == "KHONG_TIM_THAY":
+        raise LoiNghiepVu("Không tìm thấy nhân viên đang hoạt động có họ tên khớp chính xác.", ma_kq)
+    if ma_kq == "TRUNG_HO_TEN":
+        raise XungDot("Có nhiều nhân viên trùng họ tên. Hãy liên hệ Quản trị để đăng ký.", ma_kq)
+    if ma_kq == "THIEU_BO_PHAN":
+        raise LoiNghiepVu("Hồ sơ nhân viên chưa có mã bộ phận. Hãy liên hệ Nhân sự.", ma_kq)
     if ma_kq == "DA_TON_TAI":
-        raise XungDot("Tên đăng nhập hoặc mã nhân viên đã có tài khoản.", "TAI_KHOAN_DA_TON_TAI")
+        raise XungDot("Nhân viên này đã có tài khoản hoặc đang chờ duyệt.", "TAI_KHOAN_DA_TON_TAI")
     return dict(row)
 
 
@@ -70,6 +78,9 @@ def dang_nhap(ma_tai_khoan: str, mat_khau: str, ip=None, thiet_bi=None) -> dict:
         raise ChuaDangNhap("Tài khoản đang chờ Quản trị duyệt.", "TAI_KHOAN_CHO_DUYET")
     if row["trang_thai"] != "HOAT_DONG":
         raise ChuaDangNhap("Tài khoản đã bị khóa. Hãy liên hệ Quản trị.", "TAI_KHOAN_BI_KHOA")
+    quyen = auth_repo.lay_quyen(row["vai_tro"])
+    if str(row["vai_tro"] or "").strip().upper() != "ADMIN" and not any(q["duoc_xem"] for q in quyen):
+        raise KhongCoQuyen("Tài khoản chưa được cấp quyền truy cập phân hệ Mua hàng & Gia công ngoài.", "KHONG_CO_QUYEN_PHAN_HE")
     if row["mat_khau_hash"].startswith("pbkdf2_sha256$"):
         auth_repo.cap_nhat_hash_dang_nhap(row["ma_tai_khoan"], _bam(mat_khau))
     token = secrets.token_hex(32)

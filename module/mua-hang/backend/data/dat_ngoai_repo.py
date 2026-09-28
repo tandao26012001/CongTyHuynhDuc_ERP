@@ -188,6 +188,24 @@ def lay_dat_ngoai(conn, id_phieu: str, khoa: bool = False):
     return conn.execute(sql, (id_phieu,)).fetchone()
 
 
+def chon_nha_cung_cap(id_phieu: str, phien_ban: int, id_ncc: str, ma_ncc: str, ten_ncc: str, nguoi_sua: str):
+    with get_conn() as conn:
+        phieu = lay_dat_ngoai(conn, id_phieu, True)
+        if not phieu or phieu["trang_thai"] != "DANG_BAO_GIA" or phieu["phien_ban"] != phien_ban:
+            return None
+        row = conn.execute(
+            """UPDATE dat_ngoai SET id_ncc=%s,ten_ncc_chup=%s,ngay_sua=now(),nguoi_sua=%s,
+                      phien_ban=phien_ban+1 WHERE id=%s AND phien_ban=%s RETURNING *""",
+            (id_ncc, ten_ncc, nguoi_sua, id_phieu, phien_ban),
+        ).fetchone()
+        conn.execute(
+            """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
+               VALUES(%s,'DANG_BAO_GIA','DANG_BAO_GIA',%s,%s)""",
+            (id_phieu, f"Chọn nhà cung cấp gia công {ma_ncc} - {ten_ncc}", nguoi_sua),
+        )
+        return dict(row) if row else None
+
+
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):
     with get_conn() as conn:
         phieu = lay_dat_ngoai(conn, id_phieu, True)

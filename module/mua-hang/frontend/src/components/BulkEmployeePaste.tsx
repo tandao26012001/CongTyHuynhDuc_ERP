@@ -54,14 +54,57 @@ export function BulkEmployeePaste({ onClose, onImported }: {
     setBusy(true); setMessage(''); setErrors([]);
     try {
       const checked = await xemTruocNhapNhanVien(rows);
-      if (checked.co_loi) {
-        setErrors(checked.chi_tiet.filter((item) => item.loi.length).map((item) => ({ dong: item.dong, loi: item.loi })));
-        setMessage(`Còn ${checked.co_loi} dòng lỗi. Hãy sửa dữ liệu rồi xem trước lại.`);
+      const invalidRows = checked.chi_tiet
+        .filter((item) => !item.hop_le)
+        .map((item) => ({ row: rows[item.dong - 1], error: { dong: item.dong, loi: item.loi } }))
+        .filter((item) => item.row);
+      const validRows = checked.chi_tiet
+        .filter((item) => item.hop_le)
+        .map((item) => rows[item.dong - 1])
+        .filter((row): row is DuLieuNhanVien => Boolean(row));
+
+      if (!validRows.length) {
+        setRows(invalidRows.map((item) => item.row));
+        setErrors(invalidRows.map((item) => item.error));
+        setText(invalidRows.map(({ row }) => [row.ma_nhan_vien, row.ho_va_ten, row.ma_bo_phan || '', row.chuc_vu || '', row.ngay_vao_lam || '', row.trang_thai, row.ghi_chu || ''].join('\t')).join('\n'));
+        setMessage(`Còn ${invalidRows.length} dòng lỗi; không có dòng hợp lệ để nhập.`);
         return;
       }
-      const result = await xacNhanNhapNhanVien(rows, checked.ma_xac_nhan);
+
+      let rowsToInsert = validRows;
+      let validPreview = await xemTruocNhapNhanVien(rowsToInsert);
+      while (validPreview.co_loi) {
+        const newlyInvalid = validPreview.chi_tiet
+          .filter((item) => !item.hop_le)
+          .map((item) => ({ row: rowsToInsert[item.dong - 1], error: { dong: rows.indexOf(rowsToInsert[item.dong - 1]) + 1, loi: item.loi } }))
+          .filter((item) => item.row);
+        invalidRows.push(...newlyInvalid);
+        rowsToInsert = validPreview.chi_tiet
+          .filter((item) => item.hop_le)
+          .map((item) => rowsToInsert[item.dong - 1])
+          .filter((row): row is DuLieuNhanVien => Boolean(row));
+        if (!rowsToInsert.length) {
+          const retained = invalidRows.sort((a, b) => a.error.dong - b.error.dong);
+          setRows(retained.map((item) => item.row));
+          setErrors(retained.map((item) => item.error));
+          setText(retained.map(({ row }) => [row.ma_nhan_vien, row.ho_va_ten, row.ma_bo_phan || '', row.chuc_vu || '', row.ngay_vao_lam || '', row.trang_thai, row.ghi_chu || ''].join('\t')).join('\n'));
+          setMessage(`Còn ${retained.length} dòng lỗi; không có dòng hợp lệ để nhập.`);
+          return;
+        }
+        validPreview = await xemTruocNhapNhanVien(rowsToInsert);
+      }
+
+      const result = await xacNhanNhapNhanVien(rowsToInsert, validPreview.ma_xac_nhan);
       onImported(result.so_dong);
-      onClose();
+      if (invalidRows.length) {
+        setRows(invalidRows.map((item) => item.row));
+        setErrors(invalidRows.map((item) => item.error));
+        setText(invalidRows.map(({ row }) => [row.ma_nhan_vien, row.ho_va_ten, row.ma_bo_phan || '', row.chuc_vu || '', row.ngay_vao_lam || '', row.trang_thai, row.ghi_chu || ''].join('\t')).join('\n'));
+        setPage(1);
+        setMessage(`Đã thêm ${result.so_dong} nhân viên hợp lệ; giữ lại ${invalidRows.length} dòng lỗi để bạn sửa và nhập lại.`);
+      } else {
+        onClose();
+      }
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : 'Không nhập được danh sách nhân viên.');
     } finally { setBusy(false); }
