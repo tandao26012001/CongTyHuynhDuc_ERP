@@ -209,7 +209,13 @@ def chon_nha_cung_cap(id_phieu: str, phien_ban: int, id_ncc: str, ma_ncc: str, t
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):
     with get_conn() as conn:
         phieu = lay_dat_ngoai(conn, id_phieu, True)
-        if not phieu or phieu["phien_ban"] != phien_ban:
+        if not phieu or phieu["phien_ban"] != phien_ban or phieu["trang_thai"] != "DANG_BAO_GIA" or not phieu.get("id_ncc"):
+            return None
+        ids = [dong["id"] for dong in du_lieu["dong"]]
+        expected = {dong["id"] for dong in conn.execute(
+            "SELECT id FROM dat_ngoai_dong WHERE id_dat_ngoai=%s", (id_phieu,),
+        ).fetchall()}
+        if not expected or len(ids) != len(set(ids)) or set(ids) != expected:
             return None
         for dong in du_lieu["dong"]:
             conn.execute(
@@ -223,7 +229,7 @@ def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, nguoi_sua: st
             """UPDATE dat_ngoai SET ten_ncc_chup=%s,ky_han=%s,ghi_chu=%s,
                       trang_thai='CHO_DUYET',ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
                WHERE id=%s RETURNING *""",
-            (du_lieu["ten_ncc"], du_lieu.get("ky_han"), du_lieu.get("ghi_chu"), nguoi_sua, id_phieu),
+            (phieu["ten_ncc_chup"], du_lieu.get("ky_han"), du_lieu.get("ghi_chu"), nguoi_sua, id_phieu),
         ).fetchone()
         conn.execute(
             """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)

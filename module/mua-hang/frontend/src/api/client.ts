@@ -789,3 +789,30 @@ export async function suaNhaCungCap(id: string, duLieu: Partial<DuLieuNhaCungCap
     { method: 'PATCH', body: JSON.stringify({ ...duLieu, phien_ban: phienBan }) },
   );
 }
+
+export async function luuBaoGiaDatNgoai(phieu: PhieuDatNgoai, input: {
+  ky_han: string | null; ghi_chu: string | null;
+  dong: Array<{ id: string; don_gia: number; ghi_chu: string | null }>;
+}) {
+  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/bao-gia`, {
+    method: 'PATCH', body: JSON.stringify({ ...input, phien_ban: phieu.phien_ban, ten_ncc: phieu.ten_ncc_chup }),
+  });
+}
+
+
+export async function nhapNhaCungCapHangLoat(
+  payload: string,
+  pending: { current: { payload: string; headers: Record<string, string> } | null },
+) {
+  // Giữ khóa khi lỗi mạng để lần thử lại nhận đúng kết quả đã lưu.
+  if (!pending.current || pending.current.payload !== payload) {
+    pending.current = { payload, headers: idempotencyHeaders() };
+  }
+  const result = await api<{ so_dong: number; results: Array<{
+    dong: number; da_luu: boolean; can_xac_nhan?: boolean; canh_bao_trung?: unknown[]; loi?: string;
+  }> }>('/api/v1/nha-cung-cap/nhap-hang-loat', {
+    method: 'POST', headers: pending.current.headers, body: payload,
+  }, 120000);
+  pending.current = null;
+  return result;
+}

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.envelope import thanh_cong
 from backend.api.middleware import lay_ho_so
-from backend.services import catalog_service, phan_quyen_service
+from backend.services import catalog_service, phan_quyen_service, ncc_import_service
 from backend.services.errors import KhongCoQuyen
 
 router = APIRouter()
@@ -447,6 +447,20 @@ def tao_ncc(
     return thanh_cong(catalog_service.tao_nha_cung_cap(
         _du_lieu(body, {"xac_nhan_trung"}), ho_so["ma_nhan_vien"],
         ho_so["ma_tai_khoan"], str(khoa), body.xac_nhan_trung,
+    ))
+
+
+class NhapNccBody(BaseModel):
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=500)
+    xac_nhan_trung: bool = False
+
+
+@router.post("/nha-cung-cap/nhap-hang-loat", summary="Nhập NCC theo lô, trả lỗi từng dòng", response_model=PhanHoi)
+def nhap_ncc(body: NhapNccBody, request: Request, khoa: UUID = Header(alias="X-Idempotency-Key")):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "sua")
+    return thanh_cong(ncc_import_service.nhap(
+        body.rows, ho_so["ma_nhan_vien"], ho_so["ma_tai_khoan"], str(khoa), body.xac_nhan_trung,
     ))
 
 

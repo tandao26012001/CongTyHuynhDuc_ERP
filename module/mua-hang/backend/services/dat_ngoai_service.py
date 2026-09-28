@@ -225,7 +225,7 @@ def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, ho_so: dict) 
         raise ThieuDuLieu("Phải nhập đơn giá hợp lệ cho tất cả mã hàng.")
     row = dat_ngoai_repo.cap_nhat_bao_gia(id_phieu, phien_ban, du_lieu, ho_so["ma_nhan_vien"])
     if not row:
-        raise XungDot("Phiếu vừa được cập nhật hoặc không còn tồn tại. Hãy tải lại.")
+        raise XungDot("Không thể lưu báo giá. Hãy tải lại phiếu, kiểm tra trạng thái Đang báo giá, nhà cung cấp và đầy đủ dòng hàng.")
     return row
 
 

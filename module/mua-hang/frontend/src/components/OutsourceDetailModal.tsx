@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { OutsourceQuotePanel } from './OutsourceQuotePanel';
 import { chonNhaCungCapDatNgoai, chuyenTrangThaiDatNgoai, LsxDatNgoai, NhaCungCapDanhMuc, PhieuDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -170,13 +171,15 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
 
         {canChooseSupplier && request?.trang_thai === 'DANG_BAO_GIA' && <section className="p-4 border border-[#DCE1EC] rounded bg-white">
           <h3 className="font-bold text-[14px]">CHỌN NHÀ CUNG CẤP GIA CÔNG</h3>
-          <p className="mt-1 text-[12px] text-[#59627A]">Kinh doanh chọn NCC hoạt động; lựa chọn được lưu vào lịch sử phiếu. Form báo giá và so sánh NCC sẽ thực hiện ở bước sau.</p>
+          <p className="mt-1 text-[12px] text-[#59627A]">Chọn và lưu NCC gia công, sau đó nhập báo giá ngay bên dưới.</p>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="min-w-64 flex-1 text-[12px] font-bold">NHÀ CUNG CẤP *<select value={selectedSupplier} onChange={(event) => setSelectedSupplier(event.target.value)} className="mt-1 w-full min-h-11 px-3 border rounded bg-white font-normal"><option value="">-- Chọn NCC gia công --</option>{suppliers.map((item) => <option key={item.ma} value={item.ma}>{item.ma_ncc} · {item.ten}{item.da_phe_duyet ? '' : ' · Chưa phê duyệt'}</option>)}</select></label>
             <button type="button" disabled={!selectedSupplier || confirming || selectedSupplier === request.id_ncc} onClick={() => void saveSupplier()} className="min-h-11 px-5 rounded bg-[#283A97] text-white font-bold disabled:opacity-50">{confirming ? 'ĐANG LƯU…' : 'LƯU NHÀ CUNG CẤP'}</button>
           </div>
           {suppliers.length === 0 && <p className="mt-2 text-[12px] text-[#C4141F]">Không tải được NCC gia công đang hoạt động. Kiểm tra danh mục NCC.</p>}
         </section>}
+
+        {request && <OutsourceQuotePanel key={`${request.id}-${request.phien_ban}`} request={request} canEdit={canChooseSupplier} onChanged={onRequestChanged} onNotify={onNotify} />}
 
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

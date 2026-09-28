@@ -33,4 +33,5 @@ BEGIN;
 \ir migrations/043_chuan_hoa_cot_bang_legacy.sql
 \ir migrations/044_sua_trigger_tai_khoan_legacy.sql
 \ir migrations/045_loai_bo_cot_legacy_tai_khoan.sql
+\ir migrations/046_bo_sung_fax_nha_cung_cap.sql
 COMMIT;

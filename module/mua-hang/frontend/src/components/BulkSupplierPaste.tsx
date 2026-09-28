@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { DuLieuNhaCungCap, taoNhaCungCap } from '../api/client';
+import { useRef, useState } from 'react';
+import { DuLieuNhaCungCap, nhapNhaCungCapHangLoat } from '../api/client';
 import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox, useRowSelection } from './RowSelection';
 
 interface ImportRow {
@@ -28,6 +28,7 @@ export function BulkSupplierPaste({ onClose, onImported }: {
   const [text, setText] = useState('');
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const pendingBatch = useRef<{ payload: string; headers: Record<string, string> } | null>(null);
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState('');
   const selection = useRowSelection(rows.map((row) => row.id));
@@ -73,6 +74,7 @@ export function BulkSupplierPaste({ onClose, onImported }: {
   }
 
   async function importRows(confirmWarnings = false) {
+    if (saving) return;
     const targets = rows.filter((row) => confirmWarnings ? row.canXacNhan : !row.loi && !row.canXacNhan);
     if (!targets.length) {
       setMessage(confirmWarnings ? 'Không còn dòng cảnh báo cần xác nhận.' : 'Không có dòng hợp lệ để nhập.');
@@ -84,24 +86,23 @@ export function BulkSupplierPaste({ onClose, onImported }: {
     let imported = 0;
     const updated = [...rows];
     try {
-      for (const [indexTarget, target] of targets.entries()) {
-        setProgress(`Đang xử lý dòng ${target.dong} (${indexTarget + 1}/${targets.length})…`);
+      const payload = JSON.stringify({ rows: targets.map((row) => row.duLieu), xac_nhan_trung: confirmWarnings });
+      setProgress(`Đang nhập khối ${targets.length} nhà cung cấp…`);
+      const batch = await nhapNhaCungCapHangLoat(payload, pendingBatch);
+      for (const result of batch.results) {
+        const target = targets[result.dong - 1];
         const index = updated.findIndex((row) => row.id === target.id);
-        try {
-          const result = await taoNhaCungCap({ ...target.duLieu, xac_nhan_trung: confirmWarnings });
-          if (result.can_xac_nhan) {
-            updated[index] = { ...target, canXacNhan: true, loi: `Gần trùng: ${JSON.stringify(result.canh_bao_trung || [])}` };
-          } else if (result.da_luu) {
-            updated.splice(index, 1);
-            imported += 1;
-          } else {
-            updated[index] = { ...target, loi: 'Hệ thống chưa xác nhận đã lưu dòng này.' };
-          }
-        } catch (reason) {
-          updated[index] = { ...target, loi: reason instanceof Error ? reason.message : 'Không lưu được dòng này.' };
+        if (result.da_luu) {
+          updated.splice(index, 1);
+          imported += 1;
+        } else {
+          updated[index] = { ...target, canXacNhan: !!result.can_xac_nhan,
+            loi: result.can_xac_nhan
+              ? `Gần trùng: ${JSON.stringify(result.canh_bao_trung || [])}`
+              : result.loi || 'Hệ thống chưa xác nhận đã lưu dòng này.' };
         }
-        setRows([...updated]);
       }
+      setRows(updated);
       const remaining = updated.filter((row) => row.loi || row.canXacNhan).length;
       setMessage(`Đã thêm ${imported} nhà cung cấp hợp lệ; giữ lại ${remaining} dòng cần xử lý.`);
       setProgress('');
@@ -135,13 +136,13 @@ export function BulkSupplierPaste({ onClose, onImported }: {
         <div className="p-3 bg-[#EEF0F9] border border-[#C6CCE9] text-[12px]"><strong>Thứ tự cột:</strong> {COT}<p className="mt-1 text-[#59627A]">Sao chép các cột từ Excel, không cần cột tiêu đề. Loại NCC mặc định là MUA_HANG.</p></div>
         {progress && <div role="status" aria-live="polite" className="p-3 bg-[#EEF0F9] border border-[#C6CCE9] rounded text-[#283A97] text-[13px] font-bold">{progress}</div>}
         {message && <div role="status" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{message}</div>}
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={5} className="w-full p-3 border border-[#DCE1EC] rounded font-mono text-[12px]" placeholder={'Công ty mẫu\t0101234567\tĐịa chỉ\tNguyễn Văn A\t0900000000\ta@example.com\tCA_HAI\tGhi chú'} />
+        <textarea disabled={saving} value={text} onChange={(event) => setText(event.target.value)} rows={5} className="w-full p-3 border border-[#DCE1EC] rounded font-mono text-[12px]" placeholder={'Công ty mẫu\t0101234567\tĐịa chỉ\tNguyễn Văn A\t0900000000\ta@example.com\tCA_HAI\tGhi chú'} />
         <button type="button" disabled={saving} onClick={preview} className="min-h-11 px-5 bg-[#283A97] text-white font-bold rounded disabled:opacity-50">XEM TRƯỚC</button>
         {rows.length > 0 && <>
           <RowSelectionActions total={rows.length} selectedCount={selection.selectedCount} allSelected={selection.allSelected} onToggleAll={selection.toggleAll} onDeleteSelected={() => remove(selection.selected)} onDeleteAll={() => remove(new Set(rows.map((row) => row.id)))} disabled={saving} />
           <div className="overflow-x-auto border border-[#DCE1EC] rounded"><table className="w-full min-w-[1200px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-2"><SelectionCheckbox checked={selection.allSelected} onChange={selection.toggleAll} label="Chọn tất cả dòng NCC" /></th><th className="p-2">DÒNG / LỖI</th>{COT.split(' | ').map((col) => <th key={col} className="p-2 text-left">{col}</th>)}<th /></tr></thead><tbody>{rows.map((row) => {
             const values = [row.duLieu.ten, row.duLieu.mst, row.duLieu.dia_chi, row.duLieu.nguoi_lien_he, row.duLieu.sdt, row.duLieu.email, row.duLieu.la_ncc_mua_hang && row.duLieu.la_ncc_gia_cong ? 'CA_HAI' : row.duLieu.la_ncc_gia_cong ? 'GIA_CONG' : 'MUA_HANG', row.duLieu.ghi_chu];
-            return <tr key={row.id} className="border-t align-top"><td className="p-2"><SelectionCheckbox checked={selection.selected.has(row.id)} onChange={() => selection.toggle(row.id)} label={`Chọn dòng ${row.dong}`} /></td><td className="p-2"><strong>{row.dong}</strong>{row.loi && <span className="block max-w-48 text-[#C4141F]">{row.loi}</span>}</td>{values.map((value, column) => <td key={column} className="p-1"><input value={String(value || '')} onChange={(event) => updateRow(row.id, column, event.target.value)} className="w-full min-w-24 h-10 px-2 border rounded" /></td>)}<td className="p-1"><button type="button" disabled={saving} onClick={() => remove(new Set([row.id]))} aria-label={`Xóa dòng ${row.dong}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td></tr>;
+            return <tr key={row.id} className="border-t align-top"><td className="p-2"><SelectionCheckbox checked={selection.selected.has(row.id)} onChange={() => selection.toggle(row.id)} label={`Chọn dòng ${row.dong}`} /></td><td className="p-2"><strong>{row.dong}</strong>{row.loi && <span className="block max-w-48 text-[#C4141F]">{row.loi}</span>}</td>{values.map((value, column) => <td key={column} className="p-1"><input disabled={saving} value={String(value || '')} onChange={(event) => updateRow(row.id, column, event.target.value)} className="w-full min-w-24 h-10 px-2 border rounded" /></td>)}<td className="p-1"><button type="button" disabled={saving} onClick={() => remove(new Set([row.id]))} aria-label={`Xóa dòng ${row.dong}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button></td></tr>;
           })}</tbody></table></div>
         </>}
       </div>

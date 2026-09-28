@@ -884,57 +884,61 @@ def tim_trung_nha_cung_cap(
     ma_ncc: str | None, ten_khong_dau: str, mst: str | None, bo_qua_id: str | None = None
 ):
     with get_conn() as conn:
-        co_cot_id_chuan = conn.execute(
-            """SELECT EXISTS(
-                 SELECT 1 FROM pg_attribute
-                 WHERE attrelid=to_regclass('nha_cung_cap')
-                   AND attname='id' AND attnum > 0 AND NOT attisdropped
-               ) AS co"""
-        ).fetchone()["co"]
-        nguong = nguong_trung_ten_conn(conn)
-        if not co_cot_id_chuan:
-            # Một số CSDL cũ dùng cột viết HOA; không truy vấn các cột schema
-            # mới (id/mst/ten_khong_dau) cho tới khi được chuẩn hóa bằng migration.
-            return conn.execute(
-                '''SELECT "ID" AS id,"MA_NCC" AS ma_ncc,"TEN" AS ten,
-                          NULL::text AS mst,
-                          CASE WHEN %s::text IS NOT NULL AND upper("MA_NCC")=upper(%s)
-                               THEN 'MA_CHINH_XAC'
-                               WHEN lower("TEN")=lower(%s) THEN 'TEN_CHINH_XAC'
-                               ELSE 'TEN_GAN_GIONG' END AS loai_trung,
-                          extensions.similarity(lower("TEN"),lower(%s)) AS diem
-                   FROM nha_cung_cap
-                   WHERE (%s::text IS NULL OR "ID"::text<>%s) AND (
-                     (%s::text IS NOT NULL AND upper("MA_NCC")=upper(%s))
-                     OR lower("TEN")=lower(%s)
-                     OR extensions.similarity(lower("TEN"),lower(%s)) >= %s
-                   )
-                   ORDER BY diem DESC,"TEN","ID" LIMIT 10''',
-                (ma_ncc, ma_ncc, ten_khong_dau, ten_khong_dau,
-                 bo_qua_id, bo_qua_id, ma_ncc, ma_ncc, ten_khong_dau,
-                 ten_khong_dau, nguong),
-            ).fetchall()
+        return tim_trung_ncc_conn(conn, ma_ncc, ten_khong_dau, mst, bo_qua_id)
+
+
+def tim_trung_ncc_conn(conn, ma_ncc, ten_khong_dau, mst, bo_qua_id=None):
+    co_cot_id_chuan = conn.execute(
+        """SELECT EXISTS(
+             SELECT 1 FROM pg_attribute
+             WHERE attrelid=to_regclass('nha_cung_cap')
+               AND attname='id' AND attnum > 0 AND NOT attisdropped
+           ) AS co"""
+    ).fetchone()["co"]
+    nguong = nguong_trung_ten_conn(conn)
+    if not co_cot_id_chuan:
+        # Một số CSDL cũ dùng cột viết HOA; không truy vấn các cột schema
+        # mới (id/mst/ten_khong_dau) cho tới khi được chuẩn hóa bằng migration.
         return conn.execute(
-            """SELECT id,ma_ncc,ten,mst,
-                      CASE WHEN ma_ncc IS NOT NULL AND upper(ma_ncc)=upper(%s)
+            '''SELECT "ID" AS id,"MA_NCC" AS ma_ncc,"TEN" AS ten,
+                      NULL::text AS mst,
+                      CASE WHEN %s::text IS NOT NULL AND upper("MA_NCC")=upper(%s)
                            THEN 'MA_CHINH_XAC'
-                           WHEN %s::text IS NOT NULL AND mst=%s THEN 'MST_CHINH_XAC'
-                           WHEN ten_khong_dau=%s THEN 'TEN_CHINH_XAC'
-                           ELSE 'TEN_GAN_GIONG' END loai_trung,
-                      CASE WHEN ten_khong_dau=%s THEN 1.0
-                           ELSE extensions.similarity(ten_khong_dau,%s) END diem
+                           WHEN lower("TEN")=lower(%s) THEN 'TEN_CHINH_XAC'
+                           ELSE 'TEN_GAN_GIONG' END AS loai_trung,
+                      extensions.similarity(lower("TEN"),lower(%s)) AS diem
                FROM nha_cung_cap
-               WHERE (%s::text IS NULL OR id<>%s) AND (
-                 (%s::text IS NOT NULL AND upper(ma_ncc)=upper(%s))
-                 OR (%s::text IS NOT NULL AND mst=%s)
-                 OR ten_khong_dau=%s
-                 OR extensions.similarity(ten_khong_dau,%s)>=%s
+               WHERE (%s::text IS NULL OR "ID"::text<>%s) AND (
+                 (%s::text IS NOT NULL AND upper("MA_NCC")=upper(%s))
+                 OR lower("TEN")=lower(%s)
+                 OR extensions.similarity(lower("TEN"),lower(%s)) >= %s
                )
-               ORDER BY diem DESC,id LIMIT 10""",
-            (ma_ncc, mst, mst, ten_khong_dau, ten_khong_dau, ten_khong_dau,
-             bo_qua_id, bo_qua_id, ma_ncc, ma_ncc, mst, mst, ten_khong_dau,
+               ORDER BY diem DESC,"TEN","ID" LIMIT 10''',
+            (ma_ncc, ma_ncc, ten_khong_dau, ten_khong_dau,
+             bo_qua_id, bo_qua_id, ma_ncc, ma_ncc, ten_khong_dau,
              ten_khong_dau, nguong),
         ).fetchall()
+    return conn.execute(
+        """SELECT id,ma_ncc,ten,mst,
+                  CASE WHEN ma_ncc IS NOT NULL AND upper(ma_ncc)=upper(%s)
+                       THEN 'MA_CHINH_XAC'
+                       WHEN %s::text IS NOT NULL AND mst=%s THEN 'MST_CHINH_XAC'
+                       WHEN ten_khong_dau=%s THEN 'TEN_CHINH_XAC'
+                       ELSE 'TEN_GAN_GIONG' END loai_trung,
+                  CASE WHEN ten_khong_dau=%s THEN 1.0
+                       ELSE extensions.similarity(ten_khong_dau,%s) END diem
+           FROM nha_cung_cap
+           WHERE (%s::text IS NULL OR id<>%s) AND (
+             (%s::text IS NOT NULL AND upper(ma_ncc)=upper(%s))
+             OR (%s::text IS NOT NULL AND mst=%s)
+             OR ten_khong_dau=%s
+             OR extensions.similarity(ten_khong_dau,%s)>=%s
+           )
+           ORDER BY diem DESC,id LIMIT 10""",
+        (ma_ncc, mst, mst, ten_khong_dau, ten_khong_dau, ten_khong_dau,
+         bo_qua_id, bo_qua_id, ma_ncc, ma_ncc, mst, mst, ten_khong_dau,
+         ten_khong_dau, nguong),
+    ).fetchall()
 
 
 def nguong_trung_ten_conn(conn) -> float:

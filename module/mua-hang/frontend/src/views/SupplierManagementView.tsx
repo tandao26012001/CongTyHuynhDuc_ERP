@@ -3,6 +3,7 @@ import {
   DuLieuNhaCungCap, layDanhSachNhaCungCap, NhaCungCapQuanLy, suaNhaCungCap, taoNhaCungCap,
 } from '../api/client';
 import { BulkSupplierPaste } from '../components/BulkSupplierPaste';
+import { RowSelectionActions } from '../components/RowSelection';
 
 type FormNcc = DuLieuNhaCungCap & { ngay_phe_duyet?: string };
 const FORM_MOI: FormNcc = {
@@ -33,7 +34,8 @@ export function SupplierManagementView({ onNotify, canEdit }: { onNotify: (messa
   const [form, setForm] = useState<FormNcc>(FORM_MOI);
   const [editing, setEditing] = useState<NhaCungCapQuanLy | null>(null);
   const [xacNhanTrung, setXacNhanTrung] = useState(false);
-  const pageSize = 25;
+  const [pageSize, setPageSize] = useState(25);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function loadSuppliers() {
     setLoading(true);
@@ -48,7 +50,7 @@ export function SupplierManagementView({ onNotify, canEdit }: { onNotify: (messa
       setLoading(false);
     }
   }
-  useEffect(() => { void loadSuppliers(); }, [page]);
+  useEffect(() => { void loadSuppliers(); }, [page, pageSize]);
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase('vi');
@@ -60,7 +62,7 @@ export function SupplierManagementView({ onNotify, canEdit }: { onNotify: (messa
     });
   }, [items, query, statusFilter, typeFilter]);
 
-  useEffect(() => { setSelected([]); }, [page, query, statusFilter, typeFilter]);
+  useEffect(() => { setSelected([]); }, [page, pageSize, query, statusFilter, typeFilter]);
 
   async function layTatCaTheoBoLoc() {
     const first = await layDanhSachNhaCungCap(1, 100);
@@ -182,11 +184,34 @@ export function SupplierManagementView({ onNotify, canEdit }: { onNotify: (messa
         <label className="block text-[12px] font-bold">LOẠI NCC<select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }} className="mt-1 w-full h-11 px-3 border rounded bg-white font-normal"><option value="">Tất cả</option><option value="MUA_HANG">Mua hàng</option><option value="GIA_CONG">Gia công</option></select></label>
         <button type="button" onClick={() => void downloadCsv()} disabled={loading || !total} className="min-h-11 px-4 border border-[#283A97] text-[#283A97] rounded font-bold disabled:opacity-40">TẢI XUỐNG CSV</button>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#59627A]"><span>Tổng {total} nhà cung cấp · {visibleItems.length} dòng trên trang · Trang {page}/{Math.max(1, Math.ceil(total / pageSize))}</span><div className="flex gap-2">{canEdit && <><button type="button" disabled={!selected.length || bulkBusy} onClick={() => void archiveSuppliers(visibleItems.filter((item) => selected.includes(item.ma)))} className="min-h-10 px-3 border border-[#EE202E] text-[#C4141F] rounded font-bold disabled:opacity-40">{bulkBusy ? 'ĐANG XỬ LÝ…' : `XÓA ĐÃ CHỌN (${selected.length})`}</button><button type="button" disabled={!total || bulkBusy} onClick={() => void archiveAllFiltered()} className="min-h-10 px-3 border border-[#EE202E] text-[#C4141F] rounded font-bold disabled:opacity-40">XÓA TẤT CẢ THEO BỘ LỌC</button></>}</div></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-[12px]">
+        <span className="text-[#59627A]">Hiển thị <strong>{total ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, total)}</strong> / {total} nhà cung cấp</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2">Số dòng/trang
+            <select value={pageSize} disabled={loading} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-10 px-2 border border-[#DCE1EC] rounded bg-white">
+              <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => setPage(1)} disabled={page <= 1 || loading} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang đầu"><span className="material-symbols-outlined">first_page</span></button>
+          <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1 || loading} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang trước"><span className="material-symbols-outlined">chevron_left</span></button>
+          <strong className="min-w-24 text-center">Trang {page}/{totalPages}</strong>
+          <button type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages || loading} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang sau"><span className="material-symbols-outlined">chevron_right</span></button>
+          <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading} className="min-w-10 h-10 border rounded disabled:opacity-40" aria-label="Trang cuối"><span className="material-symbols-outlined">last_page</span></button>
+        </div>
+      </div>
+      {canEdit && <RowSelectionActions
+        total={visibleItems.length}
+        selectedCount={selected.length}
+        allSelected={visibleItems.length > 0 && visibleItems.every((item) => selected.includes(item.ma))}
+        onToggleAll={() => setSelected(visibleItems.every((item) => selected.includes(item.ma)) ? [] : visibleItems.map((item) => item.ma))}
+        onDeleteSelected={() => void archiveSuppliers(visibleItems.filter((item) => selected.includes(item.ma)))}
+        onDeleteAll={() => void archiveAllFiltered()}
+        disabled={loading || bulkBusy}
+      />}
       <div className="overflow-x-auto border rounded"><table className="w-full min-w-[1050px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-3"><input aria-label="Chọn tất cả dòng trên trang" type="checkbox" checked={visibleItems.length > 0 && visibleItems.every((item) => selected.includes(item.ma))} onChange={(event) => setSelected(event.target.checked ? visibleItems.map((item) => item.ma) : [])} /></th>{['MÃ NCC', 'TÊN NHÀ CUNG CẤP', 'MST', 'LOẠI NCC', 'TRẠNG THÁI', 'THAO TÁC'].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead><tbody>
         {loading ? <tr><td colSpan={7} className="p-8 text-center">Đang tải danh sách…</td></tr> : visibleItems.length === 0 ? <tr><td colSpan={7} className="p-8 text-center text-[#59627A]">Không có nhà cung cấp phù hợp. Thử đổi bộ lọc hoặc thêm nhà cung cấp mới.</td></tr> : visibleItems.map((item) => <tr key={item.ma} className="border-t"><td className="p-3"><input aria-label={`Chọn ${item.ma}`} type="checkbox" checked={selected.includes(item.ma)} onChange={() => toggleSelected(item.ma)} /></td><td className="p-3"><strong className="font-mono">{item.ma}</strong>{item.ma_ncc !== item.ma && <span className="block mt-1 text-[#59627A]">Mã cũ: <span className="font-mono">{item.ma_ncc}</span></span>}</td><td className="p-3"><strong>{item.ten}</strong>{item.nguoi_lien_he && <span className="block mt-1 text-[#59627A]">{item.nguoi_lien_he} · {item.sdt || 'Chưa có SĐT'}</span>}</td><td className="p-3 font-mono">{item.mst || '—'}</td><td className="p-3">{[item.la_ncc_mua_hang && 'Mua hàng', item.la_ncc_gia_cong && 'Gia công'].filter(Boolean).join(' · ')}</td><td className="p-3"><span className="pill p-info px-2 py-1">{statusName(item.trang_thai)}{item.da_phe_duyet ? ' · Đã duyệt' : ' · Chưa duyệt'}</span></td><td className="p-3"><div className="flex gap-2">{canEdit && <><button type="button" onClick={() => openEdit(item)} className="min-h-10 px-3 border border-[#283A97] text-[#283A97] rounded font-bold">CHỈNH SỬA</button>{item.trang_thai !== 'LOAI_BO' && <button type="button" disabled={bulkBusy} onClick={() => void archiveSuppliers([item])} className="min-h-10 px-3 border border-[#EE202E] text-[#C4141F] rounded font-bold">XÓA</button>}</>}</div></td></tr>)}
       </tbody></table></div>
-      <div className="flex justify-end gap-2"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)} className="min-h-10 px-4 border rounded disabled:opacity-40">TRƯỚC</button><button type="button" disabled={page >= Math.max(1, Math.ceil(total / pageSize)) || loading} onClick={() => setPage((value) => value + 1)} className="min-h-10 px-4 border rounded disabled:opacity-40">SAU</button></div>
+
     </section>
     {showBulkForm && <BulkSupplierPaste onClose={() => setShowBulkForm(false)} onImported={(count, hasErrors) => { if (count) { onNotify(`Đã thêm ${count} nhà cung cấp hợp lệ.`); void loadSuppliers(); } if (!hasErrors) setShowBulkForm(false); }} />}
     {showForm && <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-3"><form onSubmit={(event) => void save(event)} className="bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded shadow-xl">
