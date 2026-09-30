@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { OutsourceQuotePanel } from './OutsourceQuotePanel';
-import { chonNhaCungCapDatNgoai, chuyenTrangThaiDatNgoai, LsxDatNgoai, NhaCungCapDanhMuc, PhieuDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
+import { capNhatYeuCauDongDatNgoai, chonNhaCungCapDatNgoai, chuyenTrangThaiDatNgoai, doiMaDatNgoai, ganSuCoDatNgoai, ghiDotGiaoDatNgoai, ghiXacNhanKyThuatDong, guiDuyetDatNgoai, LsxDatNgoai, NhaCungCapDanhMuc, PhieuDatNgoai, taiNoiDungTepDatNgoai, taiTepDatNgoai, themTraoDoiDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
 
 const STATUS_LABELS: Record<string, string> = {
+  NHAP: 'Nháp',
   CHO_XAC_NHAN_KY_THUAT: 'Chờ xác nhận kỹ thuật',
   DANG_BAO_GIA: 'Đang xử lý / Báo giá',
   CHO_DUYET: 'Chờ duyệt',
@@ -43,13 +44,14 @@ interface Props {
   onClose: () => void;
   canConfirmTechnical?: boolean;
   canCancel?: boolean;
+  canApprove?: boolean;
   canChooseSupplier?: boolean;
   suppliers?: NhaCungCapDanhMuc[];
   onRequestChanged?: () => Promise<void>;
   onNotify?: (message: string) => void;
 }
 
-export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnical = false, canCancel = false, canChooseSupplier = false, suppliers = [], onRequestChanged, onNotify }: Props) {
+export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnical = false, canCancel = false, canApprove = false, canChooseSupplier = false, suppliers = [], onRequestChanged, onNotify }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [confirming, setConfirming] = useState(false);
@@ -57,6 +59,12 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(request?.id_ncc || '');
+  const [drafts, setDrafts] = useState<Record<string, { giaCong: string; kyThuat: string; chatLuong: string }>>({});
+  const [technical, setTechnical] = useState({ id: '', noiDung: '', ketQua: 'DA_XAC_NHAN', ghiChu: '' });
+  const [delivery, setDelivery] = useState({ id: '', lan: '1', duKien: '', soLuong: '', thucTe: '', soLuongThucTe: '', ghiChu: '' });
+  const [incident, setIncident] = useState({ id: '', suCoId: '' });
+  const [replacement, setReplacement] = useState({ id: '', ma: '', lyDo: '' });
+  const [message, setMessage] = useState('');
   const requestLines = useMemo(
     () => new Map((request?.dong || []).map((line) => [line.ma_vach, line])),
     [request],
@@ -100,6 +108,30 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
     } finally {
       setConfirming(false);
     }
+  }
+
+  async function submitForApproval() {
+    if (!request || confirming) return;
+    setConfirming(true); setActionError('');
+    try { await guiDuyetDatNgoai(request); await onRequestChanged?.(); onNotify?.(`Đã gửi duyệt phiếu ${request.id}.`); }
+    catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Không gửi duyệt được phiếu.'); }
+    finally { setConfirming(false); }
+  }
+
+  async function approveRequest() {
+    if (!request || confirming) return;
+    setConfirming(true); setActionError('');
+    try { await chuyenTrangThaiDatNgoai(request, 'DA_DUYET'); await onRequestChanged?.(); onNotify?.(`Đã duyệt phiếu ${request.id}.`); }
+    catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Không duyệt được phiếu.'); }
+    finally { setConfirming(false); }
+  }
+
+  async function startQuote() {
+    if (!request || confirming) return;
+    setConfirming(true); setActionError('');
+    try { await chuyenTrangThaiDatNgoai(request, 'DANG_BAO_GIA'); await onRequestChanged?.(); }
+    catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Không chuyển bước được.'); }
+    finally { setConfirming(false); }
   }
 
   async function saveSupplier() {
@@ -179,6 +211,8 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
           {suppliers.length === 0 && <p className="mt-2 text-[12px] text-[#C4141F]">Không tải được NCC gia công đang hoạt động. Kiểm tra danh mục NCC.</p>}
         </section>}
 
+        {request?.trang_thai === 'NHAP' && <section className="p-4 border rounded bg-[#FFF7E6] border-[#F2CD82]"><h3 className="font-bold">YÊU CẦU THEO TỪNG MÃ HÀNG</h3><p className="text-[12px] mt-1">Ba trường dưới đây bắt buộc trước khi gửi duyệt.</p><div className="mt-3 space-y-3">{request.dong.map((line) => { const draft=drafts[line.id] || {giaCong:line.noi_dung_gia_cong||'',kyThuat:line.yeu_cau_ky_thuat||'',chatLuong:line.yeu_cau_chat_luong||''}; return <div key={line.id} className="grid md:grid-cols-3 gap-2 p-3 border bg-white rounded"><strong className="md:col-span-3 font-mono">{line.ma_hang} · {line.ten_hang}</strong>{([['giaCong','Nội dung gia công'],['kyThuat','Yêu cầu kỹ thuật'],['chatLuong','Yêu cầu chất lượng']] as const).map(([key,label])=><label key={key} className="text-[11px] font-bold">{label} *<textarea required value={draft[key]} onChange={(e)=>setDrafts((cur)=>({...cur,[line.id]:{...draft,...{[key]:e.target.value}}}))} className="mt-1 w-full p-2 border rounded font-normal" rows={2}/></label>)}<button type="button" className="md:col-span-3 justify-self-end px-3 min-h-9 bg-[#283A97] text-white rounded font-bold" onClick={async()=>{try{await capNhatYeuCauDongDatNgoai(request.id,line.id,{noi_dung_gia_cong:draft.giaCong,yeu_cau_ky_thuat:draft.kyThuat,yeu_cau_chat_luong:draft.chatLuong});await onRequestChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'Không lưu được yêu cầu.');}}}>LƯU YÊU CẦU DÒNG</button></div>; })}</div></section>}
+
         {request && <OutsourceQuotePanel key={`${request.id}-${request.phien_ban}`} request={request} canEdit={canChooseSupplier} onChanged={onRequestChanged} onNotify={onNotify} />}
 
         <section>
@@ -195,6 +229,19 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
           {totalPages > 1 && <div className="mt-3 flex items-center justify-end gap-2 text-[12px]"><button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="h-10 px-3 border rounded disabled:opacity-40">TRƯỚC</button><strong>Trang {currentPage}/{totalPages}</strong><button type="button" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="h-10 px-3 border rounded disabled:opacity-40">SAU</button></div>}
         </section>
 
+        {request && <section className="space-y-4">
+          <h3 className="font-bold text-[15px]">HỒ SƠ THEO MÃ HÀNG</h3>
+          {request.dong.map((line) => <article key={line.id} className="p-4 border rounded space-y-3"><div className="flex flex-wrap justify-between gap-2"><div><strong className="font-mono text-[#283A97]">{line.ma_hang}</strong> · {line.ten_hang}<span className="block text-[11px] text-[#59627A]">Mã vạch {line.ma_vach} · số sự cố: {line.so_su_co||0}</span>{line.ma_hang_goc&&<span className="text-[11px]">Mã gốc {line.ma_hang_goc} → thay thế {line.ma_hang_thay_the}</span>}</div><button type="button" className="min-h-9 px-3 border rounded text-[11px] font-bold" onClick={()=>setReplacement({id:line.id,ma:line.ma_hang_thay_the||'',lyDo:''})}>ĐỔI MÃ</button></div>
+            {replacement.id===line.id&&<div className="grid md:grid-cols-[1fr_2fr_auto] gap-2"><input aria-label="Mã hàng thay thế" value={replacement.ma} onChange={e=>setReplacement({...replacement,ma:e.target.value})} placeholder="Mã hàng thay thế" className="p-2 border rounded"/><input aria-label="Lý do đổi mã" value={replacement.lyDo} onChange={e=>setReplacement({...replacement,lyDo:e.target.value})} placeholder="Lý do đổi mã" className="p-2 border rounded"/><button type="button" className="px-3 min-h-9 bg-[#283A97] text-white rounded" onClick={async()=>{try{await doiMaDatNgoai(request.id,line.id,replacement.ma,replacement.lyDo);setReplacement({id:'',ma:'',lyDo:''});await onRequestChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'Không đổi được mã.');}}}>LƯU MÃ THAY THẾ</button></div>}
+            {(line.noi_dung_gia_cong||line.yeu_cau_ky_thuat||line.yeu_cau_chat_luong)&&<div className="grid md:grid-cols-3 gap-2 text-[12px]">{[['NỘI DUNG GIA CÔNG',line.noi_dung_gia_cong],['YÊU CẦU KỸ THUẬT',line.yeu_cau_ky_thuat],['YÊU CẦU CHẤT LƯỢNG',line.yeu_cau_chat_luong]].map(([h,v])=><div key={String(h)} className="p-2 bg-[#F4F6FA] rounded"><strong className="block text-[10px]">{h}</strong>{v||'—'}</div>)}</div>}
+            <div className="grid md:grid-cols-2 gap-3"><div className="p-3 bg-[#F4F6FA] rounded"><strong className="text-[11px]">LỊCH SỬ XÁC NHẬN KỸ THUẬT</strong>{line.xac_nhan_ky_thuat?.map((x)=><p key={x.id} className="mt-2 text-[12px]">{displayDate(x.thoi_diem,true)} · {x.ket_qua}: {x.noi_dung} <span className="text-[#59627A]">({x.nguoi_xac_nhan})</span></p>)}{canConfirmTechnical&&<div className="mt-2 grid gap-2"><textarea aria-label="Nội dung xác nhận kỹ thuật" placeholder="Nội dung xác nhận" value={technical.id===line.id?technical.noiDung:''} onChange={e=>setTechnical({...technical,id:line.id,noiDung:e.target.value})} className="p-2 border rounded"/><select value={technical.id===line.id?technical.ketQua:'DA_XAC_NHAN'} onChange={e=>setTechnical({...technical,id:line.id,ketQua:e.target.value})} className="p-2 border rounded"><option value="DA_XAC_NHAN">Đã xác nhận</option><option value="CAN_LAM_RO">Cần làm rõ</option><option value="KHONG_DAT">Không đạt</option></select><button type="button" className="px-3 min-h-9 bg-emerald-700 text-white rounded" onClick={async()=>{try{await ghiXacNhanKyThuatDong(request.id,{id_dat_ngoai_dong:line.id,noi_dung:technical.noiDung,ket_qua:technical.ketQua,ghi_chu:technical.ghiChu});setTechnical({id:'',noiDung:'',ketQua:'DA_XAC_NHAN',ghiChu:''});await onRequestChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'Không lưu được xác nhận.');}}}>GHI NHẬN LẦN XÁC NHẬN</button></div>}</div>
+            <div className="p-3 bg-[#F4F6FA] rounded"><strong className="text-[11px]">CÁC ĐỢT GIAO VÀ LỊCH SỬ KỲ HẠN</strong>{line.dot_giao?.map(g=><p key={g.id} className="mt-2 text-[12px]">Đợt {g.lan_giao}: dự kiến {displayDate(g.ngay_du_kien)} / {g.so_luong_du_kien??'—'} · thực tế {displayDate(g.ngay_thuc_te)} / {g.so_luong_thuc_te??'—'}</p>)}{line.lich_su_ky_han?.map((h,i)=><p key={i} className="text-[11px] text-[#59627A]">Hạn {displayDate(h.ky_han_cu)} → {displayDate(h.ky_han_moi)} · {h.ly_do}</p>)}<div className="mt-2 grid sm:grid-cols-3 gap-2"><input type="number" min="1" aria-label="Lần giao" placeholder="Đợt số" value={delivery.id===line.id?delivery.lan:'1'} onChange={e=>setDelivery({...delivery,id:line.id,lan:e.target.value})} className="p-2 border rounded"/><input type="date" aria-label="Ngày dự kiến" value={delivery.id===line.id?delivery.duKien:''} onChange={e=>setDelivery({...delivery,id:line.id,duKien:e.target.value})} className="p-2 border rounded"/><input type="number" min="0" aria-label="Số lượng dự kiến" placeholder="SL dự kiến" value={delivery.id===line.id?delivery.soLuong:''} onChange={e=>setDelivery({...delivery,id:line.id,soLuong:e.target.value})} className="p-2 border rounded"/><input type="date" aria-label="Ngày thực tế" value={delivery.id===line.id?delivery.thucTe:''} onChange={e=>setDelivery({...delivery,id:line.id,thucTe:e.target.value})} className="p-2 border rounded"/><input type="number" min="0" aria-label="Số lượng thực tế" placeholder="SL thực tế" value={delivery.id===line.id?delivery.soLuongThucTe:''} onChange={e=>setDelivery({...delivery,id:line.id,soLuongThucTe:e.target.value})} className="p-2 border rounded"/><button type="button" className="px-3 min-h-9 bg-[#283A97] text-white rounded" onClick={async()=>{if(!delivery.duKien)return;try{await ghiDotGiaoDatNgoai(request.id,{id_dat_ngoai_dong:line.id,lan_giao:Number(delivery.lan),ngay_du_kien:delivery.duKien,so_luong_du_kien:delivery.soLuong?Number(delivery.soLuong):undefined,ngay_thuc_te:delivery.thucTe||undefined,so_luong_thuc_te:delivery.soLuongThucTe?Number(delivery.soLuongThucTe):undefined});await onRequestChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'Không lưu được đợt giao.');}}}>LƯU ĐỢT GIAO</button></div></div></div>
+            <div className="flex flex-wrap gap-2">{line.su_co?.map(sc=><span key={sc.id} className="pill p-info px-2 py-1">{sc.id}: {sc.mo_ta}</span>)}<input aria-label="Mã sự cố" placeholder="Mã sự cố để liên kết" value={incident.id===line.id?incident.suCoId:''} onChange={e=>setIncident({id:line.id,suCoId:e.target.value})} className="px-2 border rounded"/><button type="button" className="px-3 min-h-9 border rounded" onClick={async()=>{try{await ganSuCoDatNgoai(request.id,line.id,incident.suCoId);setIncident({id:'',suCoId:''});await onRequestChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'Không gắn được sự cố.');}}}>GẮN SỰ CỐ</button></div>
+          </article>)}
+        </section>}
+
+        {request && <section className="p-4 border rounded space-y-3"><h3 className="font-bold">TRAO ĐỔI VÀ TỆP ĐÍNH KÈM</h3><div className="space-y-2">{request.trao_doi?.map(item=><div key={item.id} className="p-2 bg-[#F4F6FA] rounded text-[12px]"><strong>{item.ten_nguoi_gui||item.nguoi_gui}</strong> · {displayDate(item.thoi_diem,true)}<p>{item.noi_dung}</p></div>)}</div><form className="flex gap-2" onSubmit={async e=>{e.preventDefault();try{await themTraoDoiDatNgoai(request.id,message);setMessage('');await onRequestChanged?.();}catch(err){setActionError(err instanceof Error?err.message:'Không gửi được trao đổi.');}}}><input value={message} onChange={e=>setMessage(e.target.value)} className="flex-1 min-h-10 px-3 border rounded" placeholder="Nhập trao đổi"/><button className="px-4 bg-[#283A97] text-white rounded">GỬI</button></form><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={async e=>{const file=e.target.files?.[0];if(file)try{await taiTepDatNgoai(request.id,file);await onRequestChanged?.();}catch(err){setActionError(err instanceof Error?err.message:'Không tải được tệp.');}}}/><div className="flex flex-wrap gap-2">{request.tep?.map(file=><button type="button" key={file.id} className="text-[#283A97] underline" onClick={async()=>{try{const blob=await taiNoiDungTepDatNgoai(request.id,file.id);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.ten_tep;a.click();URL.revokeObjectURL(url);}catch(e){setActionError(e instanceof Error?e.message:'Không tải được tệp.');}}}>{file.ten_tep}</button>)}</div></section>}
+
         {request && <section>
           <h3 className="font-bold text-[15px] mb-3">LỊCH SỬ XỬ LÝ</h3>
           {!request.lich_su?.length ? <div className="p-4 border rounded text-[13px] text-[#59627A]">Chưa có lịch sử xử lý.</div> : <div className="border rounded divide-y">{request.lich_su.map((item, index) => <div key={`${item.thoi_diem}-${index}`} className="p-3 grid md:grid-cols-[170px_1fr_180px] gap-2 text-[12px]"><span className="font-mono">{displayDate(item.thoi_diem, true)}</span><div><strong>{statusLabel(item.trang_thai_cu)} → {statusLabel(item.trang_thai_moi)}</strong><span className="block text-[#59627A]">{item.noi_dung || '—'}</span></div><span>Thực hiện: <strong>{item.nguoi_thuc_hien}</strong></span></div>)}</div>}
@@ -202,6 +249,9 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
       </div>
 
       <footer className="sticky bottom-0 bg-white p-4 border-t flex flex-wrap justify-between gap-2">
+        {request?.trang_thai === 'NHAP' && canCancel && <button type="button" disabled={confirming} onClick={()=>void submitForApproval()} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold">GỬI TRƯỞNG BP KINH DOANH DUYỆT</button>}
+        {request?.trang_thai === 'CHO_DUYET' && canApprove && <button type="button" disabled={confirming} onClick={()=>void approveRequest()} className="min-h-11 px-5 bg-emerald-700 text-white rounded font-bold">DUYỆT PHIẾU</button>}
+        {request?.trang_thai === 'DA_DUYET' && canChooseSupplier && <button type="button" disabled={confirming} onClick={()=>void startQuote()} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold">BẮT ĐẦU BÁO GIÁ</button>}
         {canConfirmTechnical && request?.trang_thai === 'CHO_XAC_NHAN_KY_THUAT' && <button type="button" disabled={confirming} onClick={() => void confirmTechnical()} className="min-h-11 px-5 bg-emerald-700 text-white rounded font-bold disabled:opacity-50">{confirming ? 'ĐANG XÁC NHẬN…' : 'XÁC NHẬN KỸ THUẬT'}</button>}
         {canCancel && request && request.trang_thai !== 'HUY' && <button type="button" disabled={confirming} onClick={() => { setShowCancelForm((shown) => !shown); setActionError(''); }} className="min-h-11 px-5 border border-[#EE202E] text-[#C4141F] rounded font-bold disabled:opacity-50">HỦY PHIẾU</button>}
         <button type="button" onClick={onClose} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold">ĐÓNG</button>

@@ -255,7 +255,7 @@ export default function App() {
 
           {activeTab === 'company-data' && <CatalogView currentUser={currentUser} onNotify={showNotification} />}
 
-          {activeTab === 'suppliers' && <SupplierManagementView onNotify={showNotification} canEdit={isAdmin || (currentUser.quyen?.ncc as { sua?: boolean } | undefined)?.sua === true} />}
+          {activeTab === 'suppliers' && <SupplierManagementView onNotify={showNotification} canEdit={isAdmin || (currentUser.quyen?.ncc as { sua?: boolean } | undefined)?.sua === true} canApprove={isAdmin || (currentUser.quyen?.ncc as { duyet?: boolean } | undefined)?.duyet === true} />}
           {activeTab === 'utilities' && <ComingSoonView title="TIỆN ÍCH" description="Các tiện ích quản trị hệ thống đang được chuẩn bị." />}
           {activeTab === 'reports' && <ComingSoonView title="BÁO CÁO" description="Báo cáo điều hành sẽ được tính trực tiếp từ dữ liệu giao dịch." />}
           {activeTab === 'purchase-orders' && <ComingSoonView title="ĐƠN HÀNG" description="Chức năng quản lý đơn đặt hàng đang được triển khai." />}

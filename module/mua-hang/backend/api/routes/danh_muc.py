@@ -111,6 +111,9 @@ class NhaCungCapBody(BaseModel):
     ky_han_quy_dinh: int | None = None
     da_phe_duyet: bool = False
     ngay_phe_duyet: date | None = None
+    dinh_muc_thang: Decimal | None = None
+    ghi_chu_dinh_muc: str | None = None
+    nhom_hang_chi_tiet: list[str] | None = None
     phan_loai_ncc: str | None = None
     trang_thai: str = "HOAT_DONG"
     ghi_chu: str | None = None
@@ -140,6 +143,9 @@ class SuaNhaCungCapBody(BaseModel):
     ky_han_quy_dinh: int | None = None
     da_phe_duyet: bool | None = None
     ngay_phe_duyet: date | None = None
+    dinh_muc_thang: Decimal | None = None
+    ghi_chu_dinh_muc: str | None = None
+    nhom_hang_chi_tiet: list[str] | None = None
     phan_loai_ncc: str | None = None
     trang_thai: str | None = None
     ghi_chu: str | None = None
@@ -478,3 +484,166 @@ def sua_ncc(id_ncc: str, body: SuaNhaCungCapBody, request: Request):
         id_ncc, _du_lieu(body, {"phien_ban", "xac_nhan_trung"}, True),
         body.phien_ban, ho_so["ma_nhan_vien"], body.xac_nhan_trung,
     ))
+
+
+class MatHangNccBody(BaseModel):
+    id_ncc: str | None = None
+    ma_vat_tu: str | None = None
+    ten_hang: str
+    loai: str
+    nhom_hang_chinh: str | None = None
+    nhom_hang_chi_tiet: str | None = None
+    ma_loai_gia_cong: str | None = None
+    ma_cong_doan: str | None = None
+    dvt: str
+    thong_so_ky_thuat: str | None = None
+    diem_ky_thuat: Decimal | None = None
+    muc_chat_luong: str | None = None
+    diem_chat_luong: Decimal | None = None
+    nang_luc_thang: Decimal | None = None
+    so_ngay_giao_chuan: int | None = None
+    trang_thai: str = "DE_XUAT"
+    nguoi_de_xuat: str | None = None
+    ngay_de_xuat: date | None = None
+    ghi_chu: str | None = None
+
+
+class SuaMatHangNccBody(MatHangNccBody):
+    phien_ban: int = Field(ge=1)
+
+
+class DuyetMatHangNccBody(BaseModel):
+    phien_ban: int = Field(ge=1)
+    trang_thai: str = "DA_DUYET"
+
+
+@router.get("/mat-hang-ncc", summary="Danh sách mặt hàng theo nhà cung cấp", response_model=PhanHoi)
+def danh_sach_mat_hang_ncc(
+    request: Request, id_ncc: str | None = None, q: str = "", loai: str | None = None,
+    nhom_hang_chinh: str | None = None, nhom_hang_chi_tiet: str | None = None,
+    ma_loai_gia_cong: str | None = None, muc_chat_luong: str | None = None,
+    trang_thai: str | None = None, trang: int = 1, kich_thuoc: int = 100,
+):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.danh_sach_mat_hang_ncc(
+        id_ncc,
+        {"q": q, "loai": loai, "nhom_hang_chinh": nhom_hang_chinh,
+         "nhom_hang_chi_tiet": nhom_hang_chi_tiet, "ma_loai_gia_cong": ma_loai_gia_cong,
+         "muc_chat_luong": muc_chat_luong, "trang_thai": trang_thai},
+        trang, kich_thuoc,
+    ))
+
+
+@router.get("/mat-hang-ncc/{id_mat_hang}", summary="Chi tiết mặt hàng của nhà cung cấp", response_model=PhanHoi)
+def lay_mat_hang_ncc(id_mat_hang: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.lay_mat_hang_ncc(id_mat_hang))
+
+
+@router.post("/nha-cung-cap/{id_ncc}/mat-hang", summary="Thêm mặt hàng cho nhà cung cấp", response_model=PhanHoi)
+def tao_mat_hang_ncc(id_ncc: str, body: MatHangNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "sua")
+    return thanh_cong(catalog_service.tao_mat_hang_ncc(
+        {**_du_lieu(body, set()), "id_ncc": id_ncc, "nguoi_de_xuat": ho_so["ma_nhan_vien"]},
+        ho_so["ma_nhan_vien"],
+    ))
+
+
+@router.patch("/mat-hang-ncc/{id_mat_hang}", summary="Sửa mặt hàng của nhà cung cấp", response_model=PhanHoi)
+def sua_mat_hang_ncc(id_mat_hang: str, body: SuaMatHangNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "sua")
+    return thanh_cong(catalog_service.cap_nhat_mat_hang_ncc(
+        id_mat_hang, _du_lieu(body, {"phien_ban"}, True), body.phien_ban, ho_so["ma_nhan_vien"],
+    ))
+
+
+@router.post("/mat-hang-ncc/{id_mat_hang}/duyet", summary="Duyệt mặt hàng nhà cung cấp", response_model=PhanHoi)
+def duyet_mat_hang_ncc(id_mat_hang: str, body: DuyetMatHangNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "duyet")
+    return thanh_cong(catalog_service.duyet_mat_hang_ncc(
+        id_mat_hang, body.phien_ban, ho_so["ma_nhan_vien"], body.trang_thai,
+    ))
+
+
+class TaoDanhGiaNccBody(BaseModel):
+    id_mat_hang_ncc: str
+    loai: str = "DINH_KY"
+    ky_danh_gia: str | None = None
+    ngay_danh_gia: date | None = None
+    diem_gia_ca: Decimal | None = None
+    diem_tam_voc: Decimal | None = None
+    diem_thanh_toan: Decimal | None = None
+    diem_dich_vu: Decimal | None = None
+    ghi_chu: str | None = None
+
+
+class DuyetDanhGiaNccBody(BaseModel):
+    phien_ban: int = Field(ge=1)
+    trang_thai: str = "DA_DUYET"
+
+
+@router.get("/danh-gia-ncc", summary="Danh sách đánh giá NCC theo mặt hàng", response_model=PhanHoi)
+def danh_sach_danh_gia_ncc(
+    request: Request, id_mat_hang: str | None = None, trang_thai: str | None = None,
+    trang: int = 1, kich_thuoc: int = 100,
+):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.danh_sach_danh_gia_ncc(id_mat_hang, trang_thai, trang, kich_thuoc))
+
+
+@router.get("/danh-gia-ncc/den-han", summary="Danh sách mặt hàng đến hạn đánh giá", response_model=PhanHoi)
+def danh_sach_mat_hang_ncc_den_han(request: Request, trang: int = 1, kich_thuoc: int = 100):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.danh_sach_mat_hang_ncc_den_han(trang, kich_thuoc))
+
+
+@router.get("/so-theo-doi-ncc", summary="Sổ theo dõi sự cố chất lượng NCC", response_model=PhanHoi)
+def danh_sach_so_theo_doi_ncc(
+    request: Request, id_ncc: str | None = None, trang_thai: str | None = None,
+    q: str = "", trang: int = 1, kich_thuoc: int = 100,
+):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.danh_sach_so_theo_doi_ncc(
+        id_ncc, trang_thai, q, trang, kich_thuoc,
+    ))
+
+
+@router.post("/danh-gia-ncc", summary="Tạo bảng đánh giá NCC theo mặt hàng", response_model=PhanHoi)
+def tao_danh_gia_ncc(body: TaoDanhGiaNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "sua")
+    return thanh_cong(catalog_service.tao_danh_gia_ncc(
+        _du_lieu(body), ho_so["ma_nhan_vien"],
+    ))
+
+
+@router.post("/danh-gia-ncc/{id_danh_gia}/duyet", summary="Duyệt bảng đánh giá NCC", response_model=PhanHoi)
+def duyet_danh_gia_ncc(id_danh_gia: str, body: DuyetDanhGiaNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "duyet")
+    return thanh_cong(catalog_service.duyet_danh_gia_ncc(
+        id_danh_gia, body.phien_ban, body.trang_thai, ho_so["ma_nhan_vien"],
+    ))
+
+
+class KiemTraDinhMucNccBody(BaseModel):
+    gia_tri_don: Decimal = Field(ge=0)
+    ngay_dat: date | None = None
+
+
+@router.post("/nha-cung-cap/{id_ncc}/kiem-tra-dinh-muc", summary="Kiểm tra định mức đặt hàng tháng NCC", response_model=PhanHoi)
+def kiem_tra_dinh_muc_ncc(id_ncc: str, body: KiemTraDinhMucNccBody, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "xem")
+    return thanh_cong(catalog_service.kiem_tra_dinh_muc_ncc(id_ncc, body.gia_tri_don, body.ngay_dat))
+
+
+@router.post("/de-xuat-mat-hang-ncc", summary="Đề xuất thêm mặt hàng cho NCC", response_model=PhanHoi)
+def de_xuat_mat_hang_ncc(body: MatHangNccBody, request: Request):
+    ho_so = lay_ho_so(request)
+    # Mọi bộ phận được đề xuất, nhưng chỉ người có quyền duyệt NCC mới đưa vào hiệu lực.
+    phan_quyen_service.kiem_quyen(ho_so, "ncc", "xem")
+    du_lieu = {**_du_lieu(body), "trang_thai": "DE_XUAT", "nguoi_de_xuat": ho_so["ma_nhan_vien"]}
+    return thanh_cong(catalog_service.tao_mat_hang_ncc(du_lieu, ho_so["ma_nhan_vien"]))

@@ -34,4 +34,8 @@ BEGIN;
 \ir migrations/044_sua_trigger_tai_khoan_legacy.sql
 \ir migrations/045_loai_bo_cot_legacy_tai_khoan.sql
 \ir migrations/046_bo_sung_fax_nha_cung_cap.sql
+\ir migrations/047_quyen_theo_loai_tai_khoan_va_bo_phan.sql
+\ir migrations/048_nha_cung_cap_theo_mat_hang.sql
+\ir migrations/049_khoi_phuc_nguon_nghiep_v1.sql
+\ir migrations/050_dat_ngoai_ho_so_theo_dong.sql
 COMMIT;
