@@ -9,7 +9,7 @@ type OutsourceTab = 'tracking' | 'tickets' | 'quotes' | 'orders' | 'suppliers';
 type FilterState = { from: string; to: string; workshop: string; supplier: string; status: string; query: string };
 
 interface ProgressLine {
-  code: string; material: string; name: string; process: string; quantity: string; timing: string; status: string; danger?: boolean;
+  code: string; material: string; name: string; supplier: string; quantity: string; timing: string; status: string; danger?: boolean;
 }
 interface ProgressGroup {
   id: string; title: string; priority: string; workshop: string; coordinator: string; customer: string; po: string;
@@ -56,21 +56,26 @@ function normalizeSourceStatus(value: string) {
   return normalized || undefined;
 }
 
-export function parseExcel(value: string): DongNhapLsx[] {
+interface ParsedLsxRow { data: DongNhapLsx; raw: string }
+interface ParsedLsxError { line: number; raw: string; message: string }
+
+export function parseExcel(value: string): { rows: ParsedLsxRow[]; errors: ParsedLsxError[] } {
   const rows = value.split(/\r?\n/)
-    .map((line) => line.split('\t').map((cell) => cell.trim()))
-    .filter((row) => row.some(Boolean));
-  if (!rows.length) return [];
-  const sourceHeader = rows.findIndex((row) => row[0]?.toLocaleUpperCase('vi-VN') === 'CHỨNG TỪ' && row[2]?.toLocaleUpperCase('vi-VN') === 'SỐ PO');
-  const sourceLayout = sourceHeader >= 0 || rows.some((row) => row.length >= 30 && row[0] && row[6]);
+    .map((raw, index) => ({ raw, line: index + 1, cells: raw.split('\t').map((cell) => cell.trim()) }))
+    .filter((row) => row.cells.some(Boolean));
+  if (!rows.length) return { rows: [], errors: [] };
+  const sourceHeader = rows.findIndex((row) => row.cells[0]?.toLocaleUpperCase('vi-VN') === 'CHỨNG TỪ' && row.cells[2]?.toLocaleUpperCase('vi-VN') === 'SỐ PO');
+  const sourceLayout = sourceHeader >= 0 || rows.some((row) => row.cells.length >= 30 && row.cells[0] && row.cells[6]);
   let data = sourceHeader >= 0 ? rows.slice(sourceHeader + 2) : rows;
   if (!sourceLayout) {
-    const first = rows[0][0]?.toLocaleUpperCase('vi-VN') || '';
+    const first = rows[0].cells[0]?.toLocaleUpperCase('vi-VN') || '';
     if (first.includes('LỆNH SẢN XUẤT') || first === 'LSX') data = rows.slice(1);
   }
-  data = data.filter((row) => sourceLayout ? Boolean(row[0] || row[4] || row[6]) : row.some(Boolean));
   const seen = new Set<string>();
-  return data.map((cells, index) => {
+  const parsed: ParsedLsxRow[] = [];
+  const errors: ParsedLsxError[] = [];
+  for (const { cells, line, raw } of data) {
+    try {
     const normalized = sourceLayout ? {
       lenh_san_xuat: cells[0], ma_vach: cells[6], ma_hang: cells[4], ten_hang: cells[5],
       rawQuantity: cells[8], dvt: cells[9], so_po: cells[2], ma_khach_hang: undefined,
@@ -92,15 +97,19 @@ export function parseExcel(value: string): DongNhapLsx[] {
     const { lenh_san_xuat, ma_vach, ma_hang, ten_hang, rawQuantity, dvt, so_po, ma_khach_hang,
       ten_khach_hang_chup, ma_bo_phan, ten_bo_phan_chup, ki_han_khach_hang, ngay_nhan_lenh, so_so, ngay_so,
       trang_thai_don, rawPriority, ma_cong_doan, ma_ban_ve, ghi_chu, ghi_chu_dong } = normalized;
-    if (!lenh_san_xuat || !ma_vach || !ma_hang || !ten_hang || !rawQuantity || !dvt) throw new Error(`Dòng ${index + 1}: thiếu trường bắt buộc.`);
-    if (seen.has(ma_vach)) throw new Error(`Dòng ${index + 1}: mã vạch ${ma_vach} bị trùng.`);
-    seen.add(ma_vach);
+    if (!lenh_san_xuat || !ma_vach || !ma_hang || !ten_hang || !rawQuantity || !dvt) throw new Error('Thiếu trường bắt buộc.');
+    if (seen.has(ma_vach.toUpperCase())) throw new Error(`Mã vạch ${ma_vach} bị trùng.`);
     const so_luong = parseNumber(rawQuantity);
-    if (!Number.isFinite(so_luong) || so_luong <= 0) throw new Error(`Dòng ${index + 1}: số lượng không hợp lệ.`);
+    if (!Number.isFinite(so_luong) || so_luong <= 0) throw new Error('Số lượng không hợp lệ.');
     const muc_do_uu_tien = rawPriority ? Number(rawPriority) : undefined;
-    if (muc_do_uu_tien && ![1, 2, 3].includes(muc_do_uu_tien)) throw new Error(`Dòng ${index + 1}: ưu tiên chỉ nhận 1–3.`);
-    return { lenh_san_xuat: lenh_san_xuat.toUpperCase(), ma_vach: ma_vach.toUpperCase(), ma_hang: ma_hang.toUpperCase(), ten_hang, so_luong, dvt: dvt.toUpperCase(), so_po: so_po || undefined, ma_khach_hang: ma_khach_hang || undefined, ten_khach_hang_chup, ma_bo_phan: ma_bo_phan?.toUpperCase(), ten_bo_phan_chup, ki_han_khach_hang, ngay_nhan_lenh, so_so, ngay_so, trang_thai_don, muc_do_uu_tien, ma_cong_doan: ma_cong_doan?.toUpperCase(), ma_ban_ve, ghi_chu: ghi_chu || undefined, ghi_chu_dong };
-  });
+    if (rawPriority && ![1, 2, 3].includes(muc_do_uu_tien || 0)) throw new Error('Ưu tiên chỉ nhận 1–3.');
+    seen.add(ma_vach.toUpperCase());
+    parsed.push({ raw, data: { lenh_san_xuat: lenh_san_xuat.toUpperCase(), ma_vach: ma_vach.toUpperCase(), ma_hang: ma_hang.toUpperCase(), ten_hang, so_luong, dvt: dvt.toUpperCase(), so_po: so_po || undefined, ma_khach_hang: ma_khach_hang || undefined, ten_khach_hang_chup, ma_bo_phan: ma_bo_phan?.toUpperCase(), ten_bo_phan_chup, ki_han_khach_hang, ngay_nhan_lenh, so_so, ngay_so, trang_thai_don, muc_do_uu_tien, ma_cong_doan: ma_cong_doan?.toUpperCase(), ma_ban_ve, ghi_chu: ghi_chu || undefined, ghi_chu_dong } });
+    } catch (reason) {
+      errors.push({ line, raw, message: reason instanceof Error ? reason.message : 'Dữ liệu không hợp lệ.' });
+    }
+  }
+  return { rows: parsed, errors };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -130,14 +139,14 @@ function importedToGroup(item: LsxDatNgoai, requests: PhieuDatNgoai[]): Progress
     priority: item.muc_do_uu_tien ? `ƯU TIÊN ${item.muc_do_uu_tien}` : 'BÌNH THƯỜNG',
     workshop: item.ten_bo_phan_chup || item.ma_bo_phan || 'Bộ phận Kinh doanh', coordinator: request?.nguoi_lap || 'Chưa phân công',
     customer: item.ten_khach_hang_chup || item.ma_khach_hang || 'Chưa cập nhật', po: item.so_po || '—',
-    supplier: request?.ten_ncc_chup || 'Chưa chọn nhà cung cấp', quantity: `${item.dong.length} mã hàng`,
+    supplier: [...new Set((request?.dong || []).map((line) => line.ten_ncc_chup).filter(Boolean))].join(', ') || request?.ten_ncc_chup || 'Chưa chọn nhà cung cấp', quantity: `${item.dong.length} mã hàng`,
     progress, due: displayDate(dueValue), timing: overdue ? 'QUÁ HẠN' : (dueValue ? 'TRONG HẠN' : 'CHƯA CÓ HẠN'),
     status: request ? STATUS_LABELS[request.trang_thai] || request.trang_thai : 'CHƯA LẬP BÁO GIÁ',
     note: request?.ghi_chu || item.ghi_chu || '—', danger: overdue,
     lines: item.dong.map((line) => {
       const requestLine = request?.dong.find((entry) => entry.ma_vach === line.ma_vach);
       return { code: line.ma_hang, material: line.ma_vach, name: line.ten_hang,
-        process: line.ma_cong_doan || requestLine?.ghi_chu || request?.noi_dung_ky_thuat || 'Chưa cập nhật công đoạn',
+        supplier: requestLine ? requestLine.ten_ncc_chup || 'Chưa chọn' : request?.ten_ncc_chup || 'Chưa chọn',
         quantity: `${Number(line.so_luong).toLocaleString('vi-VN')} ${line.dvt}`,
         timing: displayDate(requestLine?.ky_han || request?.ky_han),
         status: requestLine ? STATUS_LABELS[requestLine.trang_thai] || requestLine.trang_thai : 'Chờ xử lý',
@@ -148,6 +157,11 @@ function importedToGroup(item: LsxDatNgoai, requests: PhieuDatNgoai[]): Progress
 
 function StatusPill({ children, danger = false }: { children: string; danger?: boolean }) {
   return <span className={`pill px-2 py-1 text-[10px] ${danger ? 'p-r' : 'p-info'}`}>{children}</span>;
+}
+
+function requestSupplierSummary(request: PhieuDatNgoai) {
+  return request.nha_cung_cap_tom_tat || [...new Set(request.dong.map((line) => line.ten_ncc_chup).filter(Boolean))].join(', ')
+    || request.ten_ncc_chup || 'Chưa chọn';
 }
 
 function SupplierCards({ suppliers: supplied, onNotify }: { suppliers?: NhaCungCapDanhMuc[]; onNotify: (message: string) => void }) {
@@ -184,21 +198,21 @@ function TicketTable({ requests, onView }: { requests: PhieuDatNgoai[]; onView: 
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(50);
   const totalPages = Math.max(1, Math.ceil(requests.length / pageSize)); const currentPage = Math.min(page, totalPages);
   const visible = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="phiếu" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ PHIẾU', 'NGÀY TẠO', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'SỐ MÃ HÀNG', 'HẠN TRẢ', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có phiếu đặt ngoài.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3">{displayDate(request.ngay_lap)}</td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{request.ten_ncc_chup || 'Chưa chọn'}</td><td className="p-3">{request.dong.length}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3"><StatusPill danger={request.trang_thai === 'HUY'}>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
+  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="phiếu" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ PHIẾU', 'NGÀY TẠO', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'SỐ MÃ HÀNG', 'HẠN TRẢ', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có phiếu đặt ngoài.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3">{displayDate(request.ngay_lap)}</td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{requestSupplierSummary(request)}</td><td className="p-3">{request.dong.length}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3"><StatusPill danger={request.trang_thai === 'HUY'}>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
 }
 
 function QuoteTable({ requests, onView }: { requests: PhieuDatNgoai[]; onView: (lsx: string) => void }) {
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(50);
   const totalPages = Math.max(1, Math.ceil(requests.length / pageSize)); const currentPage = Math.min(page, totalPages);
   const visible = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="phiếu báo giá" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ PHIẾU', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'SỐ MÃ HÀNG', 'TỔNG GIÁ TRỊ', 'KỲ HẠN', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có phiếu đang báo giá hoặc chờ duyệt.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{request.ten_ncc_chup || 'Chưa chọn'}</td><td className="p-3">{request.dong.length}</td><td className="p-3 font-mono font-bold">{formatMoney(request.tong_gia_tri)}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3"><StatusPill>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
+  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="phiếu báo giá" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ PHIẾU', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'SỐ MÃ HÀNG', 'TỔNG GIÁ TRỊ', 'KỲ HẠN', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có phiếu đang báo giá hoặc chờ duyệt.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{requestSupplierSummary(request)}</td><td className="p-3">{request.dong.length}</td><td className="p-3 font-mono font-bold">{formatMoney(request.tong_gia_tri)}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3"><StatusPill>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
 }
 
 function OrderTable({ requests, onView }: { requests: PhieuDatNgoai[]; onView: (lsx: string) => void }) {
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(50);
   const totalPages = Math.max(1, Math.ceil(requests.length / pageSize)); const currentPage = Math.min(page, totalPages);
   const visible = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="đơn" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ ĐƠN', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'GIÁ TRỊ', 'KỲ HẠN', 'SỐ DÒNG', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có đơn đặt gia công.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{request.ten_ncc_chup || 'Chưa chọn'}</td><td className="p-3 font-mono font-bold">{formatMoney(request.tong_gia_tri)}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3">{request.dong.length}</td><td className="p-3"><StatusPill>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
+  return <div className="space-y-3"><Pagination total={requests.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} label="đơn" /><section className="bg-white border rounded overflow-x-auto"><table className="w-full min-w-[900px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['SỐ ĐƠN', 'LỆNH SẢN XUẤT', 'NHÀ CUNG CẤP', 'GIÁ TRỊ', 'KỲ HẠN', 'SỐ DÒNG', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{requests.length === 0 ? <EmptyTableRow colSpan={7}>Chưa có đơn đặt gia công.</EmptyTableRow> : visible.map((request) => <tr key={request.id} className="border-t"><td className="p-3"><button type="button" onClick={() => onView(request.lenh_san_xuat)} className="font-mono font-bold text-[#283A97] hover:underline">{request.id}</button></td><td className="p-3 font-mono">{request.lenh_san_xuat}</td><td className="p-3">{requestSupplierSummary(request)}</td><td className="p-3 font-mono font-bold">{formatMoney(request.tong_gia_tri)}</td><td className="p-3">{displayDate(request.ky_han)}</td><td className="p-3">{request.dong.length}</td><td className="p-3"><StatusPill>{STATUS_LABELS[request.trang_thai] || request.trang_thai}</StatusPill></td></tr>)}</tbody></table></section></div>;
 }
 
 interface CreateRequestModalProps {
@@ -208,17 +222,29 @@ interface CreateRequestModalProps {
   createLines: Set<string>;
   needsTechnical: boolean;
   technicalNote: string;
+  processContent: string;
+  technicalRequirements: string;
+  qualityRequirements: string;
   loading: boolean;
   onSelectLsx: (value: string) => void;
   onToggleLine: (barcode: string) => void;
   onNeedsTechnical: (value: boolean) => void;
   onTechnicalNote: (value: string) => void;
+  onProcessContent: (value: string) => void;
+  onTechnicalRequirements: (value: string) => void;
+  onQualityRequirements: (value: string) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent) => void;
 }
 
 function CreateRequestModal(props: CreateRequestModalProps) {
-  return <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-3"><form onSubmit={props.onSubmit} className="bg-white w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">THÊM MỚI ĐẶT NGOÀI</h2><p className="mt-1 text-[12px] text-[#59627A]">Chọn LSX và mã hàng đã nạp từ dữ liệu thật.</p></div><button type="button" onClick={props.onClose} className="w-10 h-10"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-4"><label className="block text-[11px] font-bold">LỆNH SẢN XUẤT *<select required value={props.createLsx} onChange={(event) => props.onSelectLsx(event.target.value)} className="mt-1 w-full h-11 px-3 border rounded bg-white font-normal"><option value="">-- Chọn LSX --</option>{props.imported.map((item) => <option key={item.lenh_san_xuat} value={item.lenh_san_xuat}>{item.lenh_san_xuat} · {item.dong.length} mã hàng</option>)}</select></label>{props.imported.length === 0 && <div className="p-4 bg-[#FFF7E6] border border-[#F2CD82] rounded text-[12px]">Chưa có dữ liệu LSX. Hãy dùng nút “Nạp LSX từ Excel” trước.</div>}{props.selectedOrder && <div className="border rounded overflow-x-auto"><table className="w-full min-w-[650px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-3 text-left">CHỌN</th><th className="p-3 text-left">MÃ VẠCH</th><th className="p-3 text-left">MÃ HÀNG</th><th className="p-3 text-left">TÊN HÀNG</th><th className="p-3 text-left">SỐ LƯỢNG</th></tr></thead><tbody>{props.selectedOrder.dong.map((line) => <tr key={line.ma_vach} className="border-t"><td className="p-3"><input type="checkbox" checked={props.createLines.has(line.ma_vach)} disabled={line.da_lap_bao_gia} onChange={() => props.onToggleLine(line.ma_vach)} aria-label={`Chọn ${line.ma_hang}`} /></td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold">{line.ma_hang}</td><td className="p-3">{line.ten_hang}{line.da_lap_bao_gia && <span className="block text-[10px] text-[#59627A]">Đã lập phiếu</span>}</td><td className="p-3">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td></tr>)}</tbody></table></div>}<label className="flex items-center gap-2 text-[12px] font-bold"><input type="checkbox" checked={props.needsTechnical} onChange={(event) => props.onNeedsTechnical(event.target.checked)} />CẦN XÁC NHẬN KỸ THUẬT</label>{props.needsTechnical && <label className="block text-[11px] font-bold">NỘI DUNG CẦN XÁC NHẬN *<textarea required value={props.technicalNote} onChange={(event) => props.onTechnicalNote(event.target.value)} rows={3} className="mt-1 w-full p-3 border rounded font-normal" /></label>}</div><footer className="p-4 border-t flex justify-end gap-2"><button type="button" onClick={props.onClose} className="min-h-11 px-5 border rounded font-bold">HỦY</button><button disabled={props.loading || props.createLines.size === 0} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold disabled:opacity-40">TẠO PHIẾU ({props.createLines.size})</button></footer></form></div>;
+  return <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-3"><form onSubmit={props.onSubmit} className="bg-white w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">THÊM MỚI ĐẶT NGOÀI</h2><p className="mt-1 text-[12px] text-[#59627A]">Chọn LSX và mã hàng đã nạp từ dữ liệu thật.</p></div><button type="button" onClick={props.onClose} className="w-10 h-10"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-4"><label className="block text-[11px] font-bold">LỆNH SẢN XUẤT *<select required value={props.createLsx} onChange={(event) => props.onSelectLsx(event.target.value)} className="mt-1 w-full h-11 px-3 border rounded bg-white font-normal"><option value="">-- Chọn LSX --</option>{props.imported.map((item) => <option key={item.lenh_san_xuat} value={item.lenh_san_xuat}>{item.lenh_san_xuat} · {item.dong.length} mã hàng</option>)}</select></label>{props.imported.length === 0 && <div className="p-4 bg-[#FFF7E6] border border-[#F2CD82] rounded text-[12px]">Chưa có dữ liệu LSX. Hãy dùng nút “Nạp LSX từ Excel” trước.</div>}{props.selectedOrder && <div className="border rounded overflow-x-auto"><table className="w-full min-w-[650px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-3 text-left">CHỌN</th><th className="p-3 text-left">MÃ VẠCH</th><th className="p-3 text-left">MÃ HÀNG</th><th className="p-3 text-left">TÊN HÀNG</th><th className="p-3 text-left">SỐ LƯỢNG</th></tr></thead><tbody>{props.selectedOrder.dong.map((line) => <tr key={line.ma_vach} className="border-t"><td className="p-3"><input type="checkbox" checked={props.createLines.has(line.ma_vach)} disabled={line.da_lap_bao_gia} onChange={() => props.onToggleLine(line.ma_vach)} aria-label={`Chọn ${line.ma_hang}`} /></td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold">{line.ma_hang}</td><td className="p-3">{line.ten_hang}{line.da_lap_bao_gia && <span className="block text-[10px] text-[#59627A]">Đã lập phiếu</span>}</td><td className="p-3">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td></tr>)}</tbody></table></div>}<label className="flex items-center gap-2 text-[12px] font-bold"><input type="checkbox" checked={props.needsTechnical} onChange={(event) => props.onNeedsTechnical(event.target.checked)} />CẦN XÁC NHẬN KỸ THUẬT</label>{props.needsTechnical && <label className="block text-[11px] font-bold">NỘI DUNG CẦN XÁC NHẬN *<textarea required value={props.technicalNote} onChange={(event) => props.onTechnicalNote(event.target.value)} rows={3} className="mt-1 w-full p-3 border rounded font-normal" /></label>}
+  <div className="grid gap-3 border-t pt-3">
+    <label className="block text-[11px] font-bold">NỘI DUNG GIA CÔNG *<textarea required value={props.processContent} onChange={(event) => props.onProcessContent(event.target.value)} rows={2} className="mt-1 w-full p-3 border rounded font-normal" /></label>
+    <label className="block text-[11px] font-bold">YÊU CẦU KỸ THUẬT *<textarea required value={props.technicalRequirements} onChange={(event) => props.onTechnicalRequirements(event.target.value)} rows={2} className="mt-1 w-full p-3 border rounded font-normal" /></label>
+    <label className="block text-[11px] font-bold">YÊU CẦU CHẤT LƯỢNG *<textarea required value={props.qualityRequirements} onChange={(event) => props.onQualityRequirements(event.target.value)} rows={2} className="mt-1 w-full p-3 border rounded font-normal" /></label>
+    <p className="text-xs text-[#59627A]">Các yêu cầu này được lưu cho từng mã hàng đã chọn.</p>
+  </div></div><footer className="p-4 border-t flex justify-end gap-2"><button type="button" onClick={props.onClose} className="min-h-11 px-5 border rounded font-bold">HỦY</button><button disabled={props.loading || props.createLines.size === 0} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold disabled:opacity-40">TẠO PHIẾU ({props.createLines.size})</button></footer></form></div>;
 }
 
 export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: string) => void; currentUser: HoSo }) {
@@ -234,12 +260,17 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
   const [detailLsxId, setDetailLsxId] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState('');
   const [pasteRows, setPasteRows] = useState<DongNhapLsx[]>([]);
+  const [pasteRawRows, setPasteRawRows] = useState<string[]>([]);
+  const [parseErrors, setParseErrors] = useState<ParsedLsxError[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [createLsx, setCreateLsx] = useState('');
   const [createLines, setCreateLines] = useState<Set<string>>(new Set());
   const [needsTechnical, setNeedsTechnical] = useState(false);
   const [technicalNote, setTechnicalNote] = useState('');
+  const [processContent, setProcessContent] = useState('');
+  const [technicalRequirements, setTechnicalRequirements] = useState('');
+  const [qualityRequirements, setQualityRequirements] = useState('');
   const [trackingPage, setTrackingPage] = useState(1);
   const [trackingPageSize, setTrackingPageSize] = useState(50);
   const [pastePage, setPastePage] = useState(1);
@@ -248,7 +279,7 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
   const filteredGroups = useMemo(() => groups.filter((group) => {
     const query = filters.query.trim().toLocaleUpperCase('vi-VN');
     if (filters.workshop && group.workshop !== filters.workshop) return false;
-    if (filters.supplier && group.supplier !== filters.supplier) return false;
+    if (filters.supplier && group.supplier !== filters.supplier && !group.lines.some((line) => line.supplier === filters.supplier)) return false;
     if (filters.status === 'late' && !group.danger) return false;
     if (filters.status === 'on-time' && group.danger) return false;
     return !query || `${group.id} ${group.po} ${group.title} ${group.lines.map((line) => line.code).join(' ')}`.toLocaleUpperCase('vi-VN').includes(query);
@@ -266,6 +297,11 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
     currentPastePage * pastePageSize,
   ), [currentPastePage, pastePageSize, pasteRows]);
 
+  useEffect(() => {
+    setPasteRows([]);
+    setPasteRawRows([]);
+    setParseErrors([]);
+  }, [pasteText]);
   useEffect(() => setTrackingPage((page) => Math.min(page, trackingTotalPages)), [trackingTotalPages]);
   useEffect(() => setPastePage((page) => Math.min(page, pasteTotalPages)), [pasteTotalPages]);
 
@@ -296,8 +332,13 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
 
   function previewPaste() {
     setError('');
-    try { const rows = parseExcel(pasteText); if (!rows.length) throw new Error('Hãy dán ít nhất một dòng từ Excel.'); setPasteRows(rows); setPastePage(1); }
-    catch (reason) { setPasteRows([]); setError(reason instanceof Error ? reason.message : 'Dữ liệu Excel không hợp lệ.'); }
+    const preview = parseExcel(pasteText);
+    setPasteRows(preview.rows.map((item) => item.data));
+    setPasteRawRows(preview.rows.map((item) => item.raw));
+    setParseErrors(preview.errors);
+    setPastePage(1);
+    if (!preview.rows.length && !preview.errors.length) setError('Hãy dán ít nhất một dòng từ Excel.');
+    else if (preview.errors.length) setError(`${preview.rows.length} dòng hợp lệ; ${preview.errors.length} dòng cần sửa. ${preview.errors.map((item) => `Dòng ${item.line}: ${item.message}`).join(' · ')}`);
   }
   async function importRows() {
     setLoading(true); setError('');
@@ -306,17 +347,18 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
       const result = await nhapLsxDatNgoai(submittedRows);
       await loadData();
       setExpanded((current) => new Set([...current, ...submittedRows.map((row) => row.lenh_san_xuat)]));
-      if (result.errors.length) {
+      if (result.errors.length || parseErrors.length) {
         const failedIndexes = new Set(result.errors.map((item) => item.dong - 1));
         const failedRows = submittedRows.filter((_, index) => failedIndexes.has(index));
+        const failedRaw = pasteRawRows.filter((_, index) => failedIndexes.has(index));
         setPasteRows(failedRows); setPastePage(1);
-        setPasteText(failedRows.map((row) => [row.lenh_san_xuat, row.ma_vach, row.ma_hang, row.ten_hang,
-          row.so_luong, row.dvt, row.so_po || '', row.ma_khach_hang || '', row.ki_han_khach_hang || '',
-          row.muc_do_uu_tien || '', row.ghi_chu || ''].join('\t')).join('\n'));
-        setError(`Đã thêm ${result.so_dong} dòng hợp lệ; giữ lại ${result.co_loi} dòng lỗi để sửa và nhập lại. ${result.errors.map((item) => `Dòng ${item.dong} (${item.ma}): ${item.loi}`).join(' · ')}`);
-        onNotify(`Đã nạp ${result.so_dong} mã hàng; còn ${result.co_loi} dòng lỗi.`);
+        setPasteRawRows(failedRaw);
+        setPasteText([...parseErrors.map((item) => item.raw), ...failedRaw].join('\n'));
+        const remaining = result.co_loi + parseErrors.length;
+        setError(`Đã thêm ${result.so_dong} dòng hợp lệ; giữ lại ${remaining} dòng lỗi để sửa và nhập lại. ${result.errors.map((item) => `Dòng ${item.dong} (${item.ma}): ${item.loi}`).join(' · ')}`);
+        onNotify(`Đã nạp ${result.so_dong} mã hàng; còn ${remaining} dòng lỗi.`);
       } else {
-        setShowPaste(false); setPasteRows([]); setPasteText('');
+        setShowPaste(false); setPasteRows([]); setPasteRawRows([]); setParseErrors([]); setPasteText('');
         onNotify(`Đã nạp ${result.so_dong} mã hàng thuộc ${result.so_lsx} LSX.`);
       }
     }
@@ -328,8 +370,13 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
     if (!createLines.size) { setError('Hãy chọn ít nhất một mã hàng.'); return; }
     setLoading(true); setError('');
     try {
-      const result = await taoBaoGiaDatNgoai({ ma_vach: [...createLines], can_xac_nhan_ky_thuat: needsTechnical, noi_dung_ky_thuat: technicalNote || undefined });
+      const result = await taoBaoGiaDatNgoai({ ma_vach: [...createLines],
+        chi_tiet_dong: [...createLines].map((ma_vach) => ({ ma_vach,
+          noi_dung_gia_cong: processContent.trim(), yeu_cau_ky_thuat: technicalRequirements.trim(),
+          yeu_cau_chat_luong: qualityRequirements.trim() })),
+        can_xac_nhan_ky_thuat: needsTechnical, noi_dung_ky_thuat: technicalNote || undefined });
       setShowCreate(false); setCreateLsx(''); setCreateLines(new Set()); setNeedsTechnical(false); setTechnicalNote('');
+      setProcessContent(''); setTechnicalRequirements(''); setQualityRequirements('');
       await loadData(); onNotify(`Đã tạo ${result.so_phieu} phiếu đặt ngoài từ dữ liệu LSX.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không tạo được phiếu đặt ngoài.'); }
     finally { setLoading(false); }
@@ -344,7 +391,7 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
   const detailRequest = requests.find((item) => item.lenh_san_xuat === detailLsxId && item.trang_thai !== 'HUY')
     || requests.find((item) => item.lenh_san_xuat === detailLsxId);
   const technicalPermission = currentUser.quyen?.xac_nhan_kt as { sua?: boolean } | undefined;
-  const canConfirmTechnical = technicalPermission?.sua === true;
+  const canConfirmTechnical = technicalPermission?.sua === true || currentUser.vai_tro === 'QC';
   const outsourcePermission = currentUser.quyen?.dat_ngoai as { sua?: boolean } | undefined;
   const canCancelOutsource = outsourcePermission?.sua === true;
 
@@ -361,16 +408,16 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
       ['warning', 'TRỄ TIẾN ĐỘ / BÁO ĐỘNG', String(groups.filter((item) => item.danger).length), 'đơn', 'Cần đôn đốc tiến độ', true],
       ['fact_check', 'ĐÃ NHẬN / CHỜ HOÀN THÀNH', String(waitingReceipt), 'lô', 'Chờ xác nhận hoàn thành', false],
     ].map(([icon, title, value, unit, note, danger]) => <article key={String(title)} className={`bg-white border rounded p-4 ${danger ? 'border-[#F9B9BE] border-l-4 border-l-[#EE202E]' : 'border-[#DCE1EC]'}`}><div className={`flex justify-between text-[12px] font-bold ${danger ? 'text-[#C4141F]' : 'text-[#59627A]'}`}><span>{title}</span><span className="material-symbols-outlined">{icon}</span></div><div className="mt-2"><strong className={`font-mono text-[24px] ${danger ? 'text-[#C4141F]' : 'text-[#283A97]'}`}>{value}</strong> <span>{unit}</span></div><p className="mt-2 pt-2 border-t text-[12px] text-[#59627A]">{note}</p></article>)}</section>
-      <section className="bg-white border rounded p-3 space-y-3"><div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2"><label className="text-[11px] font-bold">TỪ NGÀY<input type="date" value={draftFilters.from} onChange={(event) => setDraftFilters({ ...draftFilters, from: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label><label className="text-[11px] font-bold">ĐẾN NGÀY<input type="date" value={draftFilters.to} onChange={(event) => setDraftFilters({ ...draftFilters, to: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label><label className="text-[11px] font-bold">XƯỞNG / BỘ PHẬN<select value={draftFilters.workshop} onChange={(event) => setDraftFilters({ ...draftFilters, workshop: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option>{[...new Set(groups.map((group) => group.workshop))].map((value) => <option key={value}>{value}</option>)}</select></label><label className="text-[11px] font-bold">NHÀ CUNG CẤP<select value={draftFilters.supplier} onChange={(event) => setDraftFilters({ ...draftFilters, supplier: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option>{[...new Set(groups.map((group) => group.supplier))].map((value) => <option key={value}>{value}</option>)}</select></label><label className="text-[11px] font-bold">TRẠNG THÁI<select value={draftFilters.status} onChange={(event) => setDraftFilters({ ...draftFilters, status: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option><option value="late">Đang trễ</option><option value="on-time">Trong hạn</option></select></label><label className="text-[11px] font-bold">TÌM LSX, MÃ HÀNG, PO<input value={draftFilters.query} onChange={(event) => setDraftFilters({ ...draftFilters, query: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label></div><div className="pt-2 border-t flex justify-between"><span className="text-[12px] text-[#59627A]">Hiển thị <strong>{visibleGroups.length} lệnh sản xuất</strong></span><div className="flex gap-2"><button onClick={() => { setDraftFilters(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); }} className="min-h-9 px-3 border rounded font-bold text-[11px]">XOÁ LỌC</button><button onClick={() => setFilters(draftFilters)} className="min-h-9 px-4 bg-[#283A97] text-white rounded font-bold text-[11px]">ÁP DỤNG LỌC</button></div></div></section>
-      <section className="bg-white border rounded overflow-hidden"><div className="p-3 bg-[#F4F6FA] border-b flex justify-between"><div><h2 className="font-bold text-[15px]">BẢNG TIẾN ĐỘ THEO LỆNH SẢN XUẤT</h2><span className="text-[12px] text-[#59627A]">Bấm mũi tên để bung/gập mã hàng gia công</span></div></div><div className="overflow-x-auto"><table className="w-full min-w-[1150px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['#', 'LỆNH SẢN XUẤT / NỘI DUNG', 'KHÁCH HÀNG', 'NHÀ CUNG CẤP', 'SỐ LƯỢNG / TIẾN ĐỘ', 'HẠN GIAO', 'TRẠNG THÁI', 'THAO TÁC'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{visibleGroups.flatMap((group) => { const parent = <tr key={group.id} className={`border-t align-top ${group.danger ? 'bg-[#FDECEE]/45 border-l-4 border-l-[#EE202E]' : ''}`}><td className="p-3"><button onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(group.id)) next.delete(group.id); else next.add(group.id); return next; })} className="w-8 h-8 border rounded"><span className={`material-symbols-outlined text-[17px] ${expanded.has(group.id) ? 'rotate-90' : ''}`}>chevron_right</span></button></td><td className="p-3"><div className="flex gap-2"><strong className="font-mono text-[#283A97]">#{group.id}</strong><StatusPill danger={group.danger}>{group.priority}</StatusPill></div><strong className="block mt-1">{group.title}</strong><span className="text-[11px] text-[#59627A]">{group.workshop} · Điều độ: {group.coordinator}</span></td><td className="p-3"><strong>{group.customer}</strong><span className="block font-mono text-[11px]">{group.po}</span></td><td className="p-3"><strong>{group.supplier}</strong></td><td className="p-3 text-center"><strong>{group.quantity}</strong><div className="h-1.5 mt-2 bg-[#DCE1EC] rounded-full"><div className="h-full bg-[#283A97]" style={{ width: `${group.progress}%` }} /></div><span className="text-[10px]">{group.progress}%</span></td><td className="p-3 text-center"><span>{group.due}</span><strong className={`block ${group.danger ? 'text-[#C4141F]' : 'text-[#283A97]'}`}>{group.timing}</strong></td><td className="p-3"><StatusPill danger={group.danger}>{group.status}</StatusPill><span className="block mt-1 text-[10px]">{group.note}</span></td><td className="p-3"><button onClick={() => setDetailLsxId(group.id)} className="min-h-8 px-3 border rounded font-bold text-[10px]">XEM CHI TIẾT</button></td></tr>; const children = expanded.has(group.id) ? group.lines.map((line) => <tr key={`${group.id}-${line.code}`} className="border-t bg-[#EEF0F9]/45"><td className="p-3 text-center">↳</td><td className="p-3"><strong className="font-mono text-[#283A97]">{line.code}</strong><span className="pill p-info ml-2 px-2 py-0.5 text-[9px]">{line.material}</span><span className="block mt-1">{line.name}</span></td><td /><td className="p-3">{line.process}</td><td className="p-3 text-center">{line.quantity}</td><td className="p-3 text-center">{line.timing}</td><td className="p-3"><StatusPill danger={line.danger}>{line.status}</StatusPill></td><td /></tr>) : []; return [parent, ...children]; })}</tbody></table></div></section><SupplierCards suppliers={suppliers} onNotify={onNotify} /></>}
+      <section className="bg-white border rounded p-3 space-y-3"><div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2"><label className="text-[11px] font-bold">TỪ NGÀY<input type="date" value={draftFilters.from} onChange={(event) => setDraftFilters({ ...draftFilters, from: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label><label className="text-[11px] font-bold">ĐẾN NGÀY<input type="date" value={draftFilters.to} onChange={(event) => setDraftFilters({ ...draftFilters, to: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label><label className="text-[11px] font-bold">XƯỞNG / BỘ PHẬN<select value={draftFilters.workshop} onChange={(event) => setDraftFilters({ ...draftFilters, workshop: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option>{[...new Set(groups.map((group) => group.workshop))].map((value) => <option key={value}>{value}</option>)}</select></label><label className="text-[11px] font-bold">NHÀ CUNG CẤP<select value={draftFilters.supplier} onChange={(event) => setDraftFilters({ ...draftFilters, supplier: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option>{[...new Set(groups.flatMap((group) => group.lines.map((line) => line.supplier)).filter((value) => value !== 'Chưa chọn'))].map((value) => <option key={value}>{value}</option>)}</select></label><label className="text-[11px] font-bold">TRẠNG THÁI<select value={draftFilters.status} onChange={(event) => setDraftFilters({ ...draftFilters, status: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded bg-white font-normal"><option value="">Tất cả</option><option value="late">Đang trễ</option><option value="on-time">Trong hạn</option></select></label><label className="text-[11px] font-bold">TÌM LSX, MÃ HÀNG, PO<input value={draftFilters.query} onChange={(event) => setDraftFilters({ ...draftFilters, query: event.target.value })} className="mt-1 w-full h-10 px-2 border rounded font-normal" /></label></div><div className="pt-2 border-t flex justify-between"><span className="text-[12px] text-[#59627A]">Hiển thị <strong>{visibleGroups.length} lệnh sản xuất</strong></span><div className="flex gap-2"><button onClick={() => { setDraftFilters(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); }} className="min-h-9 px-3 border rounded font-bold text-[11px]">XOÁ LỌC</button><button onClick={() => setFilters(draftFilters)} className="min-h-9 px-4 bg-[#283A97] text-white rounded font-bold text-[11px]">ÁP DỤNG LỌC</button></div></div></section>
+      <section className="bg-white border rounded overflow-hidden"><div className="p-3 bg-[#F4F6FA] border-b flex justify-between"><div><h2 className="font-bold text-[15px]">BẢNG TIẾN ĐỘ THEO LỆNH SẢN XUẤT</h2><span className="text-[12px] text-[#59627A]">Bấm mũi tên để bung/gập mã hàng gia công</span></div></div><div className="overflow-x-auto"><table className="w-full min-w-[1150px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['#', 'LỆNH SẢN XUẤT / NỘI DUNG', 'KHÁCH HÀNG', 'NHÀ CUNG CẤP THEO MÃ', 'SỐ LƯỢNG / TIẾN ĐỘ', 'HẠN GIAO', 'TRẠNG THÁI', 'THAO TÁC'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{visibleGroups.flatMap((group) => { const parent = <tr key={group.id} className={`border-t align-top ${group.danger ? 'bg-[#FDECEE]/45 border-l-4 border-l-[#EE202E]' : ''}`}><td className="p-3"><button onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(group.id)) next.delete(group.id); else next.add(group.id); return next; })} className="w-8 h-8 border rounded"><span className={`material-symbols-outlined text-[17px] ${expanded.has(group.id) ? 'rotate-90' : ''}`}>chevron_right</span></button></td><td className="p-3"><div className="flex gap-2"><strong className="font-mono text-[#283A97]">#{group.id}</strong><StatusPill danger={group.danger}>{group.priority}</StatusPill></div><strong className="block mt-1">{group.title}</strong><span className="text-[11px] text-[#59627A]">{group.workshop} · Điều độ: {group.coordinator}</span></td><td className="p-3"><strong>{group.customer}</strong><span className="block font-mono text-[11px]">{group.po}</span></td><td className="p-3"><strong>{group.supplier}</strong></td><td className="p-3 text-center"><strong>{group.quantity}</strong><div className="h-1.5 mt-2 bg-[#DCE1EC] rounded-full"><div className="h-full bg-[#283A97]" style={{ width: `${group.progress}%` }} /></div><span className="text-[10px]">{group.progress}%</span></td><td className="p-3 text-center"><span>{group.due}</span><strong className={`block ${group.danger ? 'text-[#C4141F]' : 'text-[#283A97]'}`}>{group.timing}</strong></td><td className="p-3"><StatusPill danger={group.danger}>{group.status}</StatusPill><span className="block mt-1 text-[10px]">{group.note}</span></td><td className="p-3"><button onClick={() => setDetailLsxId(group.id)} className="min-h-8 px-3 border rounded font-bold text-[10px]">XEM CHI TIẾT</button></td></tr>; const children = expanded.has(group.id) ? group.lines.map((line) => <tr key={`${group.id}-${line.code}`} className="border-t bg-[#EEF0F9]/45"><td className="p-3 text-center">↳</td><td className="p-3"><strong className="font-mono text-[#283A97]">{line.code}</strong><span className="pill p-info ml-2 px-2 py-0.5 text-[9px]">{line.material}</span><span className="block mt-1">{line.name}</span></td><td /><td className="p-3">{line.supplier}</td><td className="p-3 text-center">{line.quantity}</td><td className="p-3 text-center">{line.timing}</td><td className="p-3"><StatusPill danger={line.danger}>{line.status}</StatusPill></td><td /></tr>) : []; return [parent, ...children]; })}</tbody></table></div></section><SupplierCards suppliers={suppliers} onNotify={onNotify} /></>}
 
     {tab === 'tickets' && <TicketTable requests={requests} onView={setDetailLsxId} />}
     {tab === 'quotes' && <QuoteTable requests={quoteRequests} onView={setDetailLsxId} />}
     {tab === 'orders' && <OrderTable requests={placedOrders} onView={setDetailLsxId} />}
     {tab === 'suppliers' && <SupplierCards suppliers={suppliers} onNotify={onNotify} />}
 
-    {showPaste && <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-3"><div className="bg-white w-full max-w-6xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">NẠP LSX VÀ MÃ HÀNG TỪ EXCEL</h2><p className="mt-1 text-[12px] text-[#59627A]">Hỗ trợ trực tiếp bố cục file GCKC-2-T7 và mẫu 11 cột rút gọn.</p></div><button onClick={() => setShowPaste(false)} disabled={loading} className="w-10 h-10 disabled:opacity-40"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-3"><div className="p-3 bg-[#EEF0F9] text-[12px] rounded"><strong>File GCKC-2-T7:</strong> copy từ hàng tiêu đề “Chứng từ” đến hết dữ liệu rồi dán vào đây. Hệ thống tự lấy A Chứng từ · G Mã vạch · E Mã hàng · F Nội dung · I Số lượng · J ĐVT · C Số PO · D Khách hàng · B Ngày chứng từ · K Dự kiến giao hàng · N Tình trạng · AL Công đoạn.</div>{error && <div role="alert" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{error}</div>}<textarea value={pasteText} onChange={(event) => { setPasteText(event.target.value); setPasteRows([]); setPastePage(1); setError(''); }} rows={8} className="w-full p-3 border rounded font-mono text-[12px]" placeholder={'Dán nguyên vùng dữ liệu từ file GCKC-2-T7, gồm cả 2 hàng tiêu đề...'} />{pasteRows.length > 0 && <Pagination total={pasteRows.length} page={currentPastePage} pageSize={pastePageSize} onPageChange={setPastePage} onPageSizeChange={(size) => { setPastePageSize(size); setPastePage(1); }} />}{pasteRows.length > 0 && <div className="overflow-x-auto border rounded"><table className="w-full min-w-[950px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['LSX', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'SL', 'ĐVT', 'PO / KH', 'NGÀY NHẬN', 'HẠN GIAO', 'TÌNH TRẠNG'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{visiblePasteRows.map((row) => <tr key={row.ma_vach} className="border-t"><td className="p-3 font-mono font-bold">{row.lenh_san_xuat}</td><td className="p-3 font-mono">{row.ma_vach}</td><td className="p-3 font-mono">{row.ma_hang}</td><td className="p-3">{row.ten_hang}</td><td className="p-3">{row.so_luong}</td><td className="p-3">{row.dvt}</td><td className="p-3">{row.so_po || '—'} / {row.ten_khach_hang_chup || row.ma_khach_hang || '—'}</td><td className="p-3">{displayDate(row.ngay_nhan_lenh)}</td><td className="p-3">{displayDate(row.ki_han_khach_hang)}</td><td className="p-3">{row.trang_thai_don || '—'}</td></tr>)}</tbody></table></div>}</div><footer className="p-4 border-t flex justify-end gap-2"><button onClick={() => setShowPaste(false)} disabled={loading} className="min-h-11 px-4 border rounded font-bold disabled:opacity-40">HỦY</button><button onClick={previewPaste} disabled={loading} className="min-h-11 px-4 border border-[#283A97] text-[#283A97] rounded font-bold disabled:opacity-40">ĐỌC & XEM TRƯỚC</button><button disabled={!pasteRows.length || loading} onClick={() => void importRows()} className="min-h-11 px-4 bg-[#283A97] text-white rounded font-bold disabled:opacity-40">{loading ? 'ĐANG LƯU…' : `NẠP ${pasteRows.length || ''} DÒNG`}</button></footer></div></div>}
-    {showCreate && <CreateRequestModal imported={imported} selectedOrder={selectedCreateOrder} createLsx={createLsx} createLines={createLines} needsTechnical={needsTechnical} technicalNote={technicalNote} loading={loading} onSelectLsx={(value) => { setCreateLsx(value); setCreateLines(new Set()); }} onToggleLine={(barcode) => setCreateLines((current) => { const next = new Set(current); if (next.has(barcode)) next.delete(barcode); else next.add(barcode); return next; })} onNeedsTechnical={setNeedsTechnical} onTechnicalNote={setTechnicalNote} onClose={() => setShowCreate(false)} onSubmit={submitCreate} />}
+    {showPaste && <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-3"><div className="bg-white w-full max-w-6xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">NẠP LSX VÀ MÃ HÀNG TỪ EXCEL</h2><p className="mt-1 text-[12px] text-[#59627A]">Hỗ trợ trực tiếp bố cục file GCKC-2-T7 và mẫu 11 cột rút gọn.</p></div><button onClick={() => setShowPaste(false)} disabled={loading} className="w-10 h-10 disabled:opacity-40"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-3"><div className="p-3 bg-[#EEF0F9] text-[12px] rounded"><strong>File GCKC-2-T7:</strong> copy từ hàng tiêu đề “Chứng từ” đến hết dữ liệu rồi dán vào đây. Hệ thống tự lấy A Chứng từ · G Mã vạch · E Mã hàng · F Nội dung · I Số lượng · J ĐVT · C Số PO · D Khách hàng · B Ngày chứng từ · K Dự kiến giao hàng · N Tình trạng.</div>{error && <div role="alert" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{error}</div>}<textarea value={pasteText} onChange={(event) => { setPasteText(event.target.value); setPasteRows([]); setPastePage(1); setError(''); }} rows={8} className="w-full p-3 border rounded font-mono text-[12px]" placeholder={'Dán nguyên vùng dữ liệu từ file GCKC-2-T7, gồm cả 2 hàng tiêu đề...'} />{pasteRows.length > 0 && <Pagination total={pasteRows.length} page={currentPastePage} pageSize={pastePageSize} onPageChange={setPastePage} onPageSizeChange={(size) => { setPastePageSize(size); setPastePage(1); }} />}{pasteRows.length > 0 && <div className="overflow-x-auto border rounded"><table className="w-full min-w-[950px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['LSX', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'SL', 'ĐVT', 'PO / KH', 'NGÀY NHẬN', 'HẠN GIAO', 'TÌNH TRẠNG'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{visiblePasteRows.map((row) => <tr key={row.ma_vach} className="border-t"><td className="p-3 font-mono font-bold">{row.lenh_san_xuat}</td><td className="p-3 font-mono">{row.ma_vach}</td><td className="p-3 font-mono">{row.ma_hang}</td><td className="p-3">{row.ten_hang}</td><td className="p-3">{row.so_luong}</td><td className="p-3">{row.dvt}</td><td className="p-3">{row.so_po || '—'} / {row.ten_khach_hang_chup || row.ma_khach_hang || '—'}</td><td className="p-3">{displayDate(row.ngay_nhan_lenh)}</td><td className="p-3">{displayDate(row.ki_han_khach_hang)}</td><td className="p-3">{row.trang_thai_don || '—'}</td></tr>)}</tbody></table></div>}</div><footer className="p-4 border-t flex justify-end gap-2"><button onClick={() => setShowPaste(false)} disabled={loading} className="min-h-11 px-4 border rounded font-bold disabled:opacity-40">HỦY</button><button onClick={previewPaste} disabled={loading} className="min-h-11 px-4 border border-[#283A97] text-[#283A97] rounded font-bold disabled:opacity-40">ĐỌC & XEM TRƯỚC</button><button disabled={!pasteRows.length || loading} onClick={() => void importRows()} className="min-h-11 px-4 bg-[#283A97] text-white rounded font-bold disabled:opacity-40">{loading ? 'ĐANG LƯU…' : `NẠP ${pasteRows.length || ''} DÒNG`}</button></footer></div></div>}
+    {showCreate && <CreateRequestModal imported={imported} selectedOrder={selectedCreateOrder} createLsx={createLsx} createLines={createLines} needsTechnical={needsTechnical} technicalNote={technicalNote} processContent={processContent} technicalRequirements={technicalRequirements} qualityRequirements={qualityRequirements} loading={loading} onSelectLsx={(value) => { setCreateLsx(value); setCreateLines(new Set()); }} onToggleLine={(barcode) => setCreateLines((current) => { const next = new Set(current); if (next.has(barcode)) next.delete(barcode); else next.add(barcode); return next; })} onNeedsTechnical={setNeedsTechnical} onTechnicalNote={setTechnicalNote} onProcessContent={setProcessContent} onTechnicalRequirements={setTechnicalRequirements} onQualityRequirements={setQualityRequirements} onClose={() => setShowCreate(false)} onSubmit={submitCreate} />}
     {detailLsx && <OutsourceDetailModal key={`${detailLsx.lenh_san_xuat}-${detailRequest?.id || 'lsx'}`} lsx={detailLsx} request={detailRequest} canConfirmTechnical={canConfirmTechnical} canCancel={canCancelOutsource} canChooseSupplier={canCancelOutsource} suppliers={suppliers} onRequestChanged={loadData} onNotify={onNotify} onClose={() => setDetailLsxId(null)} />}
   </div>;
 }

@@ -12,6 +12,9 @@ def _dong_bo_khoi_tao(conn, tien_to: str, nam: int) -> None:
     bang_va_cot = {
         "DN": ("de_nghi", "id"),
         "DND": ("de_nghi_dong", "id"),
+        "DNKT": ("dat_ngoai_xac_nhan_kt", "id"),
+        "DNGH": ("dat_ngoai_lich_su_ky_han", "id"),
+        "DNGG": ("dat_ngoai_dot_giao", "id"),
     }
     if tien_to not in bang_va_cot:
         return

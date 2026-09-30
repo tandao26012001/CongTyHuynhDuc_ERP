@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { OutsourceQuotePanel } from './OutsourceQuotePanel';
-import { chonNhaCungCapDatNgoai, chuyenTrangThaiDatNgoai, LsxDatNgoai, NhaCungCapDanhMuc, PhieuDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
+import { FormEvent, useMemo, useState } from 'react';
+import { OutsourceLineDetails } from './OutsourceLineDetails';
+import { HoSoTuongTacPanel } from './HoSoTuongTacPanel';
+import { chuyenTrangThaiDatNgoai, LsxDatNgoai, NhaCungCapDanhMuc, PhieuDatNgoai, xacNhanKyThuatDatNgoai } from '../api/client';
 
 const STATUS_LABELS: Record<string, string> = {
   CHO_XAC_NHAN_KY_THUAT: 'Chờ xác nhận kỹ thuật',
@@ -56,7 +57,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
   const [actionError, setActionError] = useState('');
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [selectedSupplier, setSelectedSupplier] = useState(request?.id_ncc || '');
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const requestLines = useMemo(
     () => new Map((request?.dong || []).map((line) => [line.ma_vach, line])),
     [request],
@@ -67,7 +68,8 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
   const from = lsx.dong.length ? (currentPage - 1) * pageSize + 1 : 0;
   const to = Math.min(currentPage * pageSize, lsx.dong.length);
 
-  useEffect(() => setSelectedSupplier(request?.id_ncc || ''), [request?.id_ncc]);
+  const supplierSummary = [...new Set((request?.dong || []).map((line) => line.ten_ncc_chup).filter(Boolean))].join(', ')
+    || request?.ten_ncc_chup || 'Chưa chọn theo mã';
 
   async function confirmTechnical() {
     if (!request || confirming) return;
@@ -97,21 +99,6 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
       setCancelReason('');
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Không hủy được phiếu.');
-    } finally {
-      setConfirming(false);
-    }
-  }
-
-  async function saveSupplier() {
-    if (!request || !selectedSupplier || confirming) return;
-    setConfirming(true);
-    setActionError('');
-    try {
-      await chonNhaCungCapDatNgoai(request, selectedSupplier);
-      await onRequestChanged?.();
-      onNotify?.(`Đã lưu nhà cung cấp cho phiếu ${request.id}.`);
-    } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : 'Không lưu được nhà cung cấp.');
     } finally {
       setConfirming(false);
     }
@@ -155,11 +142,11 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Info label="SỐ PHIẾU" value={request.id} mono />
               <Info label="TRẠNG THÁI" value={statusLabel(request.trang_thai)} />
-              <Info label="NHÀ CUNG CẤP" value={request.ten_ncc_chup || 'Chưa chọn'} />
+              <Info label="NHÀ CUNG CẤP THEO MÃ" value={supplierSummary} />
               <Info label="TỔNG GIÁ TRỊ" value={money(request.tong_gia_tri)} mono />
               <Info label="NGƯỜI LẬP" value={request.nguoi_lap || '—'} />
               <Info label="NGÀY LẬP" value={displayDate(request.ngay_lap)} mono />
-              <Info label="KỲ HẠN" value={displayDate(request.ky_han)} mono />
+              <Info label="HẠN GIAO SỚM NHẤT" value={displayDate(request.ky_han)} mono />
               <Info label="PHIÊN BẢN" value={String(request.phien_ban)} mono />
             </div>
             {(request.can_xac_nhan_ky_thuat || request.noi_dung_ky_thuat || request.ghi_chu) && <div className="mt-3 grid md:grid-cols-2 gap-3 text-[13px]">
@@ -169,18 +156,6 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
           </>}
         </section>
 
-        {canChooseSupplier && request?.trang_thai === 'DANG_BAO_GIA' && <section className="p-4 border border-[#DCE1EC] rounded bg-white">
-          <h3 className="font-bold text-[14px]">CHỌN NHÀ CUNG CẤP GIA CÔNG</h3>
-          <p className="mt-1 text-[12px] text-[#59627A]">Chọn và lưu NCC gia công, sau đó nhập báo giá ngay bên dưới.</p>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="min-w-64 flex-1 text-[12px] font-bold">NHÀ CUNG CẤP *<select value={selectedSupplier} onChange={(event) => setSelectedSupplier(event.target.value)} className="mt-1 w-full min-h-11 px-3 border rounded bg-white font-normal"><option value="">-- Chọn NCC gia công --</option>{suppliers.map((item) => <option key={item.ma} value={item.ma}>{item.ma_ncc} · {item.ten}{item.da_phe_duyet ? '' : ' · Chưa phê duyệt'}</option>)}</select></label>
-            <button type="button" disabled={!selectedSupplier || confirming || selectedSupplier === request.id_ncc} onClick={() => void saveSupplier()} className="min-h-11 px-5 rounded bg-[#283A97] text-white font-bold disabled:opacity-50">{confirming ? 'ĐANG LƯU…' : 'LƯU NHÀ CUNG CẤP'}</button>
-          </div>
-          {suppliers.length === 0 && <p className="mt-2 text-[12px] text-[#C4141F]">Không tải được NCC gia công đang hoạt động. Kiểm tra danh mục NCC.</p>}
-        </section>}
-
-        {request && <OutsourceQuotePanel key={`${request.id}-${request.phien_ban}`} request={request} canEdit={canChooseSupplier} onChanged={onRequestChanged} onNotify={onNotify} />}
-
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="font-bold text-[15px]">DANH SÁCH MÃ HÀNG</h3><span className="text-[12px] text-[#59627A]">Hiển thị {from}–{to} / {lsx.dong.length} dòng</span></div>
@@ -188,10 +163,24 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
           </div>
           <div className="border rounded overflow-x-auto">
             <table className="w-full min-w-[1250px] text-[12px]">
-              <thead className="bg-[#F4F6FA]"><tr>{['STT', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'BẢN VẼ', 'CÔNG ĐOẠN', 'SL / ĐVT', 'ĐƠN GIÁ', 'THÀNH TIỀN', 'KỲ HẠN', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead>
-              <tbody>{visibleLines.map((line, index) => { const quoteLine = requestLines.get(line.ma_vach); return <tr key={line.ma_vach} className="border-t align-top"><td className="p-3 font-mono">{(currentPage - 1) * pageSize + index + 1}</td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold text-[#283A97]">{line.ma_hang}</td><td className="p-3 min-w-56">{line.ten_hang}<span className="block text-[10px] text-[#59627A]">{line.ghi_chu || ''}</span></td><td className="p-3 font-mono">{line.ma_ban_ve || '—'}</td><td className="p-3">{line.ma_cong_doan || '—'}</td><td className="p-3 font-mono">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td><td className="p-3 font-mono">{money(quoteLine?.don_gia)}</td><td className="p-3 font-mono font-bold">{quoteLine?.don_gia == null ? '—' : money(Number(line.so_luong) * Number(quoteLine.don_gia))}</td><td className="p-3 font-mono">{displayDate(quoteLine?.ky_han || request?.ky_han)}</td><td className="p-3"><span className="pill p-info px-2 py-1 text-[10px]">{statusLabel(quoteLine?.trang_thai || request?.trang_thai)}</span></td></tr>; })}</tbody>
+              <thead className="bg-[#F4F6FA]"><tr>{['STT', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'BẢN VẼ', 'NHÀ CUNG CẤP', 'SL / ĐVT', 'ĐƠN GIÁ', 'THÀNH TIỀN', 'KỲ HẠN', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead>
+              <tbody>{visibleLines.map((line, index) => { const quoteLine = requestLines.get(line.ma_vach); return <tr key={line.ma_vach} className="border-t align-top"><td className="p-3 font-mono">{(currentPage - 1) * pageSize + index + 1}</td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold text-[#283A97]">{quoteLine ? <button type="button" onClick={() => setSelectedLineId(quoteLine.id)} className="underline">{line.ma_hang}</button> : line.ma_hang}</td><td className="p-3 min-w-56">{line.ten_hang}<span className="block text-[10px] text-[#59627A]">{line.ghi_chu || ''}</span></td><td className="p-3 font-mono">{line.ma_ban_ve || '—'}</td><td className="p-3">{quoteLine?.ten_ncc_chup || '—'}</td><td className="p-3 font-mono">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td><td className="p-3 font-mono">{money(quoteLine?.don_gia)}</td><td className="p-3 font-mono font-bold">{quoteLine?.don_gia == null ? '—' : money(Number(line.so_luong) * Number(quoteLine.don_gia))}</td><td className="p-3 font-mono">{displayDate(quoteLine?.ky_han || request?.ky_han)}</td><td className="p-3"><span className="pill p-info px-2 py-1 text-[10px]">{statusLabel(quoteLine?.trang_thai || request?.trang_thai)}</span></td></tr>; })}</tbody>
             </table>
           </div>
+          {request && selectedLineId && request.dong.find((item) => item.id === selectedLineId) && <OutsourceLineDetails
+            key={`${request.id}-${selectedLineId}`}
+            idPhieu={request.id}
+            idDong={selectedLineId}
+            request={request}
+            quoteLine={request.dong.find((item) => item.id === selectedLineId)!}
+            suppliers={suppliers}
+            canQuote={canChooseSupplier}
+            onRequestChanged={onRequestChanged}
+            onNotify={onNotify}
+            canEdit={canCancel}
+            canConfirm={canConfirmTechnical || canCancel}
+          />}
+        {request && <HoSoTuongTacPanel loai="dat-ngoai" id={request.id} canEdit={canCancel} />}
           {totalPages > 1 && <div className="mt-3 flex items-center justify-end gap-2 text-[12px]"><button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="h-10 px-3 border rounded disabled:opacity-40">TRƯỚC</button><strong>Trang {currentPage}/{totalPages}</strong><button type="button" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="h-10 px-3 border rounded disabled:opacity-40">SAU</button></div>}
         </section>
 

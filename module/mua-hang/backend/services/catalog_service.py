@@ -11,6 +11,7 @@ from psycopg.errors import CheckViolation, ForeignKeyViolation, NotNullViolation
 
 from backend.data import catalog_repo
 from backend.services.errors import KhongTimThay, LoiNghiepVu, ThieuDuLieu, XungDot
+from backend.services.lich_lam_viec import now_vn
 
 DANH_MUC = {
     "don-vi-tinh": "Đơn vị tính",
@@ -714,11 +715,20 @@ def cap_nhat_vat_tu(id_vat_tu: str, du_lieu: dict, phien_ban: int, nguoi_sua: st
     return {"da_luu": True, "item": dict(row), "canh_bao_trung": canh_bao}
 
 
-def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str, xac_nhan_trung=False) -> dict:
-    cu = _ket_qua_cu(tai_khoan, khoa, "POST:/api/v1/nha-cung-cap")
+def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str, xac_nhan_trung=False,
+                     duong_dan="POST:/api/v1/nha-cung-cap") -> dict:
+    cu = _ket_qua_cu(tai_khoan, khoa, duong_dan)
     if cu is not None:
         return cu
     chuan = _chuan_ncc(du_lieu)
+    if du_lieu.get("trang_thai_xet_duyet") == "DE_XUAT":
+        chuan["trang_thai_xet_duyet"] = "DE_XUAT"
+        chuan["nguoi_de_xuat"] = nguoi_tao
+        chuan["ngay_de_xuat"] = now_vn()
+    else:
+        chuan['trang_thai_xet_duyet'] = 'DA_DUYET'
+        chuan['nguoi_duyet'] = nguoi_tao
+        chuan['ngay_duyet'] = now_vn()
     trung = kiem_tra_trung_nha_cung_cap(chuan)
     chan, canh_bao = _tach_trung(trung, "nha-cung-cap")
     if chan:
@@ -726,7 +736,7 @@ def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str, x
     if canh_bao and not xac_nhan_trung:
         return {"da_luu": False, "can_xac_nhan": True, "canh_bao_trung": canh_bao}
     try:
-        result = catalog_repo.tao_nha_cung_cap(chuan, nguoi_tao, tai_khoan, khoa)
+        result = catalog_repo.tao_nha_cung_cap(chuan, nguoi_tao, tai_khoan, khoa, duong_dan)
         result["canh_bao_trung"] = canh_bao
         return result
     except (UniqueViolation, ForeignKeyViolation, CheckViolation, NotNullViolation) as exc:

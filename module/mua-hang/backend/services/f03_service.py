@@ -134,6 +134,47 @@ def chon_bao_gia(id_bao_gia, ly_do_chon, phien_ban, ho_so):
             count = repo.dem_bao_gia_cua_dong(conn, line["id_de_nghi_dong"])
             if count < 2 and not bg["mien_tru_2_bao_gia"]:
                 raise LoiNghiepVu(f"Dong {line['id_de_nghi_dong']} chua du 2 bao gia.", "BG01_CHUA_DU_BAO_GIA")
+            rating = conn.execute(
+                """SELECT dg.xep_loai FROM de_nghi_dong d
+                   JOIN vat_tu v ON v.id=coalesce(d.id_vt_duyet_mua,d.id_vt_de_nghi)
+                   JOIN mat_hang_ncc m ON m.ma_vat_tu=v.ma_vat_tu AND m.id_ncc=%s
+                   JOIN danh_gia_ncc dg ON dg.id_mat_hang_ncc=m.id
+                   WHERE d.id=%s AND dg.trang_thai_duyet='DA_DUYET'
+                   ORDER BY dg.ngay_danh_gia DESC,dg.ngay_duyet DESC LIMIT 1""",
+                (bg['id_ncc'], line['id_de_nghi_dong']),
+            ).fetchone()
+            if rating and rating['xep_loai'] == 'KHONG_CHON':
+                raise LoiNghiepVu('BM06 đã duyệt kết luận Không chọn cho mặt hàng này.',
+                                   'NCC_KHONG_CHON_MAT_HANG')
+            if rating and rating['xep_loai'] == 'DU_PHONG' and not str(ly_do_chon or '').strip():
+                raise ThieuDuLieu('NCC dự phòng: cần ghi lý do vẫn chọn báo giá.',
+                                  'NCC_DU_PHONG_CAN_LY_DO')
+        cap = conn.execute('SELECT dinh_muc_thang,ten FROM nha_cung_cap WHERE id=%s',
+                           (bg['id_ncc'],)).fetchone()
+        if cap and cap['dinh_muc_thang'] is not None:
+            used = conn.execute(
+                """SELECT
+                     (SELECT coalesce(sum(d.don_gia_co_so * CASE WHEN d.don_vi_gia='PCS'
+                          THEN d.so_luong ELSE d.trong_luong END),0)
+                      FROM don_hang o JOIN don_hang_dong d ON d.id_don_hang=o.id
+                      WHERE o.id_ncc=%s AND o.ngay_dat>=date_trunc('month',current_date)::date
+                        AND o.ngay_dat<(date_trunc('month',current_date)+interval '1 month')::date
+                        AND o.ngay_duyet IS NOT NULL AND o.trang_thai<>'HUY')
+                    + (SELECT coalesce(sum(d.so_luong*d.don_gia),0)
+                       FROM dat_ngoai o JOIN dat_ngoai_dong d ON d.id_dat_ngoai=o.id
+                       WHERE d.id_ncc=%s AND o.ngay_dat>=date_trunc('month',current_date)
+                         AND o.ngay_dat<date_trunc('month',current_date)+interval '1 month'
+                         AND o.trang_thai<>'HUY') AS total""",
+                (bg['id_ncc'], bg['id_ncc']),
+            ).fetchone()['total']
+            proposed = sum((Decimal(str(line['don_gia_co_so'])) *
+                            Decimal(str(line['so_luong'] if line['don_vi_gia']=='PCS'
+                                        else line['trong_luong'])) for line in lines), Decimal(0))
+            if Decimal(used) + proposed > Decimal(cap['dinh_muc_thang']) and not str(ly_do_chon or '').strip():
+                raise ThieuDuLieu(
+                    f"{cap['ten']} đã đặt {used:,.0f} VND tháng này; báo giá này {proposed:,.0f} VND "
+                    f"vượt định mức {cap['dinh_muc_thang']:,.0f} VND. Ghi lý do để tiếp tục.",
+                    'NCC_VUOT_DINH_MUC_CAN_LY_DO')
         if not ly_do_chon or not ly_do_chon.strip():
             # So sanh tong gia cac bao gia co cung tap dong.
             alternatives = conn.execute("SELECT b.id FROM bao_gia b JOIN bao_gia_dong bd ON bd.id_bao_gia=b.id WHERE bd.id_de_nghi_dong=ANY(%s) GROUP BY b.id", ([line["id_de_nghi_dong"] for line in lines],)).fetchall()

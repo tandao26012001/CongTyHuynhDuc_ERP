@@ -40,7 +40,7 @@
 | `cong_viec` | Giao việc · việc của tôi | F04 |
 | `giao_nhan` | Nhận hàng · IQC · hàng không phù hợp | F05 |
 | `dat_ngoai` | Đặt ngoài | F06 |
-| `dieu_xe` | Yêu cầu điều xe · lịch điều xe | F07 |
+| `dieu_xe` | Đã chuyển sang hệ thống Kho vận; không cấp quyền/màn hình tại Mua hàng | — |
 | `thanh_toan` | Yêu cầu thanh toán · bàn giao chứng từ | F08 |
 | `ncc` | Danh mục & đánh giá nhà cung cấp | F09 |
 | `danh_muc` | Dữ liệu gốc: vật tư · ĐVT · chủng loại · xe | F10 |
@@ -77,11 +77,13 @@ Bốn chiều: **XEM · SỬA · DUYỆT · XUẤT** + **PHẠM VI**.
 
 | Dữ liệu | Mức | Vai trò được xem |
 |---|---|---|
-| `DON_GIA`, `THANH_TIEN`, `TONG_TIEN` trên chứng từ | Hạn chế | `QUAN_TRI_*` · `BAN_LANH_DAO` · `TBP_MUA_HANG` · `NV_MUA_HANG` · `KE_TOAN` |
-| Bảng giá NCC, chiết khấu, điều khoản thương mại | **Tối mật** | `QUAN_TRI_NGHIEP_VU` · `BAN_LANH_DAO` · `TBP_MUA_HANG` |
+| `DON_GIA`, `THANH_TIEN`, `TONG_TIEN` trên chứng từ (`gia_giao_dich`) | Hạn chế; quyền `xem` riêng | `QUAN_TRI_KY_THUAT` · `QUAN_TRI_NGHIEP_VU` · `BAN_LANH_DAO` · `TBP_MUA_HANG` · `NV_MUA_HANG` · `KE_TOAN` |
+| Định mức tháng và bảng giá NCC (`gia_ncc`) | **Tối mật**; quyền `xem` riêng | `QUAN_TRI_NGHIEP_VU` · `BAN_LANH_DAO` · `TBP_MUA_HANG` |
 | Quyền **xuất file hàng loạt** | — | `QUAN_TRI_*` · `TBP_MUA_HANG` · `KE_TOAN` (chỉ phần thanh toán) |
 
 **Ẩn ở backend, không chỉ ẩn ở giao diện.** Vai trò không có quyền thì API **không trả về** các trường này, chứ không phải trả về rồi frontend ẩn đi.
+
+Hai trang quyền `gia_giao_dich` và `gia_ncc` được seed riêng bằng migration `051`; không suy ra quyền xem giá chỉ từ quyền xem báo cáo/NCC. Điều xe thuộc hệ Kho vận; Mua hàng chỉ giữ luồng xuất lịch sử để bàn giao, không tạo phiếu hoặc điều phối xe.
 
 ```python
 def loc_truong_nhay_cam(ban_ghi: dict, ho_so) -> dict:

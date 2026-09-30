@@ -16,6 +16,16 @@ def kiem_quyen(ho_so: dict, trang: str, hanh_dong: str, conn=None) -> str:
     return quyen["pham_vi"]
 
 
+def co_quyen_xem_gia(ho_so: dict, loai: str = "giao_dich") -> bool:
+    if loai not in ("giao_dich", "ncc"):
+        raise ValueError("Loai gia khong hop le")
+    try:
+        kiem_quyen(ho_so, f"gia_{loai}", "xem")
+        return True
+    except KhongCoQuyen:
+        return False
+
+
 def danh_sach_tai_khoan(trang: int, kich_thuoc: int, tu_khoa: str = "", trang_thai: str = "") -> dict:
     kich_thuoc = min(max(kich_thuoc, 1), 100)
     trang = max(trang, 1)
@@ -42,6 +52,8 @@ def danh_sach_vai_tro_va_quyen() -> dict:
 
 
 def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguoi_sua: str) -> dict:
+    if trang == "dieu_xe":
+        raise ThieuDuLieu("Điều xe đã chuyển sang Hệ thống Kho vận.", "DIEU_XE_DA_CHUYEN")
     if du_lieu["pham_vi"] not in ("toan_bo", "bo_phan", "ca_nhan"):
         raise ThieuDuLieu("Phạm vi quyền không hợp lệ")
     if any(du_lieu[key] for key in ("duoc_sua", "duoc_duyet", "duoc_xuat")):

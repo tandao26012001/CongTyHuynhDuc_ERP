@@ -62,3 +62,6 @@ Các module thêm sau phải đi qua cùng hợp đồng này: chưa có phiên 
 backend. Việc ẩn màn hình phía frontend không thay thế kiểm tra quyền. Khi triển
 khai nhiều module trên web, cần phục vụ chúng dưới cùng origin hoặc bổ sung cơ chế
 chuyển phiên an toàn; `sessionStorage` không tự chia sẻ giữa các origin khác nhau.
+
+Khởi động backend
+.\.venv\Scripts\python.exe .\module\mua-hang\run.py

@@ -8,9 +8,10 @@ import {
 const PAGE_LABELS: Record<string, string> = {
   home: 'Tổng quan', de_nghi: 'Đề nghị', xac_nhan_kt: 'Xác nhận kỹ thuật',
   bao_gia: 'Báo giá', don_hang: 'Đơn hàng', cong_viec: 'Giao việc',
-  giao_nhan: 'Giao nhận', dat_ngoai: 'Đặt ngoài', dieu_xe: 'Điều xe',
+  giao_nhan: 'Giao nhận', dat_ngoai: 'Đặt ngoài',
   thanh_toan: 'Thanh toán', ncc: 'Nhà cung cấp', danh_muc: 'Dữ liệu gốc',
   bao_cao: 'Báo cáo', tien_ich: 'Tiện ích', quan_tri: 'Quản trị hệ thống',
+  gia_giao_dich: 'Giá trị giao dịch', gia_ncc: 'Bảng giá nhà cung cấp',
 };
 
 const STATUS_LABELS: Record<string, string> = {

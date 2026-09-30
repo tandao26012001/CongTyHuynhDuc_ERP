@@ -12,6 +12,9 @@ from backend.api.routes.auth import router as auth_router
 from backend.api.routes.danh_muc import router as danh_muc_router
 from backend.api.routes.de_nghi import router as de_nghi_router
 from backend.api.routes.dat_ngoai import router as dat_ngoai_router
+from backend.api.routes.mat_hang_ncc import router as mat_hang_ncc_router
+from backend.api.routes.bao_cao_f2 import router as bao_cao_f2_router
+from backend.api.routes.tuong_tac_ho_so import router as tuong_tac_ho_so_router
 from backend.config.settings import APP_NAME, API_PREFIX
 from backend.api.routes.health import router as health_router
 from backend.api.routes.quan_tri import router as quan_tri_router
@@ -54,3 +57,6 @@ app.include_router(quan_tri_router, prefix=API_PREFIX, tags=["quản trị"])
 app.include_router(danh_muc_router, prefix=API_PREFIX, tags=["danh mục"])
 app.include_router(de_nghi_router, prefix=API_PREFIX, tags=["đề nghị"])
 app.include_router(dat_ngoai_router, prefix=API_PREFIX, tags=["đặt ngoài"])
+app.include_router(mat_hang_ncc_router, prefix=API_PREFIX, tags=["nhà cung cấp"])
+app.include_router(bao_cao_f2_router, prefix=API_PREFIX, tags=["báo cáo"])
+app.include_router(tuong_tac_ho_so_router, prefix=API_PREFIX, tags=["trao đổi và tệp hồ sơ"])

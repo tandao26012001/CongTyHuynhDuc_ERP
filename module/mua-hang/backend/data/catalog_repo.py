@@ -599,7 +599,7 @@ def danh_sach_nha_cung_cap(offset: int, limit: int):
             items = conn.execute(
                 """SELECT id ma,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,email,
                           la_ncc_mua_hang,la_ncc_gia_cong,da_phe_duyet,ngay_phe_duyet,
-                          trang_thai,ghi_chu,phien_ban
+                          trang_thai,trang_thai_xet_duyet,ghi_chu,phien_ban
                    FROM nha_cung_cap ORDER BY ten,id OFFSET %s LIMIT %s""",
                 (offset, limit),
             ).fetchall()
@@ -1267,6 +1267,8 @@ def _tao_nha_cung_cap(conn, du_lieu: dict, nguoi_tao: str):
         "fax", "email", "mat_hang", "la_ncc_mua_hang", "la_ncc_gia_cong", "co_hoa_don",
         "cong_no", "tien_mat", "nganh_nghe", "ma_loai_gia_cong", "vung", "so_km",
         "ky_han_quy_dinh", "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
+        "trang_thai_xet_duyet",
+        *(["nguoi_de_xuat", "ngay_de_xuat"] if du_lieu.get("trang_thai_xet_duyet") == "DE_XUAT" else ["nguoi_duyet", "ngay_duyet"]),
     ]
     query = sql.SQL("INSERT INTO nha_cung_cap(id,{},nguoi_tao) VALUES(%s,{},%s) RETURNING *").format(
         sql.SQL(",").join(map(sql.Identifier, cot)),
@@ -1275,9 +1277,10 @@ def _tao_nha_cung_cap(conn, du_lieu: dict, nguoi_tao: str):
     return conn.execute(query, (id_moi, *[du_lieu.get(key) for key in cot], nguoi_tao)).fetchone()
 
 
-def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str):
+def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str,
+                     duong_dan: str = "POST:/api/v1/nha-cung-cap"):
     with get_conn() as conn:
-        cu = _bat_dau_idempotency(conn, tai_khoan, khoa, "POST:/api/v1/nha-cung-cap")
+        cu = _bat_dau_idempotency(conn, tai_khoan, khoa, duong_dan)
         if cu is not None:
             return cu
         row = dict(_tao_nha_cung_cap(conn, du_lieu, nguoi_tao))

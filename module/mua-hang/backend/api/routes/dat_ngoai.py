@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.envelope import thanh_cong
 from backend.api.middleware import lay_ho_so
-from backend.services import dat_ngoai_service
+from backend.services import dat_ngoai_service, dat_ngoai_chi_tiet_service
 
 router = APIRouter()
 
@@ -50,8 +50,16 @@ class NhapLsxIn(BaseModel):
     rows: list[dict[str, Any]] = Field(min_length=1, max_length=500)
 
 
+class ChiTietDongIn(BaseModel):
+    ma_vach: str = Field(min_length=1, max_length=40)
+    noi_dung_gia_cong: str = Field(min_length=1)
+    yeu_cau_ky_thuat: str = Field(min_length=1)
+    yeu_cau_chat_luong: str = Field(min_length=1)
+
+
 class TaoBaoGiaIn(BaseModel):
     ma_vach: list[str] = Field(min_length=1)
+    chi_tiet_dong: list[ChiTietDongIn] = Field(min_length=1)
     can_xac_nhan_ky_thuat: bool = False
     noi_dung_ky_thuat: str | None = None
     ghi_chu: str | None = None
@@ -59,27 +67,57 @@ class TaoBaoGiaIn(BaseModel):
 
 class GiaDongIn(BaseModel):
     id: str
+    id_ncc: str = Field(min_length=1, max_length=20)
     don_gia: int = Field(ge=0)
+    ky_han: date | None = None
     ghi_chu: str | None = None
 
 
 class CapNhatBaoGiaIn(BaseModel):
     phien_ban: int = Field(ge=1)
-    ten_ncc: str = Field(min_length=1, max_length=200)
-    ky_han: date | None = None
     ghi_chu: str | None = None
     dong: list[GiaDongIn] = Field(min_length=1)
-
-
-class ChonNhaCungCapIn(BaseModel):
-    id_ncc: str = Field(min_length=1, max_length=20)
-    phien_ban: int = Field(ge=1)
 
 
 class ChuyenTrangThaiIn(BaseModel):
     phien_ban: int = Field(ge=1)
     trang_thai: str
     noi_dung: str | None = None
+
+
+class SuaDongDatNgoaiIn(BaseModel):
+    phien_ban: int = Field(ge=1)
+    noi_dung_gia_cong: str = Field(min_length=1)
+    yeu_cau_ky_thuat: str = Field(min_length=1)
+    yeu_cau_chat_luong: str = Field(min_length=1)
+    ngay_khach_yeu_cau: date | None = None
+    ngay_ncc_cam_ket: date | None = None
+    ngay_du_kien_noi_bo: date | None = None
+    ma_hang_thay_the: str | None = Field(default=None, max_length=60)
+    id_su_co: str | None = Field(default=None, max_length=24)
+    ly_do_doi_han: str | None = None
+
+
+class XacNhanKtDongIn(BaseModel):
+    noi_dung: str = Field(min_length=1)
+
+
+class DotGiaoIn(BaseModel):
+    dot_so: int = Field(ge=1)
+    so_luong: Decimal = Field(gt=0)
+    ngay_du_kien: date
+    ghi_chu: str | None = None
+
+
+class NhanDotGiaoIn(BaseModel):
+    phien_ban: int = Field(ge=1)
+    ngay_thuc_te: date
+
+
+class SuaDotGiaoIn(BaseModel):
+    phien_ban: int = Field(ge=1)
+    ngay_du_kien: date
+    ly_do: str = Field(min_length=1)
 
 
 @router.post('/dat-ngoai/nhap-lsx', summary='Kinh doanh nạp LSX và mã hàng từ Excel', response_model=PhanHoi)
@@ -96,10 +134,12 @@ def danh_sach_lsx(request: Request, q: str = ''):
 
 
 @router.post('/dat-ngoai', summary='Lập phiếu báo giá từ các mã hàng đã chọn', response_model=PhanHoi)
-def tao_bao_gia(body: TaoBaoGiaIn, request: Request):
+def tao_bao_gia(body: TaoBaoGiaIn, request: Request,
+                khoa: UUID = Header(alias='X-Idempotency-Key')):
     return thanh_cong(dat_ngoai_service.tao_bao_gia(
-        body.ma_vach, body.can_xac_nhan_ky_thuat, body.noi_dung_ky_thuat,
-        body.ghi_chu, lay_ho_so(request)
+        body.ma_vach, [item.model_dump() for item in body.chi_tiet_dong],
+        body.can_xac_nhan_ky_thuat, body.noi_dung_ky_thuat,
+        body.ghi_chu, lay_ho_so(request), str(khoa)
     ))
 
 
@@ -108,16 +148,9 @@ def danh_sach(request: Request):
     return thanh_cong(dat_ngoai_service.danh_sach(lay_ho_so(request)))
 
 
-@router.get('/dat-ngoai/nha-cung-cap', summary='Danh sách nhà cung cấp gia công cho phiếu đặt ngoài', response_model=PhanHoi)
+@router.get('/dat-ngoai/nha-cung-cap', summary='Danh sách nhà cung cấp gia công để chọn theo mã hàng', response_model=PhanHoi)
 def danh_sach_nha_cung_cap_dat_ngoai(request: Request):
     return thanh_cong(dat_ngoai_service.nha_cung_cap_co_the_chon(lay_ho_so(request)))
-
-
-@router.patch('/dat-ngoai/{id_phieu}/nha-cung-cap', summary='Chọn nhà cung cấp cho phiếu đặt ngoài', response_model=PhanHoi)
-def chon_nha_cung_cap_dat_ngoai(id_phieu: str, body: ChonNhaCungCapIn, request: Request):
-    return thanh_cong(dat_ngoai_service.chon_nha_cung_cap(
-        id_phieu, body.id_ncc, body.phien_ban, lay_ho_so(request)
-    ))
 
 
 @router.get('/dat-ngoai/hang-doi-ky-thuat', summary='Phiếu đặt ngoài chờ kỹ thuật xác nhận', response_model=PhanHoi)
@@ -137,3 +170,44 @@ def chuyen_trang_thai(id_phieu: str, body: ChuyenTrangThaiIn, request: Request):
     return thanh_cong(dat_ngoai_service.chuyen_trang_thai(
         id_phieu, body.phien_ban, body.trang_thai, body.noi_dung, lay_ho_so(request)
     ))
+
+
+@router.get('/dat-ngoai/{id_phieu}/dong/{id_dong}', response_model=PhanHoi)
+def chi_tiet_dong(id_phieu: str, id_dong: str, request: Request):
+    return thanh_cong(dat_ngoai_chi_tiet_service.chi_tiet(id_phieu, id_dong, lay_ho_so(request)))
+
+
+@router.patch('/dat-ngoai/{id_phieu}/dong/{id_dong}', response_model=PhanHoi)
+def sua_dong(id_phieu: str, id_dong: str, body: SuaDongDatNgoaiIn, request: Request):
+    return thanh_cong(dat_ngoai_chi_tiet_service.sua_dong(
+        id_phieu, id_dong, body.model_dump(), lay_ho_so(request)))
+
+
+@router.post('/dat-ngoai/{id_phieu}/dong/{id_dong}/xac-nhan-kt', response_model=PhanHoi)
+def them_xac_nhan_kt(id_phieu: str, id_dong: str, body: XacNhanKtDongIn,
+                     request: Request, khoa: UUID = Header(alias='X-Idempotency-Key')):
+    return thanh_cong(dat_ngoai_chi_tiet_service.them_xac_nhan(
+        id_phieu, id_dong, body.model_dump(), lay_ho_so(request), str(khoa)))
+
+
+@router.post('/dat-ngoai/{id_phieu}/dong/{id_dong}/dot-giao', response_model=PhanHoi)
+def them_dot_giao(id_phieu: str, id_dong: str, body: DotGiaoIn,
+                  request: Request, khoa: UUID = Header(alias='X-Idempotency-Key')):
+    return thanh_cong(dat_ngoai_chi_tiet_service.them_dot_giao(
+        id_phieu, id_dong, body.model_dump(), lay_ho_so(request), str(khoa)))
+
+
+@router.patch('/dat-ngoai/{id_phieu}/dong/{id_dong}/dot-giao/{id_dot}', response_model=PhanHoi)
+def nhan_dot_giao(id_phieu: str, id_dong: str, id_dot: str,
+                  body: NhanDotGiaoIn, request: Request):
+    return thanh_cong(dat_ngoai_chi_tiet_service.nhan_dot_giao(
+        id_phieu, id_dong, id_dot, body.phien_ban, body.ngay_thuc_te,
+        lay_ho_so(request)))
+
+
+@router.patch('/dat-ngoai/{id_phieu}/dong/{id_dong}/dot-giao/{id_dot}/lich',
+              summary='Điều chỉnh ngày dự kiến một đợt giao', response_model=PhanHoi)
+def sua_ngay_du_kien_dot_giao(id_phieu: str, id_dong: str, id_dot: str,
+                              body: SuaDotGiaoIn, request: Request):
+    return thanh_cong(dat_ngoai_chi_tiet_service.sua_dot_giao(
+        id_phieu, id_dong, id_dot, body.model_dump(), lay_ho_so(request)))

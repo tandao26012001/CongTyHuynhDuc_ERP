@@ -1,5 +1,14 @@
 # Supabase — schema `mua_hang`
 
+## Chuyển Điều xe sang Kho vận (F4)
+
+Trước khi áp dụng migration `047`, tạo một bản Excel lịch sử bằng
+`python scripts/xuat_lich_su_dieu_xe.py` từ thư mục `module/mua-hang`.
+File nằm trong `output/` (không đưa lên Git), gồm bốn sheet `DIEU_XE`,
+`DIEU_XE_DONG`, `XE`, `TAI_XE`. Đối chiếu số dòng in ra với CSDL rồi bàn giao
+file cho Kho vận. Migration `047` chỉ gỡ quyền và tham số Điều xe; các bảng lịch
+sử vẫn còn nguyên.
+
 Các migration này chỉ tạo schema mới `mua_hang`; không sửa hoặc xoá đối tượng trong `public`.
 
 Chạy toàn bộ trong một transaction:
@@ -19,6 +28,61 @@ SELECT count(*) FROM information_schema.tables WHERE table_schema = 'mua_hang';
 
 Schema không cấp quyền cho `anon` hoặc `authenticated`. Backend hiện kết nối trực tiếp bằng
 `DATABASE_URL`; trước production cần tạo một DB role riêng và chỉ cấp quyền tối thiểu cho role đó.
+
+### Sửa DB đã ghi nhận migration 050 nhưng thiếu cấu trúc Đặt ngoài v3
+
+Nếu API báo thiếu cột hoặc bảng chi tiết Đặt ngoài, chạy hai migration sửa trên đúng database
+đang cấu hình cho backend. Chúng bổ sung cột, chuẩn hóa tên bảng/cột cũ và giữ lại dữ liệu:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/052_sua_cot_chi_tiet_dat_ngoai.sql
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/053_chuan_hoa_bang_chi_tiet_dat_ngoai.sql
+```
+
+Xác nhận sau khi chạy:
+
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_schema='mua_hang' AND table_name='dat_ngoai_dong'
+  AND column_name IN ('ngay_khach_yeu_cau','ngay_ncc_cam_ket',
+                      'ngay_du_kien_noi_bo','id_su_co');
+SELECT table_name FROM information_schema.tables
+WHERE table_schema='mua_hang' AND table_name IN
+  ('dat_ngoai_xac_nhan_kt','dat_ngoai_dot_giao','dat_ngoai_lich_su_ky_han');
+```
+
+### Khôi phục bộ đếm mã chứng từ bị thiếu
+
+Nếu API ghi xác nhận kỹ thuật báo `relation "bo_dem_chung_tu" does not exist`, chạy migration
+`supabase/migrations/055_khoi_phuc_bo_dem_chung_tu.sql` trên đúng database backend đang dùng:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/055_khoi_phuc_bo_dem_chung_tu.sql
+```
+
+Kiểm tra bảng đã được khôi phục:
+
+```sql
+SELECT to_regclass('mua_hang.bo_dem_chung_tu');
+```
+
+### Bỏ mã kết luận khỏi xác nhận kỹ thuật Đặt ngoài
+
+Chạy migration `057` trên database backend đang dùng. Migration xóa cột `ket_luan` và các mã kết luận
+đã lưu; nội dung, người xác nhận và thời điểm xác nhận vẫn được giữ:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/057_bo_cot_ket_luan_xac_nhan_ky_thuat.sql
+```
+
+### Lịch sử điều chỉnh lịch giao Đặt ngoài
+
+Migration `058` bổ sung bảng lưu ngày cũ/mới, lý do, người sửa và thời điểm khi đổi ngày dự kiến
+của từng đợt giao. Chạy trên đúng database backend đang dùng trước khi sử dụng chức năng này:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/058_lich_su_dieu_chinh_dot_giao.sql
+```
 
 `anh_xa_du_lieu_cu` dùng để quản lý mapping khi di trú từ các bảng `public` hiện tại. Các file
 này không tự động di trú dữ liệu thật khi cài schema mới.

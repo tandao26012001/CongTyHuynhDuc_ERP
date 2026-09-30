@@ -444,6 +444,10 @@ def tao_ncc(
 ):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "sua")
     ho_so = lay_ho_so(request)
+    if ho_so.get("vai_tro") not in ("ADMIN", "TBP_MUA_HANG", "NV_MUA_HANG"):
+        raise KhongCoQuyen("Hãy dùng chức năng Đề xuất NCC để Mua hàng xét duyệt.")
+    if body.da_phe_duyet and ho_so.get("vai_tro") not in ("ADMIN", "TBP_MUA_HANG"):
+        raise KhongCoQuyen("Chỉ Trưởng bộ phận Mua hàng được phê duyệt NCC vào BM03.")
     return thanh_cong(catalog_service.tao_nha_cung_cap(
         _du_lieu(body, {"xac_nhan_trung"}), ho_so["ma_nhan_vien"],
         ho_so["ma_tai_khoan"], str(khoa), body.xac_nhan_trung,
@@ -459,6 +463,8 @@ class NhapNccBody(BaseModel):
 def nhap_ncc(body: NhapNccBody, request: Request, khoa: UUID = Header(alias="X-Idempotency-Key")):
     ho_so = lay_ho_so(request)
     phan_quyen_service.kiem_quyen(ho_so, "ncc", "sua")
+    if ho_so.get("vai_tro") not in ("ADMIN", "TBP_MUA_HANG", "NV_MUA_HANG"):
+        raise KhongCoQuyen("Chỉ bộ phận Mua hàng được nhập hàng loạt NCC.")
     return thanh_cong(ncc_import_service.nhap(
         body.rows, ho_so["ma_nhan_vien"], ho_so["ma_tai_khoan"], str(khoa), body.xac_nhan_trung,
     ))
@@ -474,6 +480,15 @@ def lay_ncc(id_ncc: str, request: Request):
 def sua_ncc(id_ncc: str, body: SuaNhaCungCapBody, request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "ncc", "sua")
     ho_so = lay_ho_so(request)
+    if ho_so.get("vai_tro") not in ("ADMIN", "TBP_MUA_HANG", "NV_MUA_HANG"):
+        raise KhongCoQuyen("Chỉ bộ phận Mua hàng được sửa hồ sơ NCC.")
+    if "da_phe_duyet" in body.model_fields_set and ho_so.get("vai_tro") not in ("ADMIN", "TBP_MUA_HANG"):
+        raise KhongCoQuyen("Chỉ Trưởng bộ phận Mua hàng được đổi trạng thái phê duyệt BM03.")
+    hien_tai = catalog_service.lay_nha_cung_cap(id_ncc)
+    if hien_tai.get("trang_thai_xet_duyet") == "DE_XUAT" and (
+        body.trang_thai not in (None, "TAM_NGUNG") or body.da_phe_duyet is True
+    ):
+        raise KhongCoQuyen("Hãy duyệt đề xuất NCC trước khi kích hoạt hoặc đưa vào BM03.")
     return thanh_cong(catalog_service.cap_nhat_nha_cung_cap(
         id_ncc, _du_lieu(body, {"phien_ban", "xac_nhan_trung"}, True),
         body.phien_ban, ho_so["ma_nhan_vien"], body.xac_nhan_trung,

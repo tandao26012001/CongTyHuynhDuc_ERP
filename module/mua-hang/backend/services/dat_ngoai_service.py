@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from backend.data import dat_ngoai_repo
 from backend.data.db import get_conn
+from backend.data.catalog_repo import lay_ket_qua_idempotency
 from backend.services import catalog_service
 from backend.services import phan_quyen_service
 from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
@@ -156,11 +157,22 @@ def danh_sach_lsx(tu_khoa: str, ho_so: dict) -> list[dict]:
     return list(nhom.values())
 
 
-def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, ghi_chu: str | None, ho_so: dict) -> dict:
+def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: bool,
+                noi_dung: str | None, ghi_chu: str | None, ho_so: dict, khoa: str) -> dict:
     phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa, 'POST:/api/v1/dat-ngoai')
+    if prior is not None:
+        return {'so_phieu': len(prior), 'items': prior}
     ds_ma = list(dict.fromkeys(str(ma).strip() for ma in ma_vach if str(ma).strip()))
     if not ds_ma:
         raise ThieuDuLieu("Hãy chọn ít nhất một mã hàng để báo giá.")
+    details = {str(item['ma_vach']).strip(): item for item in chi_tiet_dong}
+    if len(details) != len(chi_tiet_dong) or set(details) != set(ds_ma):
+        raise ThieuDuLieu('Mỗi mã hàng được chọn phải có đúng một bộ nội dung gia công, kỹ thuật và chất lượng.')
+    for item in details.values():
+        if any(not str(item.get(key) or '').strip() for key in
+               ('noi_dung_gia_cong', 'yeu_cau_ky_thuat', 'yeu_cau_chat_luong')):
+            raise ThieuDuLieu('Nội dung gia công, yêu cầu kỹ thuật và chất lượng không được để trống.')
     with get_conn() as conn:
         if not dat_ngoai_repo.san_sang(conn):
             raise ThieuDuLieu("Cơ sở dữ liệu chưa có bảng Đặt ngoài. Hãy chạy migration 031 và 032.", "CHUA_MIGRATE_DAT_NGOAI")
@@ -180,9 +192,10 @@ def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, gh
             "id": _ma("DNG"), "lenh_san_xuat": lsx, "trang_thai": trang_thai,
             "can_xac_nhan_ky_thuat": can_xac_nhan, "noi_dung_ky_thuat": noi_dung,
             "ghi_chu": ghi_chu,
-            "dong": [{**item, "id": _ma("DNGD")} for item in dong],
+            "dong": [{**item, **details[item['ma_vach']], "id": _ma("DNGD")} for item in dong],
         })
-    items = dat_ngoai_repo.tao_dat_ngoai(ds_phieu, ho_so["ma_nhan_vien"])
+    items = dat_ngoai_repo.tao_dat_ngoai(ds_phieu, ho_so["ma_nhan_vien"],
+                                           ho_so['ma_tai_khoan'], khoa)
     return {"so_phieu": len(items), "items": items}
 
 
@@ -199,33 +212,42 @@ def hang_doi_xac_nhan_ky_thuat(ho_so: dict) -> list[dict]:
 
 def nha_cung_cap_co_the_chon(ho_so: dict) -> list[dict]:
     phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    danh_muc = catalog_service.lay_danh_muc("nha-cung-cap", 1, 100)
-    return [item for item in danh_muc["items"]
-            if item.get("la_ncc_gia_cong") and item.get("trang_thai") == "HOAT_DONG"]
-
-
-def chon_nha_cung_cap(id_phieu: str, id_ncc: str, phien_ban: int, ho_so: dict) -> dict:
-    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    ncc = catalog_service.lay_nha_cung_cap(id_ncc)
-    if not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG":
-        raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
-    row = dat_ngoai_repo.chon_nha_cung_cap(
-        id_phieu, phien_ban, id_ncc, ncc.get("ma_ncc"), ncc.get("ten"), ho_so["ma_nhan_vien"],
-    )
-    if not row:
-        raise XungDot("Phiếu không còn ở bước Đang xử lý / Báo giá hoặc vừa được cập nhật. Hãy tải lại.", "PHIEU_VUA_CAP_NHAT")
-    return row
+    result = []
+    page = 1
+    while True:
+        danh_muc = catalog_service.lay_danh_muc("nha-cung-cap", page, 100)
+        result.extend(item for item in danh_muc["items"]
+                      if item.get("la_ncc_gia_cong") and item.get("trang_thai") == "HOAT_DONG"
+                      and item.get('trang_thai_xet_duyet') != 'DE_XUAT')
+        if page * 100 >= danh_muc['tong'] or not danh_muc['items']:
+            break
+        page += 1
+    return result
 
 
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, ho_so: dict) -> dict:
     phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    if not str(du_lieu.get("ten_ncc") or "").strip():
-        raise ThieuDuLieu("Nhà cung cấp là bắt buộc.")
-    if not du_lieu.get("dong") or any(item.get("don_gia") is None or item["don_gia"] < 0 for item in du_lieu["dong"]):
-        raise ThieuDuLieu("Phải nhập đơn giá hợp lệ cho tất cả mã hàng.")
+    dong = du_lieu.get("dong") or []
+    if not dong or any(item.get("don_gia") is None or item["don_gia"] < 0 for item in dong):
+        raise ThieuDuLieu("Phải nhập đơn giá hợp lệ cho từng mã được lưu báo giá.")
+    if any(not str(item.get("id_ncc") or "").strip() for item in dong):
+        raise ThieuDuLieu("Phải chọn nhà cung cấp cho từng mã hàng.", "THIEU_NCC_THEO_MA")
+    if len({item["id"] for item in dong}) != len(dong):
+        raise ThieuDuLieu("Mỗi mã hàng chỉ được cập nhật một lần trong một lượt lưu.", "TRUNG_DONG_BAO_GIA")
+    suppliers = {}
+    for id_ncc in {item["id_ncc"] for item in dong}:
+        ncc = catalog_service.lay_nha_cung_cap(id_ncc)
+        if (not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG"
+                or ncc.get("trang_thai_xet_duyet") == "DE_XUAT"):
+            raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
+        suppliers[id_ncc] = ncc
+    for item in dong:
+        ncc = suppliers[item["id_ncc"]]
+        item["ma_ncc"] = ncc.get("ma_ncc")
+        item["ten_ncc"] = ncc.get("ten")
     row = dat_ngoai_repo.cap_nhat_bao_gia(id_phieu, phien_ban, du_lieu, ho_so["ma_nhan_vien"])
     if not row:
-        raise XungDot("Không thể lưu báo giá. Hãy tải lại phiếu, kiểm tra trạng thái Đang báo giá, nhà cung cấp và đầy đủ dòng hàng.")
+        raise XungDot("Không thể lưu báo giá mã hàng. Hãy tải lại phiếu và kiểm tra trạng thái Đang báo giá.")
     return row
 
 

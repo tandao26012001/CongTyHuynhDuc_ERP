@@ -34,4 +34,16 @@ BEGIN;
 \ir migrations/044_sua_trigger_tai_khoan_legacy.sql
 \ir migrations/045_loai_bo_cot_legacy_tai_khoan.sql
 \ir migrations/046_bo_sung_fax_nha_cung_cap.sql
+\ir migrations/047_go_dieu_xe_khoi_mua_hang.sql
+\ir migrations/048_nha_cung_cap_theo_mat_hang.sql
+\ir migrations/049_ncc_cho_kinh_doanh_xem.sql
+\ir migrations/050_dat_ngoai_chi_tiet_v3.sql
+\ir migrations/051_quyen_gia_bao_cao.sql
+\ir migrations/052_sua_cot_chi_tiet_dat_ngoai.sql
+\ir migrations/053_chuan_hoa_bang_chi_tiet_dat_ngoai.sql
+\ir migrations/054_ncc_bao_gia_theo_ma_dat_ngoai.sql
+\ir migrations/055_khoi_phuc_bo_dem_chung_tu.sql
+\ir migrations/056_ket_luan_xac_nhan_ky_thuat_tuy_chon.sql
+\ir migrations/057_bo_cot_ket_luan_xac_nhan_ky_thuat.sql
+\ir migrations/058_lich_su_dieu_chinh_dot_giao.sql
 COMMIT;
