@@ -41,6 +41,23 @@ class CapNhatQuyenBody(BaseModel):
     pham_vi: str = Field(min_length=1, max_length=20)
 
 
+class CapNhatQuyenLoaiTKBody(BaseModel):
+    trang: str = Field(min_length=1, max_length=40)
+    phien_ban: int = Field(ge=1)
+    duoc_xem: bool
+    duoc_sua: bool
+    duoc_duyet: bool
+    duoc_xuat: bool
+    pham_vi_xem: str = Field(min_length=1, max_length=20)
+    pham_vi_sua: str = Field(min_length=1, max_length=20)
+    kieu_sua: str = Field(min_length=1, max_length=20)
+    ma_loai_tk_duyet: str | None = Field(default=None, max_length=40)
+
+
+class CapNhatMaTranQuyenLoaiTKBody(BaseModel):
+    items: list[CapNhatQuyenLoaiTKBody] = Field(min_length=1, max_length=100)
+
+
 @router.get("/tai-khoan", summary="Danh sách tài khoản", response_model=PhanHoi)
 def danh_sach(request: Request, trang: int = 1, kich_thuoc: int = 20, q: str = "", trang_thai: str = ""):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
@@ -52,6 +69,40 @@ def danh_sach_vai_tro(request: Request):
     phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
     return thanh_cong(phan_quyen_service.danh_sach_vai_tro_va_quyen())
 
+
+@router.get("/loai-tai-khoan", summary="Danh sách loại tài khoản và bộ phận", response_model=PhanHoi)
+def danh_sach_loai_tai_khoan(request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
+    return thanh_cong(phan_quyen_service.danh_sach_loai_tai_khoan())
+
+
+@router.get("/phan-quyen/{ma_loai_tk}/{ma_bo_phan}", summary="Ma trận quyền theo loại tài khoản và bộ phận", response_model=PhanHoi)
+def lay_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str, request: Request):
+    phan_quyen_service.kiem_quyen(lay_ho_so(request), "quan_tri", "xem")
+    return thanh_cong(phan_quyen_service.danh_sach_quyen_loai_tk(ma_loai_tk, ma_bo_phan))
+
+
+@router.patch("/phan-quyen/{ma_loai_tk}/{ma_bo_phan}/{trang}", summary="Cập nhật quyền theo loại tài khoản và bộ phận", response_model=PhanHoi)
+def cap_nhat_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str, trang: str,
+                           body: CapNhatQuyenLoaiTKBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "quan_tri", "sua")
+    return thanh_cong(phan_quyen_service.cap_nhat_quyen_loai_tk(
+        ma_loai_tk, ma_bo_phan, trang, body.phien_ban,
+        body.model_dump(exclude={"phien_ban"}), ho_so["ma_nhan_vien"],
+    ))
+
+
+
+@router.put("/phan-quyen/{ma_loai_tk}/{ma_bo_phan}", summary="Lưu toàn bộ ma trận quyền loại tài khoản và bộ phận", response_model=PhanHoi)
+def cap_nhat_ma_tran_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str,
+                                   body: CapNhatMaTranQuyenLoaiTKBody, request: Request):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "quan_tri", "sua")
+    return thanh_cong(phan_quyen_service.cap_nhat_ma_tran_quyen_loai_tk(
+        ma_loai_tk, ma_bo_phan, [item.model_dump() for item in body.items],
+        ho_so["ma_nhan_vien"],
+    ))
 
 @router.patch("/phan-quyen/{vai_tro}/{trang}", summary="Cập nhật một quyền của vai trò", response_model=PhanHoi)
 def cap_nhat_quyen(vai_tro: str, trang: str, body: CapNhatQuyenBody, request: Request):
