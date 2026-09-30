@@ -871,7 +871,7 @@ export async function chuyenTrangThaiDatNgoai(phieu: PhieuDatNgoai, trangThai: s
   });
 }
 
-export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan_ky_thuat?: boolean; noi_dung_ky_thuat?: string; ghi_chu?: string }) {
+export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan_ky_thuat?: boolean; noi_dung_ky_thuat?: string; ghi_chu?: string; id_ncc?: string; ky_han?: string; noi_dung_gia_cong?: string; yeu_cau_ky_thuat?: string; yeu_cau_chat_luong?: string }) {
   return api<{ so_phieu: number }>('/api/v1/dat-ngoai', { method: 'POST', body: JSON.stringify(input) });
 }
 

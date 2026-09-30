@@ -126,21 +126,22 @@ def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str) -> list[dict]:
             row = conn.execute(
                 """INSERT INTO dat_ngoai(
                        id,lenh_san_xuat,nguoi_lap,ngay_lap,trang_thai,ghi_chu,nguoi_tao,
-                       can_xac_nhan_ky_thuat,noi_dung_ky_thuat,f3_yeu_cau_moi)
-                   VALUES(%s,%s,%s,current_date,%s,%s,%s,%s,%s,true) RETURNING *""",
+                       can_xac_nhan_ky_thuat,noi_dung_ky_thuat,f3_yeu_cau_moi,id_ncc,ten_ncc_chup,ky_han)
+                   VALUES(%s,%s,%s,current_date,%s,%s,%s,%s,%s,true,%s,%s,%s) RETURNING *""",
                 (phieu["id"], phieu["lenh_san_xuat"], nguoi_tao, phieu["trang_thai"],
                  phieu.get("ghi_chu"), nguoi_tao, phieu["can_xac_nhan_ky_thuat"],
-                 phieu.get("noi_dung_ky_thuat")),
+                 phieu.get("noi_dung_ky_thuat"), phieu.get("id_ncc"), phieu.get("ten_ncc_chup"), phieu.get("ky_han")),
             ).fetchone()
             for stt, dong in enumerate(phieu["dong"], 1):
                 conn.execute(
                     """INSERT INTO dat_ngoai_dong(
                            id,id_dat_ngoai,stt_dong,ma_vach,ma_hang,ten_hang_chup,dvt_chup,
-                           so_luong,trang_thai_dong,nguoi_tao)
-                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           so_luong,trang_thai_dong,nguoi_tao,noi_dung_gia_cong,yeu_cau_ky_thuat,yeu_cau_chat_luong,ky_han)
+                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (dong["id"], phieu["id"], stt, dong["ma_vach"], dong["ma_hang"],
                      dong["ten_hang"], dong["dvt"], dong["so_luong_po"],
-                     phieu["trang_thai"], nguoi_tao),
+                     phieu["trang_thai"], nguoi_tao, dong.get("noi_dung_gia_cong"),
+                     dong.get("yeu_cau_ky_thuat"), dong.get("yeu_cau_chat_luong"), phieu.get("ky_han")),
                 )
             conn.execute(
                 """INSERT INTO dat_ngoai_lich_su(
@@ -200,7 +201,7 @@ def lay_dat_ngoai(conn, id_phieu: str, khoa: bool = False):
 def chon_nha_cung_cap(id_phieu: str, phien_ban: int, id_ncc: str, ma_ncc: str, ten_ncc: str, nguoi_sua: str):
     with get_conn() as conn:
         phieu = lay_dat_ngoai(conn, id_phieu, True)
-        if not phieu or phieu["trang_thai"] != "DANG_BAO_GIA" or phieu["phien_ban"] != phien_ban:
+        if not phieu or phieu["trang_thai"] not in ("NHAP", "DANG_BAO_GIA") or phieu["phien_ban"] != phien_ban:
             return None
         row = conn.execute(
             """UPDATE dat_ngoai SET id_ncc=%s,ten_ncc_chup=%s,ngay_sua=now(),nguoi_sua=%s,
@@ -209,8 +210,9 @@ def chon_nha_cung_cap(id_phieu: str, phien_ban: int, id_ncc: str, ma_ncc: str, t
         ).fetchone()
         conn.execute(
             """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
-               VALUES(%s,'DANG_BAO_GIA','DANG_BAO_GIA',%s,%s)""",
-            (id_phieu, f"Chọn nhà cung cấp gia công {ma_ncc} - {ten_ncc}", nguoi_sua),
+               VALUES(%s,%s,%s,%s,%s)""",
+            (id_phieu, phieu["trang_thai"], phieu["trang_thai"],
+             f"Chọn nhà cung cấp gia công {ma_ncc} - {ten_ncc}", nguoi_sua),
         )
         return dict(row) if row else None
 

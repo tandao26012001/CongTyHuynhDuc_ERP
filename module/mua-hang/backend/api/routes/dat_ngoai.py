@@ -55,6 +55,11 @@ class TaoBaoGiaIn(BaseModel):
     can_xac_nhan_ky_thuat: bool = False
     noi_dung_ky_thuat: str | None = None
     ghi_chu: str | None = None
+    id_ncc: str | None = Field(default=None, max_length=20)
+    ky_han: date | None = None
+    noi_dung_gia_cong: str | None = Field(default=None, max_length=2000)
+    yeu_cau_ky_thuat: str | None = Field(default=None, max_length=4000)
+    yeu_cau_chat_luong: str | None = Field(default=None, max_length=4000)
 
 
 class GuiDuyetIn(BaseModel):
@@ -140,7 +145,9 @@ def danh_sach_lsx(request: Request, q: str = ''):
 def tao_bao_gia(body: TaoBaoGiaIn, request: Request):
     return thanh_cong(dat_ngoai_service.tao_bao_gia(
         body.ma_vach, body.can_xac_nhan_ky_thuat, body.noi_dung_ky_thuat,
-        body.ghi_chu, lay_ho_so(request)
+        body.ghi_chu, lay_ho_so(request), id_ncc=body.id_ncc, ky_han=body.ky_han,
+        noi_dung_gia_cong=body.noi_dung_gia_cong, yeu_cau_ky_thuat=body.yeu_cau_ky_thuat,
+        yeu_cau_chat_luong=body.yeu_cau_chat_luong
     ))
 
 

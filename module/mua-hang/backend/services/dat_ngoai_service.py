@@ -207,7 +207,7 @@ def danh_sach_lsx(tu_khoa: str, ho_so: dict) -> list[dict]:
     return list(nhom.values())
 
 
-def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, ghi_chu: str | None, ho_so: dict) -> dict:
+def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, ghi_chu: str | None, ho_so: dict, *, id_ncc: str | None = None, ky_han: date | None = None, noi_dung_gia_cong: str | None = None, yeu_cau_ky_thuat: str | None = None, yeu_cau_chat_luong: str | None = None) -> dict:
     pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     ds_ma = list(dict.fromkeys(str(ma).strip() for ma in ma_vach if str(ma).strip()))
     if not ds_ma:
@@ -221,6 +221,11 @@ def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, gh
     trung = next((row for row in rows if row["da_lap_bao_gia"]), None)
     if trung:
         raise XungDot(f"Mã hàng {trung['ma_vach']} đã có trong một báo giá đang xử lý.", "MA_HANG_DA_BAO_GIA")
+    ncc = None
+    if id_ncc:
+        ncc = catalog_service.lay_nha_cung_cap(id_ncc)
+        if not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG":
+            raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
     theo_lsx = defaultdict(list)
     for row in rows:
         theo_lsx[row["lenh_san_xuat"]].append(row)
@@ -230,8 +235,10 @@ def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, gh
         ds_phieu.append({
             "id": _ma("DNG"), "lenh_san_xuat": lsx, "trang_thai": trang_thai,
             "can_xac_nhan_ky_thuat": can_xac_nhan, "noi_dung_ky_thuat": noi_dung,
-            "ghi_chu": ghi_chu, "f3_yeu_cau_moi": True,
-            "dong": [{**item, "id": _ma("DNGD")} for item in dong],
+            "id_ncc": id_ncc, "ten_ncc_chup": ncc.get("ten") if ncc else None,
+            "ky_han": ky_han, "ghi_chu": ghi_chu, "f3_yeu_cau_moi": True,
+            "dong": [{**item, "id": _ma("DNGD"), "noi_dung_gia_cong": noi_dung_gia_cong,
+                      "yeu_cau_ky_thuat": yeu_cau_ky_thuat, "yeu_cau_chat_luong": yeu_cau_chat_luong} for item in dong],
         })
     items = dat_ngoai_repo.tao_dat_ngoai(ds_phieu, ho_so["ma_nhan_vien"])
     return {"so_phieu": len(items), "items": items}
