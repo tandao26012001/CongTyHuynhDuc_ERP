@@ -70,6 +70,10 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
 
   const supplierSummary = [...new Set((request?.dong || []).map((line) => line.ten_ncc_chup).filter(Boolean))].join(', ')
     || request?.ten_ncc_chup || 'Chưa chọn theo mã';
+  const technicalLines = request?.dong.filter((line) => line.can_xac_nhan_ky_thuat) || [];
+  const confirmedTechnicalLines = technicalLines.filter((line) => line.da_xac_nhan_kt).length;
+  const allTechnicalLinesConfirmed = technicalLines.length > 0
+    && confirmedTechnicalLines === technicalLines.length;
 
   async function confirmTechnical() {
     if (!request || confirming) return;
@@ -150,7 +154,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
               <Info label="PHIÊN BẢN" value={String(request.phien_ban)} mono />
             </div>
             {(request.can_xac_nhan_ky_thuat || request.noi_dung_ky_thuat || request.ghi_chu) && <div className="mt-3 grid md:grid-cols-2 gap-3 text-[13px]">
-              <div className="p-3 border rounded"><strong className="block text-[11px] text-[#59627A]">XÁC NHẬN KỸ THUẬT</strong><span>{request.can_xac_nhan_ky_thuat ? request.noi_dung_ky_thuat || 'Có yêu cầu xác nhận' : 'Không yêu cầu'}</span></div>
+              <div className="p-3 border rounded"><strong className="block text-[11px] text-[#59627A]">XÁC NHẬN KỸ THUẬT</strong><span>{request.can_xac_nhan_ky_thuat ? `${technicalLines.length} mã hàng cần xác nhận` : 'Không yêu cầu'}</span></div>
               <div className="p-3 border rounded"><strong className="block text-[11px] text-[#59627A]">GHI CHÚ PHIẾU</strong><span>{request.ghi_chu || '—'}</span></div>
             </div>}
           </>}
@@ -164,7 +168,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
           <div className="border rounded overflow-x-auto">
             <table className="w-full min-w-[1250px] text-[12px]">
               <thead className="bg-[#F4F6FA]"><tr>{['STT', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'BẢN VẼ', 'NHÀ CUNG CẤP', 'SL / ĐVT', 'ĐƠN GIÁ', 'THÀNH TIỀN', 'KỲ HẠN', 'TRẠNG THÁI'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead>
-              <tbody>{visibleLines.map((line, index) => { const quoteLine = requestLines.get(line.ma_vach); return <tr key={line.ma_vach} className="border-t align-top"><td className="p-3 font-mono">{(currentPage - 1) * pageSize + index + 1}</td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold text-[#283A97]">{quoteLine ? <button type="button" onClick={() => setSelectedLineId(quoteLine.id)} className="underline">{line.ma_hang}</button> : line.ma_hang}</td><td className="p-3 min-w-56">{line.ten_hang}<span className="block text-[10px] text-[#59627A]">{line.ghi_chu || ''}</span></td><td className="p-3 font-mono">{line.ma_ban_ve || '—'}</td><td className="p-3">{quoteLine?.ten_ncc_chup || '—'}</td><td className="p-3 font-mono">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td><td className="p-3 font-mono">{money(quoteLine?.don_gia)}</td><td className="p-3 font-mono font-bold">{quoteLine?.don_gia == null ? '—' : money(Number(line.so_luong) * Number(quoteLine.don_gia))}</td><td className="p-3 font-mono">{displayDate(quoteLine?.ky_han || request?.ky_han)}</td><td className="p-3"><span className="pill p-info px-2 py-1 text-[10px]">{statusLabel(quoteLine?.trang_thai || request?.trang_thai)}</span></td></tr>; })}</tbody>
+              <tbody>{visibleLines.map((line, index) => { const quoteLine = requestLines.get(line.ma_vach); return <tr key={line.ma_vach} className="border-t align-top"><td className="p-3 font-mono">{(currentPage - 1) * pageSize + index + 1}</td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold text-[#283A97]">{quoteLine ? <><button type="button" onClick={() => setSelectedLineId(quoteLine.id)} className="underline">{line.ma_hang}</button>{quoteLine.can_xac_nhan_ky_thuat && <span className={`block mt-1 text-[10px] ${quoteLine.da_xac_nhan_kt ? 'text-emerald-700' : 'text-amber-700'}`}>{quoteLine.da_xac_nhan_kt ? (canConfirmTechnical && request?.trang_thai !== 'HUY' && request?.trang_thai !== 'HOAN_THANH' ? 'Đã xác nhận · Bấm mã để xác nhận tiếp' : 'Đã xác nhận kỹ thuật') : 'Chờ xác nhận kỹ thuật'}</span>}</> : line.ma_hang}</td><td className="p-3 min-w-56">{line.ten_hang}<span className="block text-[10px] text-[#59627A]">{line.ghi_chu || ''}</span></td><td className="p-3 font-mono">{line.ma_ban_ve || '—'}</td><td className="p-3">{quoteLine?.ten_ncc_chup || '—'}</td><td className="p-3 font-mono">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td><td className="p-3 font-mono">{money(quoteLine?.don_gia)}</td><td className="p-3 font-mono font-bold">{quoteLine?.don_gia == null ? '—' : money(Number(line.so_luong) * Number(quoteLine.don_gia))}</td><td className="p-3 font-mono">{displayDate(quoteLine?.ky_han || request?.ky_han)}</td><td className="p-3"><span className="pill p-info px-2 py-1 text-[10px]">{statusLabel(quoteLine?.trang_thai || request?.trang_thai)}</span></td></tr>; })}</tbody>
             </table>
           </div>
           {request && selectedLineId && request.dong.find((item) => item.id === selectedLineId) && <OutsourceLineDetails
@@ -178,7 +182,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
             onRequestChanged={onRequestChanged}
             onNotify={onNotify}
             canEdit={canCancel}
-            canConfirm={canConfirmTechnical || canCancel}
+            canConfirm={canConfirmTechnical}
           />}
         {request && <HoSoTuongTacPanel loai="dat-ngoai" id={request.id} canEdit={canCancel} />}
           {totalPages > 1 && <div className="mt-3 flex items-center justify-end gap-2 text-[12px]"><button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="h-10 px-3 border rounded disabled:opacity-40">TRƯỚC</button><strong>Trang {currentPage}/{totalPages}</strong><button type="button" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="h-10 px-3 border rounded disabled:opacity-40">SAU</button></div>}
@@ -191,7 +195,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
       </div>
 
       <footer className="sticky bottom-0 bg-white p-4 border-t flex flex-wrap justify-between gap-2">
-        {canConfirmTechnical && request?.trang_thai === 'CHO_XAC_NHAN_KY_THUAT' && <button type="button" disabled={confirming} onClick={() => void confirmTechnical()} className="min-h-11 px-5 bg-emerald-700 text-white rounded font-bold disabled:opacity-50">{confirming ? 'ĐANG XÁC NHẬN…' : 'XÁC NHẬN KỸ THUẬT'}</button>}
+        {canConfirmTechnical && request?.trang_thai === 'CHO_XAC_NHAN_KY_THUAT' && <div className="flex flex-wrap items-center gap-3"><span className="text-[12px]">Đã xác nhận {confirmedTechnicalLines}/{technicalLines.length} mã cần xác nhận</span><button type="button" disabled={confirming || !allTechnicalLinesConfirmed} onClick={() => void confirmTechnical()} className="min-h-11 px-5 bg-emerald-700 text-white rounded font-bold disabled:opacity-50">{confirming ? 'ĐANG XỬ LÝ…' : 'HOÀN TẤT XÁC NHẬN KỸ THUẬT'}</button></div>}
         {canCancel && request && request.trang_thai !== 'HUY' && <button type="button" disabled={confirming} onClick={() => { setShowCancelForm((shown) => !shown); setActionError(''); }} className="min-h-11 px-5 border border-[#EE202E] text-[#C4141F] rounded font-bold disabled:opacity-50">HỦY PHIẾU</button>}
         <button type="button" onClick={onClose} className="min-h-11 px-5 bg-[#283A97] text-white rounded font-bold">ĐÓNG</button>
       </footer>

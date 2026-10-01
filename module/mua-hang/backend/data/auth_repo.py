@@ -201,7 +201,7 @@ def lay_ho_so_tu_token(token: str):
                 (_bam_token(token),),
             ).fetchone()
         return conn.execute(
-            """SELECT t.ma_tai_khoan,t.ma_nhan_vien,t.ho_va_ten,t.ma_bo_phan,t.vai_tro,
+            """SELECT t.ma_tai_khoan,t.ma_nhan_vien,t.ho_va_ten,t.ma_bo_phan,t.vai_tro,t.ma_loai_tk,
                       t.trang_thai,t.phien_ban,p.het_han
                FROM phien_dang_nhap p JOIN tai_khoan t ON t.ma_tai_khoan=p.ma_tai_khoan
                WHERE p.token=%s AND p.het_han>now() AND t.trang_thai='HOAT_DONG'""",
@@ -272,7 +272,7 @@ def danh_sach_tai_khoan(offset: int, limit: int, tu_khoa: str = "", trang_thai: 
                 f"""SELECT t."MA_TAI_KHOAN" AS ma_tai_khoan,
                            t."ID" AS ma_nhan_vien,t."HO_TEN" AS ho_va_ten,
                            t."MA_BO_PHAN" AS ma_bo_phan,COALESCE(bp.ten,t."MA_BO_PHAN") AS ten_bo_phan,
-                           t."VAI_TRO" AS vai_tro,
+                           t."VAI_TRO" AS vai_tro,NULL::varchar AS ma_loai_tk,
                            CASE WHEN t."DANG_HOAT_DONG" THEN 'HOAT_DONG' ELSE 'KHOA' END AS trang_thai,
                            NULL::timestamptz AS lan_dang_nhap_cuoi,
                            t."NGAY_TAO" AS ngay_tao,1 AS phien_ban
@@ -290,7 +290,7 @@ def danh_sach_tai_khoan(offset: int, limit: int, tu_khoa: str = "", trang_thai: 
             return rows, total
         rows = conn.execute(
             """SELECT t.ma_tai_khoan,t.ma_nhan_vien,t.ho_va_ten,t.ma_bo_phan,
-                      COALESCE(bp.ten,t.ma_bo_phan) AS ten_bo_phan,t.vai_tro,
+                      COALESCE(bp.ten,t.ma_bo_phan) AS ten_bo_phan,t.vai_tro,t.ma_loai_tk,
                       t.trang_thai,t.lan_dang_nhap_cuoi,t.ngay_tao,t.phien_ban
                FROM tai_khoan t
                LEFT JOIN bo_phan bp ON bp.ma_bo_phan=t.ma_bo_phan
@@ -311,6 +311,7 @@ def danh_sach_tai_khoan(offset: int, limit: int, tu_khoa: str = "", trang_thai: 
 
 def cap_nhat_tai_khoan(
     ma: str, phien_ban: int, nguoi_sua: str, vai_tro=None, khoa=False,
+    ma_loai_tk=None,
 ):
     with get_conn() as conn:
         if not _co_mo_hinh_chuan(conn):
@@ -338,14 +339,17 @@ def cap_nhat_tai_khoan(
                 conn.execute("DELETE FROM phien_dang_nhap WHERE ma_tai_khoan=%s", (ma,))
             return row
         return conn.execute(
-            """UPDATE tai_khoan SET vai_tro=%s,trang_thai='HOAT_DONG',nguoi_sua=%s
+            """UPDATE tai_khoan SET vai_tro=%s,
+                      ma_loai_tk=COALESCE(%s,(SELECT ma_loai_tk FROM doi_chieu_vai_tro_loai_tk WHERE vai_tro_cu=%s)),
+                      trang_thai='HOAT_DONG',nguoi_sua=%s
                WHERE ma_tai_khoan=%s AND phien_ban=%s RETURNING ma_tai_khoan""",
-            (vai_tro, nguoi_sua, ma, phien_ban),
+            (vai_tro, ma_loai_tk, vai_tro, nguoi_sua, ma, phien_ban),
         ).fetchone()
 
 
 def cap_nhat_thong_tin_tai_khoan(
     ma: str, ma_bo_phan: str, vai_tro: str, phien_ban: int, nguoi_sua: str,
+    ma_loai_tk: str | None = None,
 ):
     with get_conn() as conn:
         if not conn.execute(
@@ -368,10 +372,12 @@ def cap_nhat_thong_tin_tai_khoan(
         if not nhan_vien:
             return "KHONG_CO_HO_SO_NHAN_VIEN"
         conn.execute(
-            """UPDATE tai_khoan SET ma_bo_phan=%s,vai_tro=%s,trang_thai='HOAT_DONG',
+            """UPDATE tai_khoan SET ma_bo_phan=%s,vai_tro=%s,
+                      ma_loai_tk=COALESCE(%s,(SELECT ma_loai_tk FROM doi_chieu_vai_tro_loai_tk WHERE vai_tro_cu=%s)),
+                      trang_thai='HOAT_DONG',
                       nguoi_sua=%s,phien_ban=phien_ban+1
                WHERE ma_tai_khoan=%s""",
-            (ma_bo_phan, vai_tro, nguoi_sua, ma),
+            (ma_bo_phan, vai_tro, ma_loai_tk, vai_tro, nguoi_sua, ma),
         )
         if _co_schema_legacy_tai_khoan(conn):
             conn.execute(
@@ -386,6 +392,53 @@ def vai_tro_ton_tai(ma: str) -> bool:
         if not _co_ma_tran_quyen(conn):
             return ma.upper() == "ADMIN"
         return conn.execute("SELECT 1 FROM vai_tro WHERE ma=%s", (ma,)).fetchone() is not None
+
+
+def danh_sach_loai_tai_khoan():
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT ma,ten,thu_tu,mo_ta FROM loai_tai_khoan ORDER BY thu_tu"
+        ).fetchall()
+
+
+def dem_tai_khoan_theo_loai():
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT ma_loai_tk,count(*) AS so_tai_khoan FROM tai_khoan
+               WHERE trang_thai='HOAT_DONG' AND ma_loai_tk IS NOT NULL
+               GROUP BY ma_loai_tk"""
+        ).fetchall()
+
+
+def danh_sach_quyen_loai_tk():
+    with get_conn() as conn:
+        if not conn.execute(
+            "SELECT to_regclass('mua_hang.phan_quyen_loai_tk') IS NOT NULL AS co"
+        ).fetchone()["co"]:
+            return []
+        return conn.execute(
+            """SELECT ma_loai_tk,trang,duoc_xem,pham_vi_xem,duoc_sua,
+                      pham_vi_sua,kieu_sua,loai_tai_khoan_duyet,phien_ban
+               FROM phan_quyen_loai_tk ORDER BY ma_loai_tk,trang"""
+        ).fetchall()
+
+
+def cap_nhat_quyen_loai_tk(ma_loai_tk: str, trang: str, phien_ban: int,
+                          du_lieu: dict, nguoi_sua: str):
+    with get_conn() as conn:
+        return conn.execute(
+            """UPDATE phan_quyen_loai_tk SET
+                 duoc_xem=%s,pham_vi_xem=%s,duoc_sua=%s,pham_vi_sua=%s,
+                 kieu_sua=%s,loai_tai_khoan_duyet=%s,nguoi_sua=%s,
+                 ngay_sua=now(),phien_ban=phien_ban+1
+               WHERE ma_loai_tk=%s AND trang=%s AND phien_ban=%s
+               RETURNING ma_loai_tk,trang,duoc_xem,pham_vi_xem,duoc_sua,
+                         pham_vi_sua,kieu_sua,loai_tai_khoan_duyet,phien_ban""",
+            (du_lieu["duoc_xem"], du_lieu["pham_vi_xem"], du_lieu["duoc_sua"],
+             du_lieu["pham_vi_sua"], du_lieu["kieu_sua"],
+             du_lieu["loai_tai_khoan_duyet"], nguoi_sua,
+             ma_loai_tk, trang, phien_ban),
+        ).fetchone()
 
 
 def danh_sach_vai_tro_va_quyen():

@@ -84,6 +84,85 @@ của từng đợt giao. Chạy trên đúng database backend đang dùng trư�
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/058_lich_su_dieu_chinh_dot_giao.sql
 ```
 
+### Dọn cột phụ bảng tài khoản
+
+Migration `059` bỏ `ho_ten` và `dang_hoat_dong`, giữ lại các cột chuẩn `ho_va_ten` và
+`trang_thai`. Migration dừng nếu phát hiện dữ liệu phụ khác dữ liệu chuẩn hoặc thiếu cột chuẩn;
+đối chiếu dữ liệu trước khi xử lý tiếp:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/059_don_dep_cot_phu_tai_khoan.sql
+```
+
+### Xác nhận kỹ thuật nhiều lần theo mã hàng
+
+Chạy migration `061` trên database backend đang dùng trước khi mở chi tiết mã hàng.
+Migration thêm dấu phân biệt lần xác nhận mới với các ghi chú tự do đã có:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/061_phan_biet_lan_xac_nhan_ky_thuat.sql
+```
+
+Sau khi áp dụng, tài khoản có quyền xác nhận kỹ thuật có thể ghi nhiều lần ở chi tiết mã hàng.
+Mỗi lần được lưu riêng với người xác nhận và thời điểm, kể cả sau khi phiếu đã qua bước xác nhận ban đầu.
+Phiếu chỉ được chuyển khỏi trạng thái chờ kỹ thuật khi từng dòng mã hàng đã có ít nhất một lần xác nhận.
+
+Migration `062` chuyển dấu "cần xác nhận kỹ thuật" xuống từng dòng mã hàng. Khi lập phiếu,
+người dùng đánh dấu các mã cần kỹ thuật xử lý; đánh dấu này chưa phải là lần xác nhận.
+Các phiếu cũ có cờ cấp phiếu được giữ bằng cách đánh dấu toàn bộ dòng hiện có:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/062_xac_nhan_ky_thuat_theo_dong_dat_ngoai.sql
+```
+
+Migration `063` thêm nội dung cần xác nhận riêng cho từng mã được đánh dấu. Khi lập phiếu,
+người yêu cầu phải ghi rõ nội dung này; kỹ thuật sẽ đọc được ngay trong chi tiết mã hàng.
+Với phiếu cũ, migration chuyển nội dung cấp phiếu xuống các mã cần xác nhận và dùng yêu cầu
+kỹ thuật của dòng nếu nội dung cấp phiếu trống:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/063_noi_dung_can_xac_nhan_kt_theo_ma.sql
+```
+
+Kiểm tra hai cột phụ đã được bỏ:
+
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_schema='mua_hang' AND table_name='tai_khoan'
+  AND column_name IN ('ho_ten','dang_hoat_dong');
+```
+
+### Nền tảng quản trị v3, đợt 1
+
+Migration `060` mở rộng `nhat_ky_thay_doi` hiện có để ghi/đọc lịch sử thêm/sửa/xóa danh mục;
+nếu bảng bị thiếu do migration `004` ghi nhận sai, `060` sẽ khôi phục cấu trúc cơ sở trước khi
+nâng cấp. Migration tạo và nạp 7 loại tài khoản v3, đồng thời thêm cấu trúc cho đề xuất sửa cần
+duyệt, quyền nhạy cảm và ma trận v3.
+Migration `064` ghi ánh xạ 16 vai trò v2 và mã `ADMIN` bổ sung sang 7 loại tài khoản v3,
+đồng thời bổ sung `tai_khoan.ma_loai_tk` cho các tài khoản hiện có. `064` đã chạy trên
+database đang dùng; backend vẫn dùng `vai_tro` cũ để kiểm quyền, nên cần triển khai đồng bộ
+ma trận quyền và màn quản trị trước khi đưa chuyển đổi vào vận hành.
+
+Sau khi các ô lệch được chốt theo PQ-07, migration `065` đã tạo ma trận 7 loại × 17 trang
+trong bảng `phan_quyen_loai_tk` và giữ nguyên ma trận v2 để đối soát. Bảng mới chưa
+quyết định quyền đang chạy; backend vẫn đọc ma trận v2 cho đến khi xử lý nhánh
+`CAN_DUYET` và chuyển kiểm quyền có kiểm soát.
+
+Nếu lần chạy `060` trước báo thiếu `mua_hang.nhat_ky_thay_doi`, transaction đã rollback. Cập nhật
+file migration theo bản mới rồi chạy lại toàn bộ file `060` trên đúng database backend đang dùng:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f supabase/migrations/060_nen_tang_quan_tri_v3.sql
+```
+
+Kiểm tra lịch sử mới được ghi và không cho sửa/xóa trực tiếp:
+
+```sql
+SELECT to_regclass('mua_hang.nhat_ky_thay_doi'),
+       to_regclass('mua_hang.de_xuat_sua_danh_muc'),
+       to_regclass('mua_hang.loai_tai_khoan');
+```
+
 `anh_xa_du_lieu_cu` dùng để quản lý mapping khi di trú từ các bảng `public` hiện tại. Các file
 này không tự động di trú dữ liệu thật khi cài schema mới.
 

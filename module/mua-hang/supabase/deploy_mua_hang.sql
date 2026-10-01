@@ -46,4 +46,9 @@ BEGIN;
 \ir migrations/056_ket_luan_xac_nhan_ky_thuat_tuy_chon.sql
 \ir migrations/057_bo_cot_ket_luan_xac_nhan_ky_thuat.sql
 \ir migrations/058_lich_su_dieu_chinh_dot_giao.sql
+\ir migrations/059_don_dep_cot_phu_tai_khoan.sql
+\ir migrations/060_nen_tang_quan_tri_v3.sql
+\ir migrations/061_phan_biet_lan_xac_nhan_ky_thuat.sql
+\ir migrations/062_xac_nhan_ky_thuat_theo_dong_dat_ngoai.sql
+\ir migrations/063_noi_dung_can_xac_nhan_kt_theo_ma.sql
 COMMIT;

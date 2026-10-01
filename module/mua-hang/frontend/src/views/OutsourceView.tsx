@@ -4,6 +4,7 @@ import {
   NhaCungCapDanhMuc, nhapLsxDatNgoai, PhieuDatNgoai, taoBaoGiaDatNgoai,
 } from '../api/client';
 import { OutsourceDetailModal } from '../components/OutsourceDetailModal';
+import { LsxSearchSelect } from '../components/LsxSearchSelect';
 
 type OutsourceTab = 'tracking' | 'tickets' | 'quotes' | 'orders' | 'suppliers';
 type FilterState = { from: string; to: string; workshop: string; supplier: string; status: string; query: string };
@@ -220,16 +221,17 @@ interface CreateRequestModalProps {
   selectedOrder?: LsxDatNgoai;
   createLsx: string;
   createLines: Set<string>;
-  needsTechnical: boolean;
-  technicalNote: string;
+  technicalLines: Set<string>;
+  technicalNotes: Record<string, string>;
   processContent: string;
   technicalRequirements: string;
   qualityRequirements: string;
   loading: boolean;
   onSelectLsx: (value: string) => void;
   onToggleLine: (barcode: string) => void;
-  onNeedsTechnical: (value: boolean) => void;
-  onTechnicalNote: (value: string) => void;
+  onToggleAllLines: (barcodes: string[], selected: boolean) => void;
+  onToggleTechnicalLine: (barcode: string) => void;
+  onTechnicalNoteChange: (barcode: string, note: string) => void;
   onProcessContent: (value: string) => void;
   onTechnicalRequirements: (value: string) => void;
   onQualityRequirements: (value: string) => void;
@@ -238,7 +240,22 @@ interface CreateRequestModalProps {
 }
 
 function CreateRequestModal(props: CreateRequestModalProps) {
-  return <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-3"><form onSubmit={props.onSubmit} className="bg-white w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">THÊM MỚI ĐẶT NGOÀI</h2><p className="mt-1 text-[12px] text-[#59627A]">Chọn LSX và mã hàng đã nạp từ dữ liệu thật.</p></div><button type="button" onClick={props.onClose} className="w-10 h-10"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-4"><label className="block text-[11px] font-bold">LỆNH SẢN XUẤT *<select required value={props.createLsx} onChange={(event) => props.onSelectLsx(event.target.value)} className="mt-1 w-full h-11 px-3 border rounded bg-white font-normal"><option value="">-- Chọn LSX --</option>{props.imported.map((item) => <option key={item.lenh_san_xuat} value={item.lenh_san_xuat}>{item.lenh_san_xuat} · {item.dong.length} mã hàng</option>)}</select></label>{props.imported.length === 0 && <div className="p-4 bg-[#FFF7E6] border border-[#F2CD82] rounded text-[12px]">Chưa có dữ liệu LSX. Hãy dùng nút “Nạp LSX từ Excel” trước.</div>}{props.selectedOrder && <div className="border rounded overflow-x-auto"><table className="w-full min-w-[650px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-3 text-left">CHỌN</th><th className="p-3 text-left">MÃ VẠCH</th><th className="p-3 text-left">MÃ HÀNG</th><th className="p-3 text-left">TÊN HÀNG</th><th className="p-3 text-left">SỐ LƯỢNG</th></tr></thead><tbody>{props.selectedOrder.dong.map((line) => <tr key={line.ma_vach} className="border-t"><td className="p-3"><input type="checkbox" checked={props.createLines.has(line.ma_vach)} disabled={line.da_lap_bao_gia} onChange={() => props.onToggleLine(line.ma_vach)} aria-label={`Chọn ${line.ma_hang}`} /></td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold">{line.ma_hang}</td><td className="p-3">{line.ten_hang}{line.da_lap_bao_gia && <span className="block text-[10px] text-[#59627A]">Đã lập phiếu</span>}</td><td className="p-3">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td></tr>)}</tbody></table></div>}<label className="flex items-center gap-2 text-[12px] font-bold"><input type="checkbox" checked={props.needsTechnical} onChange={(event) => props.onNeedsTechnical(event.target.checked)} />CẦN XÁC NHẬN KỸ THUẬT</label>{props.needsTechnical && <label className="block text-[11px] font-bold">NỘI DUNG CẦN XÁC NHẬN *<textarea required value={props.technicalNote} onChange={(event) => props.onTechnicalNote(event.target.value)} rows={3} className="mt-1 w-full p-3 border rounded font-normal" /></label>}
+  const selectableBarcodes = props.selectedOrder?.dong
+    .filter((line) => !line.da_lap_bao_gia)
+    .map((line) => line.ma_vach) || [];
+  const allSelected = selectableBarcodes.length > 0
+    && selectableBarcodes.every((barcode) => props.createLines.has(barcode));
+  return <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-3"><form onSubmit={props.onSubmit} className="bg-white w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">THÊM MỚI ĐẶT NGOÀI</h2><p className="mt-1 text-[12px] text-[#59627A]">Chọn LSX và mã hàng đã nạp từ dữ liệu thật.</p></div><button type="button" onClick={props.onClose} className="w-10 h-10"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-4"><LsxSearchSelect orders={props.imported} value={props.createLsx} onChange={props.onSelectLsx} />{props.imported.length === 0 && <div className="p-4 bg-[#FFF7E6] border border-[#F2CD82] rounded text-[12px]">Chưa có dữ liệu LSX. Hãy dùng nút “Nạp LSX từ Excel” trước.</div>}{props.selectedOrder && <div className="border rounded overflow-x-auto"><table className="w-full min-w-[650px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr><th className="p-3 text-left"><label className="flex items-center gap-2 whitespace-nowrap"><input type="checkbox" checked={allSelected} disabled={selectableBarcodes.length === 0} onChange={(event) => props.onToggleAllLines(selectableBarcodes, event.target.checked)} aria-label="Chọn tất cả mã hàng" />CHỌN TẤT CẢ</label></th><th className="p-3 text-left">CẦN XNKT</th><th className="p-3 text-left">MÃ VẠCH</th><th className="p-3 text-left">MÃ HÀNG</th><th className="p-3 text-left">TÊN HÀNG</th><th className="p-3 text-left">SỐ LƯỢNG</th></tr></thead><tbody>{props.selectedOrder.dong.map((line) => <tr key={line.ma_vach} className="border-t"><td className="p-3"><input type="checkbox" checked={props.createLines.has(line.ma_vach)} disabled={line.da_lap_bao_gia} onChange={() => props.onToggleLine(line.ma_vach)} aria-label={`Chọn ${line.ma_hang}`} /></td><td className="p-3"><input type="checkbox" checked={props.technicalLines.has(line.ma_vach)} disabled={line.da_lap_bao_gia || !props.createLines.has(line.ma_vach)} onChange={() => props.onToggleTechnicalLine(line.ma_vach)} aria-label={`Yêu cầu xác nhận kỹ thuật mã ${line.ma_hang}`} /></td><td className="p-3 font-mono">{line.ma_vach}</td><td className="p-3 font-mono font-bold">{line.ma_hang}</td><td className="p-3">{line.ten_hang}{line.da_lap_bao_gia && <span className="block text-[10px] text-[#59627A]">Đã lập phiếu</span>}</td><td className="p-3">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td></tr>)}</tbody></table></div>}{props.selectedOrder && <p className="text-[12px] text-[#59627A]">Đánh dấu CẦN XNKT trên từng mã hàng cần kỹ thuật xác nhận sau khi lập phiếu.</p>}
+  {props.selectedOrder && props.technicalLines.size > 0 && <div className="space-y-3 rounded border border-[#C6CCE9] bg-[#F4F6FA] p-3">
+    <h3 className="text-[12px] font-bold">NỘI DUNG CẦN XÁC NHẬN THEO MÃ HÀNG</h3>
+    {props.selectedOrder.dong.filter((line) => props.createLines.has(line.ma_vach) && props.technicalLines.has(line.ma_vach)).map((line) => <label key={line.ma_vach} className="block text-[11px] font-bold">
+      {line.ma_hang} · {line.ten_hang} *
+      <textarea required rows={2} value={props.technicalNotes[line.ma_vach] || ''}
+        onChange={(event) => props.onTechnicalNoteChange(line.ma_vach, event.target.value)}
+        placeholder="Ghi rõ thông số hoặc vấn đề cần kỹ thuật xác nhận cho mã này"
+        className="mt-1 w-full rounded border bg-white p-3 font-normal" />
+    </label>)}
+  </div>}
   <div className="grid gap-3 border-t pt-3">
     <label className="block text-[11px] font-bold">NỘI DUNG GIA CÔNG *<textarea required value={props.processContent} onChange={(event) => props.onProcessContent(event.target.value)} rows={2} className="mt-1 w-full p-3 border rounded font-normal" /></label>
     <label className="block text-[11px] font-bold">YÊU CẦU KỸ THUẬT *<textarea required value={props.technicalRequirements} onChange={(event) => props.onTechnicalRequirements(event.target.value)} rows={2} className="mt-1 w-full p-3 border rounded font-normal" /></label>
@@ -266,8 +283,8 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
   const [loading, setLoading] = useState(false);
   const [createLsx, setCreateLsx] = useState('');
   const [createLines, setCreateLines] = useState<Set<string>>(new Set());
-  const [needsTechnical, setNeedsTechnical] = useState(false);
-  const [technicalNote, setTechnicalNote] = useState('');
+  const [technicalLines, setTechnicalLines] = useState<Set<string>>(new Set());
+  const [technicalNotes, setTechnicalNotes] = useState<Record<string, string>>({});
   const [processContent, setProcessContent] = useState('');
   const [technicalRequirements, setTechnicalRequirements] = useState('');
   const [qualityRequirements, setQualityRequirements] = useState('');
@@ -373,9 +390,11 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
       const result = await taoBaoGiaDatNgoai({ ma_vach: [...createLines],
         chi_tiet_dong: [...createLines].map((ma_vach) => ({ ma_vach,
           noi_dung_gia_cong: processContent.trim(), yeu_cau_ky_thuat: technicalRequirements.trim(),
-          yeu_cau_chat_luong: qualityRequirements.trim() })),
-        can_xac_nhan_ky_thuat: needsTechnical, noi_dung_ky_thuat: technicalNote || undefined });
-      setShowCreate(false); setCreateLsx(''); setCreateLines(new Set()); setNeedsTechnical(false); setTechnicalNote('');
+          yeu_cau_chat_luong: qualityRequirements.trim(),
+          can_xac_nhan_ky_thuat: technicalLines.has(ma_vach),
+          noi_dung_can_xac_nhan_kt: technicalLines.has(ma_vach) ? technicalNotes[ma_vach]?.trim() || '' : null })),
+        can_xac_nhan_ky_thuat: technicalLines.size > 0 });
+      setShowCreate(false); setCreateLsx(''); setCreateLines(new Set()); setTechnicalLines(new Set()); setTechnicalNotes({});
       setProcessContent(''); setTechnicalRequirements(''); setQualityRequirements('');
       await loadData(); onNotify(`Đã tạo ${result.so_phieu} phiếu đặt ngoài từ dữ liệu LSX.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không tạo được phiếu đặt ngoài.'); }
@@ -387,6 +406,26 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
   const quoteRequests = requests.filter((item) => ['CHO_XAC_NHAN_KY_THUAT', 'DANG_BAO_GIA', 'CHO_DUYET'].includes(item.trang_thai));
   const placedOrders = requests.filter((item) => ['DA_DUYET', 'DA_DAT', 'DANG_LAM', 'DA_NHAN', 'HOAN_THANH'].includes(item.trang_thai));
   const selectedCreateOrder = imported.find((item) => item.lenh_san_xuat === createLsx);
+  function toggleCreateLine(barcode: string) {
+    const next = new Set(createLines);
+    if (next.has(barcode)) {
+      next.delete(barcode);
+      setTechnicalLines((current) => { const updated = new Set(current); updated.delete(barcode); return updated; });
+      setTechnicalNotes((current) => { const updated = { ...current }; delete updated[barcode]; return updated; });
+    } else next.add(barcode);
+    setCreateLines(next);
+  }
+  function toggleAllCreateLines(barcodes: string[], selected: boolean) {
+    setCreateLines(new Set(selected ? barcodes : []));
+    if (!selected) { setTechnicalLines(new Set()); setTechnicalNotes({}); }
+  }
+  function toggleTechnicalLine(barcode: string) {
+    setTechnicalLines((current) => {
+      const next = new Set(current);
+      if (next.has(barcode)) next.delete(barcode); else next.add(barcode);
+      return next;
+    });
+  }
   const detailLsx = imported.find((item) => item.lenh_san_xuat === detailLsxId);
   const detailRequest = requests.find((item) => item.lenh_san_xuat === detailLsxId && item.trang_thai !== 'HUY')
     || requests.find((item) => item.lenh_san_xuat === detailLsxId);
@@ -417,7 +456,7 @@ export function OutsourceView({ onNotify, currentUser }: { onNotify: (message: s
     {tab === 'suppliers' && <SupplierCards suppliers={suppliers} onNotify={onNotify} />}
 
     {showPaste && <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-3"><div className="bg-white w-full max-w-6xl max-h-[94vh] overflow-y-auto rounded shadow-xl"><header className="p-4 border-b flex justify-between"><div><h2 className="font-bold">NẠP LSX VÀ MÃ HÀNG TỪ EXCEL</h2><p className="mt-1 text-[12px] text-[#59627A]">Hỗ trợ trực tiếp bố cục file GCKC-2-T7 và mẫu 11 cột rút gọn.</p></div><button onClick={() => setShowPaste(false)} disabled={loading} className="w-10 h-10 disabled:opacity-40"><span className="material-symbols-outlined">close</span></button></header><div className="p-4 space-y-3"><div className="p-3 bg-[#EEF0F9] text-[12px] rounded"><strong>File GCKC-2-T7:</strong> copy từ hàng tiêu đề “Chứng từ” đến hết dữ liệu rồi dán vào đây. Hệ thống tự lấy A Chứng từ · G Mã vạch · E Mã hàng · F Nội dung · I Số lượng · J ĐVT · C Số PO · D Khách hàng · B Ngày chứng từ · K Dự kiến giao hàng · N Tình trạng.</div>{error && <div role="alert" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{error}</div>}<textarea value={pasteText} onChange={(event) => { setPasteText(event.target.value); setPasteRows([]); setPastePage(1); setError(''); }} rows={8} className="w-full p-3 border rounded font-mono text-[12px]" placeholder={'Dán nguyên vùng dữ liệu từ file GCKC-2-T7, gồm cả 2 hàng tiêu đề...'} />{pasteRows.length > 0 && <Pagination total={pasteRows.length} page={currentPastePage} pageSize={pastePageSize} onPageChange={setPastePage} onPageSizeChange={(size) => { setPastePageSize(size); setPastePage(1); }} />}{pasteRows.length > 0 && <div className="overflow-x-auto border rounded"><table className="w-full min-w-[950px] text-[12px]"><thead className="bg-[#F4F6FA]"><tr>{['LSX', 'MÃ VẠCH', 'MÃ HÀNG', 'TÊN HÀNG', 'SL', 'ĐVT', 'PO / KH', 'NGÀY NHẬN', 'HẠN GIAO', 'TÌNH TRẠNG'].map((head) => <th key={head} className="p-3 text-left">{head}</th>)}</tr></thead><tbody>{visiblePasteRows.map((row) => <tr key={row.ma_vach} className="border-t"><td className="p-3 font-mono font-bold">{row.lenh_san_xuat}</td><td className="p-3 font-mono">{row.ma_vach}</td><td className="p-3 font-mono">{row.ma_hang}</td><td className="p-3">{row.ten_hang}</td><td className="p-3">{row.so_luong}</td><td className="p-3">{row.dvt}</td><td className="p-3">{row.so_po || '—'} / {row.ten_khach_hang_chup || row.ma_khach_hang || '—'}</td><td className="p-3">{displayDate(row.ngay_nhan_lenh)}</td><td className="p-3">{displayDate(row.ki_han_khach_hang)}</td><td className="p-3">{row.trang_thai_don || '—'}</td></tr>)}</tbody></table></div>}</div><footer className="p-4 border-t flex justify-end gap-2"><button onClick={() => setShowPaste(false)} disabled={loading} className="min-h-11 px-4 border rounded font-bold disabled:opacity-40">HỦY</button><button onClick={previewPaste} disabled={loading} className="min-h-11 px-4 border border-[#283A97] text-[#283A97] rounded font-bold disabled:opacity-40">ĐỌC & XEM TRƯỚC</button><button disabled={!pasteRows.length || loading} onClick={() => void importRows()} className="min-h-11 px-4 bg-[#283A97] text-white rounded font-bold disabled:opacity-40">{loading ? 'ĐANG LƯU…' : `NẠP ${pasteRows.length || ''} DÒNG`}</button></footer></div></div>}
-    {showCreate && <CreateRequestModal imported={imported} selectedOrder={selectedCreateOrder} createLsx={createLsx} createLines={createLines} needsTechnical={needsTechnical} technicalNote={technicalNote} processContent={processContent} technicalRequirements={technicalRequirements} qualityRequirements={qualityRequirements} loading={loading} onSelectLsx={(value) => { setCreateLsx(value); setCreateLines(new Set()); }} onToggleLine={(barcode) => setCreateLines((current) => { const next = new Set(current); if (next.has(barcode)) next.delete(barcode); else next.add(barcode); return next; })} onNeedsTechnical={setNeedsTechnical} onTechnicalNote={setTechnicalNote} onProcessContent={setProcessContent} onTechnicalRequirements={setTechnicalRequirements} onQualityRequirements={setQualityRequirements} onClose={() => setShowCreate(false)} onSubmit={submitCreate} />}
+    {showCreate && <CreateRequestModal imported={imported} selectedOrder={selectedCreateOrder} createLsx={createLsx} createLines={createLines} technicalLines={technicalLines} technicalNotes={technicalNotes} processContent={processContent} technicalRequirements={technicalRequirements} qualityRequirements={qualityRequirements} loading={loading} onSelectLsx={(value) => { setCreateLsx(value); setCreateLines(new Set()); setTechnicalLines(new Set()); setTechnicalNotes({}); }} onToggleLine={toggleCreateLine} onToggleAllLines={toggleAllCreateLines} onToggleTechnicalLine={toggleTechnicalLine} onTechnicalNoteChange={(barcode, note) => setTechnicalNotes((current) => ({ ...current, [barcode]: note }))} onProcessContent={setProcessContent} onTechnicalRequirements={setTechnicalRequirements} onQualityRequirements={setQualityRequirements} onClose={() => setShowCreate(false)} onSubmit={submitCreate} />}
     {detailLsx && <OutsourceDetailModal key={`${detailLsx.lenh_san_xuat}-${detailRequest?.id || 'lsx'}`} lsx={detailLsx} request={detailRequest} canConfirmTechnical={canConfirmTechnical} canCancel={canCancelOutsource} canChooseSupplier={canCancelOutsource} suppliers={suppliers} onRequestChanged={loadData} onNotify={onNotify} onClose={() => setDetailLsxId(null)} />}
   </div>;
 }

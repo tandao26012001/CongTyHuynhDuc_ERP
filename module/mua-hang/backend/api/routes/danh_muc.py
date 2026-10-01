@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from backend.api.envelope import thanh_cong
 from backend.api.middleware import lay_ho_so
 from backend.services import catalog_service, phan_quyen_service, ncc_import_service
+from backend.services import danh_muc_lich_su_service
 from backend.services.errors import KhongCoQuyen
 
 router = APIRouter()
@@ -217,6 +218,18 @@ def lay_danh_muc(
     return thanh_cong(catalog_service.lay_danh_muc(
         ma, trang, kich_thuoc,
         {"q": q, "trang_thai": trang_thai, "ma_bo_phan": ma_bo_phan},
+    ))
+
+
+@router.get("/danh-muc/{ma}/{id_ban_ghi}/lich-su", summary="Lịch sử thay đổi một bản ghi danh mục", response_model=PhanHoi)
+def lich_su_danh_muc(
+    ma: str, id_ban_ghi: str, request: Request,
+    trang: int = 1, kich_thuoc: int = 25,
+):
+    ho_so = lay_ho_so(request)
+    phan_quyen_service.kiem_quyen(ho_so, "danh_muc", "xem")
+    return thanh_cong(danh_muc_lich_su_service.danh_sach(
+        ma, id_ban_ghi, trang, kich_thuoc,
     ))
 
 

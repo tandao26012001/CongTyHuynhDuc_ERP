@@ -5,7 +5,8 @@ from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
 from backend.data import dat_ngoai_chi_tiet_repo
 from backend.data.catalog_repo import lay_ket_qua_idempotency
-from backend.services.errors import KhongCoQuyen, KhongTimThay, ThieuDuLieu, XungDot
+from backend.data.db import get_conn
+from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
 from backend.services.phan_quyen_service import kiem_quyen
 
 
@@ -18,9 +19,17 @@ def _dong(id_phieu: str, id_dong: str, ho_so: dict) -> dict:
 
 
 def chi_tiet(id_phieu: str, id_dong: str, ho_so: dict) -> dict:
-    row = _dong(id_phieu, id_dong, ho_so)
-    return {**row, 'xac_nhan_ky_thuat': dat_ngoai_chi_tiet_repo.danh_sach_xac_nhan(id_dong),
-            'dot_giao': dat_ngoai_chi_tiet_repo.danh_sach_dot_giao(id_dong)}
+    # Mot lan xem chi tiet gom quyen, dong, lich su va dot giao. Dung chung mot
+    # ket noi de tranh nhieu lan bat tay voi database qua mang.
+    with get_conn() as conn:
+        kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
+        row = dat_ngoai_chi_tiet_repo.lay_dong(id_phieu, id_dong, conn)
+        if not row:
+            raise KhongTimThay('Không tìm thấy dòng đặt ngoài thuộc phiếu này.')
+        return {**row,
+                'xac_nhan_ky_thuat': dat_ngoai_chi_tiet_repo.danh_sach_xac_nhan(
+                    id_dong, row.get('ma_hang') or None, conn),
+                'dot_giao': dat_ngoai_chi_tiet_repo.danh_sach_dot_giao(id_dong, conn)}
 
 
 def sua_dong(id_phieu: str, id_dong: str, data: dict, ho_so: dict) -> dict:
@@ -54,11 +63,10 @@ def them_xac_nhan(id_phieu: str, id_dong: str, data: dict,
     row = _dong(id_phieu, id_dong, ho_so)
     if row['trang_thai_phieu'] in ('HUY', 'HOAN_THANH'):
         raise XungDot('Phiếu đã kết thúc, không thể thêm xác nhận.')
+    if not row.get('can_xac_nhan_ky_thuat'):
+        raise XungDot('Mã hàng này không được đánh dấu cần xác nhận kỹ thuật.')
     if ho_so.get('vai_tro') != 'QC':
-        try:
-            kiem_quyen(ho_so, 'xac_nhan_kt', 'sua')
-        except KhongCoQuyen:
-            kiem_quyen(ho_so, 'dat_ngoai', 'sua')
+        kiem_quyen(ho_so, 'xac_nhan_kt', 'sua')
     content = str(data['noi_dung']).strip()
     if not content:
         raise ThieuDuLieu('Nội dung xác nhận không được để trống.')

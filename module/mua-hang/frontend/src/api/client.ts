@@ -3,12 +3,31 @@ const API_TIMEOUT_MS = 15_000;
 const BULK_IMPORT_TIMEOUT_MS = 60_000;
 export const PHIEN_HET_HAN_EVENT = 'hd-phien-het-han';
 
+export interface DongLichSuDanhMuc {
+  id: string;
+  ma_danh_muc: string;
+  ma_trang: string;
+  id_ban_ghi: string;
+  hanh_dong: 'TAO' | 'SUA' | 'XOA' | 'DUYET' | 'HUY' | 'XEM' | 'XUAT';
+  du_lieu_cu: Record<string, unknown> | null;
+  du_lieu_moi: Record<string, unknown> | null;
+  nguoi_thuc_hien: string | null;
+  thoi_diem: string;
+}
+
+export async function layLichSuDanhMuc(ma: string, idBanGhi: string) {
+  return api<{ items: DongLichSuDanhMuc[]; tong: number; trang: number; kich_thuoc: number }>(
+    `/api/v1/danh-muc/${encodeURIComponent(ma)}/${encodeURIComponent(idBanGhi)}/lich-su`,
+  );
+}
+
 export interface HoSo {
   ma_tai_khoan: string;
   ma_nhan_vien: string;
   ho_va_ten: string;
   ma_bo_phan: string;
   vai_tro: string;
+  ma_loai_tk?: string | null;
   trang_thai: string;
   phien_ban: number;
   quyen?: Record<string, { xem?: boolean; sua?: boolean; duyet?: boolean; xuat?: boolean; pham_vi?: string }>;
@@ -279,6 +298,7 @@ export interface TaiKhoanQuanTri {
   ma_bo_phan: string;
   ten_bo_phan?: string | null;
   vai_tro: string | null;
+  ma_loai_tk: string | null;
   trang_thai: 'CHO_DUYET' | 'HOAT_DONG' | 'KHOA';
   lan_dang_nhap_cuoi: string | null;
   ngay_tao: string | null;
@@ -302,6 +322,27 @@ export interface VaiTroQuanTri {
   thu_tu: number | null;
   mo_ta: string | null;
   quyen: QuyenVaiTro[];
+}
+
+export interface QuyenLoaiTaiKhoan {
+  ma_loai_tk: string;
+  trang: string;
+  duoc_xem: boolean;
+  pham_vi_xem: 'toan_bo' | 'bo_phan' | 'ca_nhan';
+  duoc_sua: boolean;
+  pham_vi_sua: 'toan_bo' | 'bo_phan' | 'ca_nhan';
+  kieu_sua: 'THANG' | 'CAN_DUYET';
+  loai_tai_khoan_duyet: string[];
+  phien_ban: number;
+}
+
+export interface LoaiTaiKhoanQuanTri {
+  ma: string;
+  ten: string;
+  thu_tu: number;
+  mo_ta: string | null;
+  so_tai_khoan: number;
+  quyen: QuyenLoaiTaiKhoan[];
 }
 
 export async function layTaiKhoanQuanTri(trang = 1, kichThuoc = 25, q = '', trangThai = '') {
@@ -334,6 +375,21 @@ export async function capNhatTaiKhoanQuanTri(ma: string, maBoPhan: string, vaiTr
 
 export async function layVaiTroVaPhanQuyen() {
   return api<{ items: VaiTroQuanTri[] }>('/api/v1/vai-tro');
+}
+
+export async function layLoaiTaiKhoan() {
+  return api<{ items: Pick<VaiTroQuanTri, 'ma' | 'ten' | 'thu_tu' | 'mo_ta'>[] }>('/api/v1/loai-tai-khoan');
+}
+
+export async function layPhanQuyenV3() {
+  return api<{ items: LoaiTaiKhoanQuanTri[]; san_sang: boolean }>('/api/v1/phan-quyen-v3');
+}
+
+export async function capNhatPhanQuyenV3(quyen: QuyenLoaiTaiKhoan) {
+  return api<QuyenLoaiTaiKhoan>(
+    `/api/v1/phan-quyen-v3/${encodeURIComponent(quyen.ma_loai_tk)}/${encodeURIComponent(quyen.trang)}`,
+    { method: 'PATCH', headers: idempotencyHeaders(), body: JSON.stringify(quyen) },
+  );
 }
 
 export async function capNhatPhanQuyen(quyen: QuyenVaiTro) {
@@ -704,6 +760,9 @@ export async function layLsxDatNgoai(q = '') {
 
 export interface DongPhieuDatNgoai {
   id: string;
+  can_xac_nhan_ky_thuat?: boolean;
+  noi_dung_can_xac_nhan_kt?: string | null;
+  da_xac_nhan_kt?: boolean;
   ma_vach: string;
   ma_hang: string;
   ten_hang: string;
@@ -730,8 +789,9 @@ export interface DongPhieuDatNgoai {
 
 export interface ChiTietDatNgoaiDong extends DongPhieuDatNgoai {
   phien_ban: number;
-  xac_nhan_ky_thuat: Array<{ id: string; noi_dung: string;
-    nguoi_xac_nhan: string; ten_nguoi_xac_nhan: string | null; thoi_diem: string }>;
+  xac_nhan_ky_thuat: Array<{ id: string; noi_dung: string | null; loai: 'PHIEU' | 'MA_HANG';
+    nguoi_xac_nhan: string; ten_nguoi_xac_nhan: string | null; thoi_diem: string;
+    id_phieu: string }>;
   dot_giao: Array<{ id: string; dot_so: number; so_luong: number;
     ngay_du_kien: string; ngay_thuc_te: string | null; phien_ban: number;
     lich_su: Array<{ id: string; ngay_cu: string; ngay_moi: string; ly_do: string;
@@ -1084,6 +1144,8 @@ export async function chuyenTrangThaiDatNgoai(phieu: PhieuDatNgoai, trangThai: s
 
 export interface ChiTietDongDatNgoai {
   ma_vach: string;
+  can_xac_nhan_ky_thuat?: boolean;
+  noi_dung_can_xac_nhan_kt?: string | null;
   noi_dung_gia_cong: string;
   yeu_cau_ky_thuat: string;
   yeu_cau_chat_luong: string;

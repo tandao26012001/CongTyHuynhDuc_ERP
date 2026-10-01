@@ -143,12 +143,14 @@ def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str,
                     """INSERT INTO dat_ngoai_dong(
                            id,id_dat_ngoai,stt_dong,ma_vach,ma_hang,ten_hang_chup,dvt_chup,
                            so_luong,trang_thai_dong,nguoi_tao,noi_dung_gia_cong,
-                           yeu_cau_ky_thuat,yeu_cau_chat_luong,ma_hang_goc)
-                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           yeu_cau_ky_thuat,yeu_cau_chat_luong,ma_hang_goc,
+                           can_xac_nhan_ky_thuat,noi_dung_can_xac_nhan_kt)
+                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (dong["id"], phieu["id"], stt, dong["ma_vach"], dong["ma_hang"],
                      dong["ten_hang"], dong["dvt"], dong["so_luong_po"],
                      phieu["trang_thai"], nguoi_tao, dong['noi_dung_gia_cong'],
-                     dong['yeu_cau_ky_thuat'], dong['yeu_cau_chat_luong'], dong['ma_hang']),
+                     dong['yeu_cau_ky_thuat'], dong['yeu_cau_chat_luong'], dong['ma_hang'],
+                     dong['can_xac_nhan_ky_thuat'], dong['noi_dung_can_xac_nhan_kt']),
                 )
             conn.execute(
                 """INSERT INTO dat_ngoai_lich_su(
@@ -169,6 +171,12 @@ def danh_sach_dat_ngoai() -> list[dict]:
             """SELECT dn.*,
                       coalesce(jsonb_agg(jsonb_build_object(
                         'id',dd.id,'ma_vach',dd.ma_vach,'ma_hang',dd.ma_hang,
+                        'can_xac_nhan_ky_thuat',dd.can_xac_nhan_ky_thuat,
+                        'noi_dung_can_xac_nhan_kt',dd.noi_dung_can_xac_nhan_kt,
+                        'da_xac_nhan_kt',EXISTS (
+                          SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                          WHERE x.id_dat_ngoai_dong=dd.id AND x.la_xac_nhan
+                        ),
                         'ten_hang',dd.ten_hang_chup,'dvt',dd.dvt_chup,'so_luong',dd.so_luong,
                         'id_ncc',dd.id_ncc,'ma_ncc_chup',dd.ma_ncc_chup,'ten_ncc_chup',dd.ten_ncc_chup,
                         'don_gia',dd.don_gia,'ky_han',dd.ky_han,'ngay_nhan',dd.ngay_nhan,
@@ -206,6 +214,18 @@ def lay_dat_ngoai(conn, id_phieu: str, khoa: bool = False):
     if khoa:
         sql += " FOR UPDATE"
     return conn.execute(sql, (id_phieu,)).fetchone()
+
+
+def dong_chua_xac_nhan_ky_thuat(id_phieu: str) -> list[dict]:
+    with get_conn() as conn:
+        return [dict(row) for row in conn.execute(
+            """SELECT d.id,d.ma_hang FROM dat_ngoai_dong d
+               WHERE d.id_dat_ngoai=%s AND d.can_xac_nhan_ky_thuat
+                 AND NOT EXISTS (
+                   SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                   WHERE x.id_dat_ngoai_dong=d.id AND x.la_xac_nhan
+                 ) ORDER BY d.stt_dong""", (id_phieu,),
+        )]
 
 
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):

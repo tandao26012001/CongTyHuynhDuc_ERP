@@ -91,7 +91,7 @@ def dang_nhap(ma_tai_khoan: str, mat_khau: str, ip=None, thiet_bi=None) -> dict:
 def _ho_so_cong_khai(row) -> dict:
     return {k: row[k] for k in (
         "ma_tai_khoan", "ma_nhan_vien", "ho_va_ten", "ma_bo_phan",
-        "vai_tro", "trang_thai", "phien_ban"
+        "vai_tro", "ma_loai_tk", "trang_thai", "phien_ban"
     ) if k in row}
 
 

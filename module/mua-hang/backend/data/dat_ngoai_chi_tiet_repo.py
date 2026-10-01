@@ -1,13 +1,15 @@
 """Chi tiet dong dat ngoai, xac nhan ky thuat va lich giao nhieu dot."""
 
+from contextlib import nullcontext
+
 from backend.data.db import get_conn
 from backend.data.catalog_repo import _bat_dau_idempotency, _hoan_tat_idempotency
 from backend.services.sinh_ma import sinh_ma
 
 
-def lay_dong(id_phieu: str, id_dong: str) -> dict | None:
-    with get_conn() as conn:
-        row = conn.execute(
+def lay_dong(id_phieu: str, id_dong: str, conn=None) -> dict | None:
+    with get_conn() if conn is None else nullcontext(conn) as db:
+        row = db.execute(
             """SELECT d.*,p.trang_thai AS trang_thai_phieu,p.nguoi_lap
                FROM dat_ngoai_dong d JOIN dat_ngoai p ON p.id=d.id_dat_ngoai
                WHERE p.id=%s AND d.id=%s""", (id_phieu, id_dong),
@@ -15,13 +17,37 @@ def lay_dong(id_phieu: str, id_dong: str) -> dict | None:
         return dict(row) if row else None
 
 
-def danh_sach_xac_nhan(id_dong: str) -> list[dict]:
-    with get_conn() as conn:
-        return [dict(r) for r in conn.execute(
-            """SELECT x.*,nv.ho_va_ten AS ten_nguoi_xac_nhan
-               FROM dat_ngoai_xac_nhan_kt x
-               LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=x.nguoi_xac_nhan
-               WHERE x.id_dat_ngoai_dong=%s ORDER BY x.thoi_diem,x.id""", (id_dong,),
+def danh_sach_xac_nhan(id_dong: str, ma_hang: str | None, conn=None) -> list[dict]:
+    dieu_kien_dong = 'd.ma_hang=%s' if ma_hang else 'd.id=%s'
+    gia_tri_dong = ma_hang if ma_hang else id_dong
+    with get_conn() if conn is None else nullcontext(conn) as db:
+        return [dict(r) for r in db.execute(
+            f"""WITH phieu_ma_hang AS (
+                   SELECT DISTINCT d.id_dat_ngoai
+                   FROM dat_ngoai_dong d WHERE {dieu_kien_dong}
+                 ), lich_su AS (
+                   SELECT 'PHIEU-' || ls.id::text AS id, ls.thoi_diem,
+                          ls.noi_dung, ls.nguoi_thuc_hien AS nguoi_xac_nhan,
+                          ls.id_dat_ngoai AS id_phieu, 'PHIEU' AS loai
+                   FROM dat_ngoai_lich_su ls
+                   JOIN dat_ngoai p ON p.id=ls.id_dat_ngoai
+                   JOIN phieu_ma_hang m ON m.id_dat_ngoai=p.id
+                   WHERE ls.trang_thai_cu='CHO_XAC_NHAN_KY_THUAT'
+                     AND ls.trang_thai_moi='DANG_BAO_GIA'
+                     AND p.can_xac_nhan_ky_thuat
+                   UNION ALL
+                   SELECT 'DONG-' || x.id, x.thoi_diem, x.noi_dung,
+                          x.nguoi_xac_nhan, d.id_dat_ngoai, 'MA_HANG'
+                   FROM dat_ngoai_xac_nhan_kt x
+                   JOIN dat_ngoai_dong d ON d.id=x.id_dat_ngoai_dong
+                   WHERE x.la_xac_nhan
+                     AND {dieu_kien_dong}
+                 )
+               SELECT h.*, nv.ho_va_ten AS ten_nguoi_xac_nhan
+               FROM lich_su h
+               LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=h.nguoi_xac_nhan
+               ORDER BY h.thoi_diem DESC,h.id DESC""",
+            (gia_tri_dong, gia_tri_dong),
         )]
 
 
@@ -32,6 +58,11 @@ def them_xac_nhan(id_dong: str, noi_dung: str, nguoi: str,
         prior = _bat_dau_idempotency(conn, tai_khoan, khoa, path)
         if prior is not None:
             return prior
+        # Giu chuoi id_lan_truoc theo dung thu tu khi hai nguoi xac nhan
+        # cung mot ma hang gan nhu dong thoi.
+        conn.execute(
+            'SELECT id FROM dat_ngoai_dong WHERE id=%s FOR UPDATE', (id_dong,)
+        ).fetchone()
         previous = conn.execute(
             """SELECT id FROM dat_ngoai_xac_nhan_kt
                WHERE id_dat_ngoai_dong=%s ORDER BY thoi_diem DESC,id DESC LIMIT 1""",
@@ -39,8 +70,8 @@ def them_xac_nhan(id_dong: str, noi_dung: str, nguoi: str,
         ).fetchone()
         row = conn.execute(
             """INSERT INTO dat_ngoai_xac_nhan_kt
-                 (id,id_dat_ngoai_dong,noi_dung,nguoi_xac_nhan,id_lan_truoc)
-               VALUES (%s,%s,%s,%s,%s) RETURNING *""",
+                 (id,id_dat_ngoai_dong,noi_dung,nguoi_xac_nhan,id_lan_truoc,la_xac_nhan)
+               VALUES (%s,%s,%s,%s,%s,true) RETURNING *""",
             (sinh_ma(conn, 'DNKT'), id_dong, noi_dung, nguoi,
              previous['id'] if previous else None),
         ).fetchone()
@@ -79,15 +110,15 @@ def sua_dong(id_dong: str, phien_ban: int, data: dict, nguoi: str) -> dict | Non
         return dict(row) if row else None
 
 
-def danh_sach_dot_giao(id_dong: str) -> list[dict]:
-    with get_conn() as conn:
-        dots = [dict(r) for r in conn.execute(
+def danh_sach_dot_giao(id_dong: str, conn=None) -> list[dict]:
+    with get_conn() if conn is None else nullcontext(conn) as db:
+        dots = [dict(r) for r in db.execute(
             "SELECT * FROM dat_ngoai_dot_giao WHERE id_dat_ngoai_dong=%s ORDER BY dot_so",
             (id_dong,),
         )]
         if not dots:
             return dots
-        histories = conn.execute(
+        histories = db.execute(
             """SELECT h.*,nv.ho_va_ten AS ten_nguoi_sua
                FROM dat_ngoai_dot_giao_lich_su h
                LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=h.nguoi_sua

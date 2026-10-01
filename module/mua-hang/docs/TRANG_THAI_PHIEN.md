@@ -21,3 +21,29 @@
 - Vite chuyển đổi thành công `CatalogView.tsx`, `CreateRequestView.tsx` và `App.tsx`.
 - Backend đã khởi động lại tại cổng `8010`; OpenAPI đã nhận endpoint đơn vị tính mới.
 - Bộ kiểm thử cũ chưa chạy xanh vì đang giả định schema chuẩn (`tai_khoan`, `tham_so_he_thong`, `lich_nghi`...), trong khi DB hiện tại dùng schema rút gọn viết hoa.
+
+## Cập nhật 01/10/2026 — Lộ trình NHÓM B · QUẢN TRỊ v3
+
+- Migration `060` đã được chỉnh để mở rộng và dùng lại `nhat_ky_thay_doi` hiện có, không tạo bảng nhật ký danh mục riêng. Trigger ghi nhận tạo/sửa/xóa cho các bảng danh mục chuẩn có mặt trong schema; API `GET /api/v1/danh-muc/{ma}/{id_ban_ghi}/lich-su` đọc theo mã danh mục và khóa bản ghi.
+- Sau lỗi database thiếu bảng `nhat_ky_thay_doi`, migration `060` tự khôi phục cấu trúc cơ sở tương thích migration `004` trước khi mở rộng; lần chạy lỗi trong transaction cần chạy lại bằng file đã cập nhật.
+- API/service lịch sử có allowlist cho các danh mục đang hỗ trợ; giao diện lịch sử hiện đã nối ở Đơn vị tính và Chủng loại. Dữ liệu cũ/mới được ghi dạng JSON; bảng nhật ký hiện tại cho phép bổ sung hành động `XOA`.
+- B2 có schema nền và migration `060` đã seed idempotent đủ 7 loại tài khoản theo DOCX. Người dùng đã xác nhận đổi toàn bộ theo DOCX v3; migration `064` ghi bảng đối chiếu 16 vai trò trong tài liệu và mã `ADMIN` bổ sung thành 7 loại. Chưa chuyển tài khoản/ma trận quyền; không triển khai phần này độc lập khi backend vẫn kiểm tra các mã vai trò cũ.
+- Khung điều hướng B1 hiện có đúng 12 tab: 3 Dữ liệu công ty và 9 Dữ liệu hệ thống; khu vực tài khoản/phân quyền/tham số/nhật ký tách riêng. Các màn đang chạy được nối lại (Nhân viên, Bộ phận, Vật tư, Đơn vị tính, Chủng loại, Lệnh sản xuất); các tab còn lại mới là khung, chưa có CRUD/dữ liệu.
+- Chưa đạt đủ B1 theo DOCX: chưa có thống kê 4 chỉ số, kiểm tra chất lượng dữ liệu, đánh lại STT, màn chi tiết bản ghi, các tab gộp quy chuẩn/thanh toán và lịch sử ở mọi tab. Nhân viên/bộ phận/công đoạn chưa đủ luồng nhập lô theo yêu cầu v3.
+- Chưa chạy migration trên database thật. Trước khi vận hành cần chạy `060` trên đúng database backend và kiểm tra trigger ghi vào `nhat_ky_thay_doi`.
+
+### Kiểm tra phiên
+
+- `compileall` cho route/repo/service lịch sử danh mục: đạt; test `test_catalog_history_service`: 3/3 đạt; `tsc --noEmit`: đạt; `git diff --check`: đạt.
+- Chưa xác nhận build Vite trong phiên này: tiến trình esbuild bị môi trường trả `spawn EPERM`. Chưa chạy migration lên database thật.
+- Bộ test tổng thể trước đó còn 13 lỗi do fixture/schema DB không khớp và cấu trúc FastAPI của một số test cũ.
+
+## Kiểm tra sau migration 064 — 01/10/2026
+
+- Database đang dùng đã ghi nhận version `064`; bảng đối chiếu có đủ 17 vai trò (16 vai trò v2 và `ADMIN`) và cả 7 tài khoản có `ma_loai_tk`. Không có tài khoản đã gán vai trò mà thiếu loại tài khoản.
+- Ma trận quyền hiện tại vẫn theo vai trò cũ. Có 42 cặp (loại tài khoản × trang) mà các vai trò được gộp có quyền khác nhau; không thể lấy một dòng cũ làm quyền chung mà không thay đổi quyền của người dùng.
+- API và giao diện quản trị vẫn đọc `vai_tro`. Chưa mở màn sửa quyền theo 7 loại, chưa chuyển kiểm quyền lúc chạy. Cần chuyển đồng bộ backend, frontend và ma trận mới trước khi sử dụng 7 loại để cấp quyền.
+- Người dùng đã chốt các ô `Pending` theo bảng quyền v3 trong DOCX. Bảng đối chiếu đã điền quy tắc PQ-07 cho 42 ô lệch và migration `065` đã dựng riêng ma trận 7 × 17 trên database. Backend vẫn dùng quyền v2, nên chưa được coi là hoàn thành chuyển đổi.
+- API tài khoản đã đọc `ma_loai_tk` và màn Tài khoản chọn 7 loại; khi lưu, backend đồng thời gán vai trò v2 tương thích theo bộ phận để các luồng cũ còn chạy. Màn Phân quyền v3 và API cho 7 × 17 ô đã chuẩn bị, ghi rõ chưa có hiệu lực. Chưa chuyển hàm kiểm quyền dùng ma trận mới hoặc xử lý đầy đủ nhánh `CAN_DUYET`.
+- Trong lúc định chạy thử `065` rồi rollback, lệnh kiểm tra giữ lại `COMMIT` ở cuối file và đã áp dụng migration thật. Đối soát sau đó: 119 ô v3, 240 ô v2 vẫn còn, 7 tài khoản hoạt động; chưa đổi quyền v2 đang được backend sử dụng. Cần tránh lặp lại mẫu chạy thử SQL này.
+- PQ-11 trong DOCX yêu cầu chạy ma trận mới song song với ma trận cũ hai tuần, ghi chênh lệch trước khi bỏ ma trận cũ. Chưa cài cơ chế so sánh nền này hoặc duyệt đề xuất cho các ô `CAN_DUYET`, vì vậy chưa chuyển quyền đang chạy sang v3.

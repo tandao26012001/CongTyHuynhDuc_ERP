@@ -52,6 +52,8 @@ class NhapLsxIn(BaseModel):
 
 class ChiTietDongIn(BaseModel):
     ma_vach: str = Field(min_length=1, max_length=40)
+    can_xac_nhan_ky_thuat: bool | None = None
+    noi_dung_can_xac_nhan_kt: str | None = None
     noi_dung_gia_cong: str = Field(min_length=1)
     yeu_cau_ky_thuat: str = Field(min_length=1)
     yeu_cau_chat_luong: str = Field(min_length=1)

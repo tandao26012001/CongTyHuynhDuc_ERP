@@ -173,6 +173,17 @@ def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: boo
         if any(not str(item.get(key) or '').strip() for key in
                ('noi_dung_gia_cong', 'yeu_cau_ky_thuat', 'yeu_cau_chat_luong')):
             raise ThieuDuLieu('Nội dung gia công, yêu cầu kỹ thuật và chất lượng không được để trống.')
+        if item.get('can_xac_nhan_ky_thuat') is None:
+            item['can_xac_nhan_ky_thuat'] = can_xac_nhan
+        if item['can_xac_nhan_ky_thuat']:
+            content = item.get('noi_dung_can_xac_nhan_kt')
+            if content is None:
+                content = noi_dung or item['yeu_cau_ky_thuat']
+            if not str(content).strip():
+                raise ThieuDuLieu('Mã cần xác nhận kỹ thuật phải có nội dung cần xác nhận.')
+            item['noi_dung_can_xac_nhan_kt'] = str(content).strip()
+        else:
+            item['noi_dung_can_xac_nhan_kt'] = None
     with get_conn() as conn:
         if not dat_ngoai_repo.san_sang(conn):
             raise ThieuDuLieu("Cơ sở dữ liệu chưa có bảng Đặt ngoài. Hãy chạy migration 031 và 032.", "CHUA_MIGRATE_DAT_NGOAI")
@@ -185,12 +196,13 @@ def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: boo
     theo_lsx = defaultdict(list)
     for row in rows:
         theo_lsx[row["lenh_san_xuat"]].append(row)
-    trang_thai = "CHO_XAC_NHAN_KY_THUAT" if can_xac_nhan else "DANG_BAO_GIA"
     ds_phieu = []
     for lsx, dong in theo_lsx.items():
+        can_xac_nhan_phieu = any(details[item['ma_vach']]['can_xac_nhan_ky_thuat'] for item in dong)
+        trang_thai = "CHO_XAC_NHAN_KY_THUAT" if can_xac_nhan_phieu else "DANG_BAO_GIA"
         ds_phieu.append({
             "id": _ma("DNG"), "lenh_san_xuat": lsx, "trang_thai": trang_thai,
-            "can_xac_nhan_ky_thuat": can_xac_nhan, "noi_dung_ky_thuat": noi_dung,
+            "can_xac_nhan_ky_thuat": can_xac_nhan_phieu, "noi_dung_ky_thuat": noi_dung,
             "ghi_chu": ghi_chu,
             "dong": [{**item, **details[item['ma_vach']], "id": _ma("DNGD")} for item in dong],
         })
@@ -269,6 +281,13 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
         phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "duyet")
     elif hien_tai == "CHO_XAC_NHAN_KY_THUAT" and trang_thai_moi == "DANG_BAO_GIA":
         phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "sua")
+        chua_xac_nhan = dat_ngoai_repo.dong_chua_xac_nhan_ky_thuat(id_phieu)
+        if chua_xac_nhan:
+            ma_hang = ', '.join(row['ma_hang'] or row['id'] for row in chua_xac_nhan[:5])
+            raise ThieuDuLieu(
+                f"Cần xác nhận kỹ thuật từng mã hàng trước khi chuyển bước: {ma_hang}.",
+                "CON_MA_HANG_CHUA_XAC_NHAN_KY_THUAT",
+            )
     else:
         phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     if la_huy and not str(noi_dung or "").strip():
