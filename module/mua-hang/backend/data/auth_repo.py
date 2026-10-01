@@ -34,6 +34,12 @@ def _co_ma_tran_quyen(conn) -> bool:
     ).fetchone()["co"]
 
 
+def _co_ma_tran_loai_tk(conn):
+    return conn.execute(
+        "SELECT to_regclass('mua_hang.phan_quyen_loai_tai_khoan') IS NOT NULL AS co"
+    ).fetchone()["co"]
+
+
 def _bam_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -81,9 +87,10 @@ def lay_tai_khoan(ma_tai_khoan: str):
                 (ma_tai_khoan,),
             ).fetchone()
         return conn.execute(
-            """SELECT * FROM tai_khoan
-               WHERE lower(ma_tai_khoan)=lower(%s)
-                  OR upper(ma_nhan_vien)=upper(%s)
+            """SELECT t.*,v.ma_loai_tk FROM tai_khoan t
+               LEFT JOIN vai_tro v ON v.ma=t.vai_tro
+               WHERE lower(t.ma_tai_khoan)=lower(%s)
+                  OR upper(t.ma_nhan_vien)=upper(%s)
                LIMIT 1""",
             (ma_tai_khoan, ma_tai_khoan),
         ).fetchone()
@@ -201,9 +208,15 @@ def lay_ho_so_tu_token(token: str):
                 (_bam_token(token),),
             ).fetchone()
         return conn.execute(
+<<<<<<< HEAD
             """SELECT t.ma_tai_khoan,t.ma_nhan_vien,t.ho_va_ten,t.ma_bo_phan,t.vai_tro,t.ma_loai_tk,
                       t.trang_thai,t.phien_ban,p.het_han
+=======
+            """SELECT t.ma_tai_khoan,t.ma_nhan_vien,t.ho_va_ten,t.ma_bo_phan,t.vai_tro,
+                      v.ma_loai_tk,t.trang_thai,t.phien_ban,p.het_han
+>>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
                FROM phien_dang_nhap p JOIN tai_khoan t ON t.ma_tai_khoan=p.ma_tai_khoan
+               LEFT JOIN vai_tro v ON v.ma=t.vai_tro
                WHERE p.token=%s AND p.het_han>now() AND t.trang_thai='HOAT_DONG'""",
             (token,),
         ).fetchone()
@@ -217,17 +230,37 @@ def xoa_phien(token: str) -> None:
         conn.execute("DELETE FROM phien_dang_nhap WHERE token=%s", (token,))
 
 
-def lay_quyen(vai_tro: str, conn=None):
-    sql = """SELECT trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,pham_vi
-             FROM phan_quyen WHERE vai_tro=%s ORDER BY trang"""
+def lay_quyen(vai_tro: str, ma_bo_phan: str | None = None, conn=None):
+    def truy_van(db):
+        if not _co_ma_tran_quyen(db):
+            return []
+        if not _co_ma_tran_loai_tk(db):
+            return db.execute(
+                """SELECT trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
+                          pham_vi,pham_vi AS pham_vi_xem,pham_vi AS pham_vi_sua
+                   FROM phan_quyen WHERE vai_tro=%s ORDER BY trang""", (vai_tro,)
+            ).fetchall()
+        return db.execute(
+            """SELECT DISTINCT ON (p.trang)
+                      p.trang,p.duoc_xem AND old.duoc_xem AS duoc_xem,
+                      p.duoc_sua AND old.duoc_sua AS duoc_sua,
+                      p.duoc_duyet AND old.duoc_duyet AS duoc_duyet,
+                      p.duoc_xuat AND old.duoc_xuat AS duoc_xuat,
+                      p.pham_vi_xem AS pham_vi,p.pham_vi_xem,p.pham_vi_sua,
+                      p.kieu_sua,p.ma_loai_tk_duyet,v.ma_loai_tk
+               FROM vai_tro v
+               JOIN phan_quyen old ON old.vai_tro=v.ma
+               JOIN phan_quyen_loai_tai_khoan p
+                 ON p.ma_loai_tk=v.ma_loai_tk AND p.trang=old.trang
+               WHERE v.ma=%s AND p.ma_bo_phan IN ('*',%s)
+               ORDER BY p.trang,(p.ma_bo_phan=%s) DESC""",
+            (vai_tro, ma_bo_phan or '', ma_bo_phan or ''),
+        ).fetchall()
+
     if conn is not None:
-        if not _co_ma_tran_quyen(conn):
-            return []
-        return conn.execute(sql, (vai_tro,)).fetchall()
+        return truy_van(conn)
     with get_conn() as ket_noi:
-        if not _co_ma_tran_quyen(ket_noi):
-            return []
-        return ket_noi.execute(sql, (vai_tro,)).fetchall()
+        return truy_van(ket_noi)
 
 
 def doi_mat_khau(ma_tai_khoan: str, mat_khau_hash: str) -> None:
@@ -446,7 +479,7 @@ def danh_sach_vai_tro_va_quyen():
         if not _co_ma_tran_quyen(conn):
             return [], []
         vai_tro = conn.execute(
-            "SELECT ma,ten,thu_tu,mo_ta FROM vai_tro ORDER BY thu_tu NULLS LAST,ma"
+            "SELECT ma,ten,thu_tu,mo_ta,ma_loai_tk FROM vai_tro ORDER BY thu_tu NULLS LAST,ma"
         ).fetchall()
         quyen = conn.execute(
             """SELECT vai_tro,trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
@@ -455,6 +488,90 @@ def danh_sach_vai_tro_va_quyen():
         ).fetchall()
         return vai_tro, quyen
 
+
+def danh_sach_loai_tai_khoan_va_bo_phan():
+    with get_conn() as conn:
+        loai = conn.execute(
+            "SELECT ma,ten,thu_tu,mo_ta FROM loai_tai_khoan ORDER BY thu_tu,ma"
+        ).fetchall()
+        bo_phan = conn.execute(
+            "SELECT ma_bo_phan AS ma,ten,trang_thai FROM bo_phan ORDER BY ma_bo_phan"
+        ).fetchall()
+        trang = conn.execute("SELECT DISTINCT trang FROM phan_quyen ORDER BY trang").fetchall()
+    return loai, bo_phan, [row["trang"] for row in trang]
+
+
+def danh_sach_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str):
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT DISTINCT ON (trang) ma_loai_tk,ma_bo_phan,trang,
+                      duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,pham_vi_xem,
+                      pham_vi_sua,kieu_sua,ma_loai_tk_duyet,phien_ban
+               FROM phan_quyen_loai_tai_khoan
+               WHERE ma_loai_tk=%s AND ma_bo_phan IN ('*',%s)
+               ORDER BY trang,(ma_bo_phan=%s) DESC""",
+            (ma_loai_tk,ma_bo_phan,ma_bo_phan),
+        ).fetchall()
+
+
+def cap_nhat_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str, trang: str,
+                           phien_ban: int, du_lieu: dict, nguoi_sua: str):
+    with get_conn() as conn:
+        return conn.execute(
+            """INSERT INTO phan_quyen_loai_tai_khoan(
+                 ma_loai_tk,ma_bo_phan,trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
+                 pham_vi_xem,pham_vi_sua,kieu_sua,ma_loai_tk_duyet,phien_ban,ngay_sua,nguoi_sua
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,now(),%s)
+               ON CONFLICT(ma_loai_tk,ma_bo_phan,trang) DO UPDATE SET
+                 duoc_xem=excluded.duoc_xem,duoc_sua=excluded.duoc_sua,
+                 duoc_duyet=excluded.duoc_duyet,duoc_xuat=excluded.duoc_xuat,
+                 pham_vi_xem=excluded.pham_vi_xem,pham_vi_sua=excluded.pham_vi_sua,
+                 kieu_sua=excluded.kieu_sua,ma_loai_tk_duyet=excluded.ma_loai_tk_duyet,
+                 phien_ban=phan_quyen_loai_tai_khoan.phien_ban+1,
+                 ngay_sua=now(),nguoi_sua=excluded.nguoi_sua
+               WHERE phan_quyen_loai_tai_khoan.phien_ban=%s
+               RETURNING ma_loai_tk,ma_bo_phan,trang,duoc_xem,duoc_sua,
+                         duoc_duyet,duoc_xuat,pham_vi_xem,pham_vi_sua,kieu_sua,
+                         ma_loai_tk_duyet,phien_ban""",
+            (ma_loai_tk,ma_bo_phan,trang,du_lieu["duoc_xem"],du_lieu["duoc_sua"],
+             du_lieu["duoc_duyet"],du_lieu["duoc_xuat"],du_lieu["pham_vi_xem"],
+             du_lieu["pham_vi_sua"],du_lieu["kieu_sua"],du_lieu.get("ma_loai_tk_duyet"),
+             nguoi_sua,phien_ban),
+        ).fetchone()
+
+
+class XungDotMaTran(Exception):
+    pass
+
+def cap_nhat_quyen_loai_tk_hang_loat(ma_loai_tk: str, ma_bo_phan: str, items: list[dict], nguoi_sua: str):
+    with get_conn() as conn:
+        ket_qua = []
+        for item in items:
+            row = conn.execute(
+                """INSERT INTO phan_quyen_loai_tai_khoan(
+                     ma_loai_tk,ma_bo_phan,trang,duoc_xem,duoc_sua,duoc_duyet,duoc_xuat,
+                     pham_vi_xem,pham_vi_sua,kieu_sua,ma_loai_tk_duyet,phien_ban,ngay_sua,nguoi_sua
+                   ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,now(),%s)
+                   ON CONFLICT(ma_loai_tk,ma_bo_phan,trang) DO UPDATE SET
+                     duoc_xem=excluded.duoc_xem,duoc_sua=excluded.duoc_sua,
+                     duoc_duyet=excluded.duoc_duyet,duoc_xuat=excluded.duoc_xuat,
+                     pham_vi_xem=excluded.pham_vi_xem,pham_vi_sua=excluded.pham_vi_sua,
+                     kieu_sua=excluded.kieu_sua,ma_loai_tk_duyet=excluded.ma_loai_tk_duyet,
+                     phien_ban=phan_quyen_loai_tai_khoan.phien_ban+1,
+                     ngay_sua=now(),nguoi_sua=excluded.nguoi_sua
+                   WHERE phan_quyen_loai_tai_khoan.phien_ban=%s
+                   RETURNING ma_loai_tk,ma_bo_phan,trang,duoc_xem,duoc_sua,
+                             duoc_duyet,duoc_xuat,pham_vi_xem,pham_vi_sua,kieu_sua,
+                             ma_loai_tk_duyet,phien_ban""",
+                (ma_loai_tk,ma_bo_phan,item["trang"],item["duoc_xem"],item["duoc_sua"],
+                 item["duoc_duyet"],item["duoc_xuat"],item["pham_vi_xem"],
+                 item["pham_vi_sua"],item["kieu_sua"],item.get("ma_loai_tk_duyet"),
+                 nguoi_sua,item["phien_ban"]),
+            ).fetchone()
+            if not row:
+                raise XungDotMaTran
+            ket_qua.append(dict(row))
+        return ket_qua
 
 def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):
     with get_conn() as conn:

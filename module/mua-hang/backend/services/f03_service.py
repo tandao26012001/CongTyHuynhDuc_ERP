@@ -22,17 +22,44 @@ def _sua(ho_so):
 def _duyet(ho_so):
     return kiem_quyen(ho_so, "bao_gia", "duyet")
 
+def _kiem_pham_vi_dong(conn, id_dong, ho_so, pham_vi):
+    if pham_vi == "toan_bo":
+        return
+    row = conn.execute(
+        """SELECT dn.ma_bo_phan,dn.nguoi_yeu_cau FROM de_nghi_dong d
+           JOIN de_nghi dn ON dn.id=d.id_de_nghi WHERE d.id=%s AND d.da_xoa=false""",
+        (id_dong,),
+    ).fetchone()
+    if (not row or row["ma_bo_phan"] != ho_so.get("ma_bo_phan")
+            or (pham_vi == "ca_nhan" and row["nguoi_yeu_cau"] != ho_so.get("ma_nhan_vien"))):
+        raise KhongTimThay("Không tìm thấy dữ liệu trong phạm vi được cấp.")
+
+def _kiem_pham_vi_ycbg(conn, id_ycbg, ho_so, pham_vi):
+    rows = repo.lay_ycbg_dong(conn, id_ycbg)
+    if not rows:
+        raise KhongTimThay("Không tìm thấy dữ liệu trong phạm vi được cấp.")
+    for row in rows:
+        _kiem_pham_vi_dong(conn, row["id_de_nghi_dong"], ho_so, pham_vi)
+
 
 def dong_cho_bao_gia(ho_so):
-    _xem(ho_so)
+    pham_vi = _xem(ho_so)
     with get_conn() as conn:
-        return {"items": [dict(row) for row in repo.dong_cho_bao_gia(conn)]}
+        rows = repo.dong_cho_bao_gia(conn)
+        items = []
+        for row in rows:
+            try:
+                _kiem_pham_vi_dong(conn, row["id"], ho_so, pham_vi)
+                items.append(dict(row))
+            except KhongTimThay:
+                continue
+        return {"items": items}
 
 
 def tao_yeu_cau_bao_gia(id_ncc, ids_dong, han_tra_loi, ho_so):
     if not ids_dong:
         raise ThieuDuLieu("Phai chon it nhat mot dong bao gia.", "THIEU_DONG_BAO_GIA")
-    _sua(ho_so)
+    pham_vi = _sua(ho_so)
     with get_conn() as conn:
         ncc = repo.lay_ncc(conn, id_ncc)
         if not ncc:
@@ -46,6 +73,7 @@ def tao_yeu_cau_bao_gia(id_ncc, ids_dong, han_tra_loi, ho_so):
             dong = repo.lay_dong(conn, id_dong, True)
             if not dong:
                 raise KhongTimThay("Khong tim thay dong de nghi.")
+            _kiem_pham_vi_dong(conn, id_dong, ho_so, pham_vi)
             if dong["trang_thai_dong"] != "DA_DUYET":
                 raise LoiNghiepVu(f"Dong {id_dong} chua duoc duyet.", "DONG_CHUA_DUYET")
             if dong["can_xac_nhan_kt"]:
@@ -57,21 +85,29 @@ def tao_yeu_cau_bao_gia(id_ncc, ids_dong, han_tra_loi, ho_so):
 
 
 def danh_sach_ycbg(ho_so):
-    _xem(ho_so)
+    pham_vi = _xem(ho_so)
     with get_conn() as conn:
-        return {"items": [dict(row) for row in repo.danh_sach_ycbg(conn)]}
+        items = []
+        for row in repo.danh_sach_ycbg(conn):
+            try:
+                _kiem_pham_vi_ycbg(conn, row["id"], ho_so, pham_vi)
+                items.append(dict(row))
+            except KhongTimThay:
+                continue
+        return {"items": items}
 
 
 def chi_tiet_ycbg(id_ycbg, ho_so):
-    _xem(ho_so)
+    pham_vi = _xem(ho_so)
     with get_conn() as conn:
         ycbg = repo.lay_ycbg(conn, id_ycbg)
         if not ycbg: raise KhongTimThay("Khong tim thay yeu cau bao gia.")
+        _kiem_pham_vi_ycbg(conn, id_ycbg, ho_so, pham_vi)
         return {"yeu_cau": dict(ycbg), "dong": [dict(row) for row in repo.lay_ycbg_dong(conn, id_ycbg)]}
 
 
 def nhap_bao_gia(du_lieu, ho_so):
-    _sua(ho_so)
+    pham_vi = _sua(ho_so)
     dong_du_lieu = du_lieu.get("dong") or []
     if not dong_du_lieu:
         raise ThieuDuLieu("Bao gia phai co it nhat mot dong.", "THIEU_DONG_BAO_GIA")
@@ -79,6 +115,7 @@ def nhap_bao_gia(du_lieu, ho_so):
         ycbg = repo.lay_ycbg(conn, du_lieu["id_ycbg"])
         if not ycbg:
             raise KhongTimThay("Khong tim thay yeu cau bao gia.")
+        _kiem_pham_vi_ycbg(conn, ycbg["id"], ho_so, pham_vi)
         if ycbg["trang_thai"] not in ("DA_GUI", "DA_NHAN"):
             raise LoiNghiepVu("Yeu cau bao gia khong o trang thai nhap bao gia.", "SAI_TRANG_THAI")
         if str(du_lieu["id_ncc"]) != str(ycbg["id_ncc"]):
@@ -97,10 +134,12 @@ def nhap_bao_gia(du_lieu, ho_so):
 
 
 def so_sanh(ids_dong, ho_so):
-    _xem(ho_so)
+    pham_vi = _xem(ho_so)
     if not ids_dong:
         raise ThieuDuLieu("Phai truyen ids_dong.", "THIEU_DONG_SO_SANH")
     with get_conn() as conn:
+        for id_dong in ids_dong:
+            _kiem_pham_vi_dong(conn, id_dong, ho_so, pham_vi)
         rows = repo.lay_ma_tran(conn, ids_dong)
     matrix = {id_dong: [] for id_dong in ids_dong}
     for row in rows:
@@ -123,10 +162,12 @@ def so_sanh(ids_dong, ho_so):
 
 
 def chon_bao_gia(id_bao_gia, ly_do_chon, phien_ban, ho_so):
-    _duyet(ho_so)
+    pham_vi = _duyet(ho_so)
     with get_conn() as conn:
         bg = repo.lay_bao_gia(conn, id_bao_gia, True)
         if not bg: raise KhongTimThay("Khong tim thay bao gia.")
+        for line in repo.lay_bao_gia_dong(conn, id_bao_gia):
+            _kiem_pham_vi_dong(conn, line["id_de_nghi_dong"], ho_so, pham_vi)
         lines = repo.lay_bao_gia_dong(conn, id_bao_gia)
         if bg["phien_ban"] != phien_ban: raise XungDot("Bao gia vua duoc cap nhat.")
         if not lines: raise LoiNghiepVu("Bao gia chua co dong.", "BAO_GIA_RONG")
@@ -192,14 +233,24 @@ def chon_bao_gia(id_bao_gia, ly_do_chon, phien_ban, ho_so):
 
 def mien_tru_bao_gia(id_bao_gia, ly_do, phien_ban, ho_so):
     if not ly_do or not ly_do.strip(): raise ThieuDuLieu("Ly do mien tru bat buoc.", "THIEU_LY_DO_MIEN_TRU")
-    _duyet(ho_so)
+    pham_vi = _duyet(ho_so)
     with get_conn() as conn:
+        bg = repo.lay_bao_gia(conn, id_bao_gia)
+        if not bg: raise KhongTimThay("Khong tim thay bao gia.")
+        for line in repo.lay_bao_gia_dong(conn, id_bao_gia):
+            _kiem_pham_vi_dong(conn, line["id_de_nghi_dong"], ho_so, pham_vi)
         result = repo.cap_nhat_bao_gia(conn, id_bao_gia, phien_ban, {"mien_tru_2_bao_gia": True, "ly_do_mien_tru": ly_do.strip()})
         if not result: raise XungDot("Bao gia vua duoc cap nhat.")
         return dict(result)
 
 
 def lich_su_gia(id_vat_tu, ho_so):
-    _xem(ho_so)
+    pham_vi = _xem(ho_so)
     with get_conn() as conn:
-        return {"items": [dict(row) for row in repo.lich_su_gia(conn, id_vat_tu)]}
+        items = []
+        for row in repo.lich_su_gia(conn, id_vat_tu):
+            _kiem_pham_vi_dong(conn, row["id_de_nghi_dong"], ho_so, pham_vi)
+            item = dict(row)
+            item.pop("id_de_nghi_dong", None)
+            items.append(item)
+        return {"items": items}

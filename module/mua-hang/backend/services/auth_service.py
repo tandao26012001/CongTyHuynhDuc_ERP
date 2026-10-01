@@ -78,7 +78,7 @@ def dang_nhap(ma_tai_khoan: str, mat_khau: str, ip=None, thiet_bi=None) -> dict:
         raise ChuaDangNhap("Tài khoản đang chờ Quản trị duyệt.", "TAI_KHOAN_CHO_DUYET")
     if row["trang_thai"] != "HOAT_DONG":
         raise ChuaDangNhap("Tài khoản đã bị khóa. Hãy liên hệ Quản trị.", "TAI_KHOAN_BI_KHOA")
-    quyen = auth_repo.lay_quyen(row["vai_tro"])
+    quyen = auth_repo.lay_quyen(row["vai_tro"], row["ma_bo_phan"])
     if str(row["vai_tro"] or "").strip().upper() != "ADMIN" and not any(q["duoc_xem"] for q in quyen):
         raise KhongCoQuyen("Tài khoản chưa được cấp quyền truy cập phân hệ Mua hàng & Gia công ngoài.", "KHONG_CO_QUYEN_PHAN_HE")
     if row["mat_khau_hash"].startswith("pbkdf2_sha256$"):
@@ -107,11 +107,12 @@ def lay_ho_so(token: str) -> dict:
 def ho_so_va_quyen(token: str) -> dict:
     ho_so = lay_ho_so(token)
     quyen = {}
-    for q in auth_repo.lay_quyen(ho_so["vai_tro"]):
+    for q in auth_repo.lay_quyen(ho_so["vai_tro"], ho_so.get("ma_bo_phan")):
         quyen[q["trang"]] = {
             "xem": q["duoc_xem"], "sua": q["duoc_sua"],
             "duyet": q["duoc_duyet"], "xuat": q["duoc_xuat"],
-            "pham_vi": q["pham_vi"],
+            "pham_vi": q["pham_vi"], "pham_vi_xem": q["pham_vi_xem"],
+            "pham_vi_sua": q["pham_vi_sua"], "kieu_sua": q.get("kieu_sua", "THANG"),
         }
     data = _ho_so_cong_khai(ho_so)
     data["quyen"] = quyen
