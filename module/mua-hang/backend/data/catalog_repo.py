@@ -3,6 +3,7 @@
 import json
 import re
 import uuid
+from contextlib import nullcontext
 
 from psycopg import sql
 from psycopg.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
@@ -588,9 +589,6 @@ DANH_MUC_SQL = {
 
 def danh_sach_nha_cung_cap(offset: int, limit: int):
     with get_conn() as conn:
-        co_bang_don_hang = conn.execute(
-            "SELECT to_regclass('don_hang') IS NOT NULL AND to_regclass('don_hang_dong') IS NOT NULL AS co"
-        ).fetchone()["co"]
         co_cot_id_chuan = conn.execute(
             """SELECT EXISTS(
                  SELECT 1 FROM pg_attribute
@@ -599,20 +597,10 @@ def danh_sach_nha_cung_cap(offset: int, limit: int):
                ) AS co"""
         ).fetchone()["co"]
         if co_cot_id_chuan:
-            gia_tri_da_dat_thang = (
-                """coalesce((SELECT sum(dhd.so_luong * dhd.don_gia_co_so)
-                              FROM don_hang dh JOIN don_hang_dong dhd ON dhd.id_don_hang=dh.id
-                              WHERE dh.id_ncc=nha_cung_cap.id
-                                AND dh.trang_thai NOT IN ('HUY','TU_CHOI')
-                                AND date_trunc('month', dh.ngay_dat)=date_trunc('month', current_date)),0)"""
-                if co_bang_don_hang else "0::numeric"
-            )
             items = conn.execute(
-                f"""SELECT id ma,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,email,
+                """SELECT id ma,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,email,
                           la_ncc_mua_hang,la_ncc_gia_cong,da_phe_duyet,ngay_phe_duyet,
-                          dinh_muc_thang,ghi_chu_dinh_muc,nhom_hang_chi_tiet,
-                          {gia_tri_da_dat_thang} AS da_dat_thang,
-                          trang_thai,ghi_chu,phien_ban
+                          trang_thai,trang_thai_xet_duyet,ghi_chu,phien_ban
                    FROM nha_cung_cap ORDER BY ten,id OFFSET %s LIMIT %s""",
                 (offset, limit),
             ).fetchall()
@@ -774,7 +762,6 @@ def lay_nha_cung_cap(id_ncc: str):
             """SELECT id,ma_ncc,ten,mst,dia_chi,nguoi_lien_he,sdt,fax,email,
                       mat_hang,la_ncc_mua_hang,la_ncc_gia_cong,co_hoa_don,cong_no,
                       tien_mat,nganh_nghe,ma_loai_gia_cong,vung,so_km,ky_han_quy_dinh,
-                      dinh_muc_thang,ghi_chu_dinh_muc,nhom_hang_chi_tiet,
                       da_phe_duyet,ngay_phe_duyet,phan_loai_ncc,trang_thai,ghi_chu,phien_ban
                FROM nha_cung_cap WHERE id=%s""",
             (id_ncc,),
@@ -1005,9 +992,9 @@ def _bat_dau_idempotency(conn, tai_khoan: str, khoa: str, duong_dan: str):
     return row["ket_qua"]
 
 
-def lay_ket_qua_idempotency(tai_khoan: str, khoa: str, duong_dan: str):
-    with get_conn() as conn:
-        row = conn.execute(
+def lay_ket_qua_idempotency(tai_khoan: str, khoa: str, duong_dan: str, conn=None):
+    with get_conn() if conn is None else nullcontext(conn) as db:
+        row = db.execute(
             "SELECT duong_dan,ket_qua FROM thao_tac_da_xu_ly WHERE ma_tai_khoan=%s AND khoa=%s",
             (tai_khoan, khoa),
         ).fetchone()
@@ -1280,8 +1267,9 @@ def _tao_nha_cung_cap(conn, du_lieu: dict, nguoi_tao: str):
         "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt",
         "fax", "email", "mat_hang", "la_ncc_mua_hang", "la_ncc_gia_cong", "co_hoa_don",
         "cong_no", "tien_mat", "nganh_nghe", "ma_loai_gia_cong", "vung", "so_km",
-        "ky_han_quy_dinh", "dinh_muc_thang", "ghi_chu_dinh_muc", "nhom_hang_chi_tiet",
-        "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
+        "ky_han_quy_dinh", "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
+        "trang_thai_xet_duyet",
+        *(["nguoi_de_xuat", "ngay_de_xuat"] if du_lieu.get("trang_thai_xet_duyet") == "DE_XUAT" else ["nguoi_duyet", "ngay_duyet"]),
     ]
     query = sql.SQL("INSERT INTO nha_cung_cap(id,{},nguoi_tao) VALUES(%s,{},%s) RETURNING *").format(
         sql.SQL(",").join(map(sql.Identifier, cot)),
@@ -1290,9 +1278,10 @@ def _tao_nha_cung_cap(conn, du_lieu: dict, nguoi_tao: str):
     return conn.execute(query, (id_moi, *[du_lieu.get(key) for key in cot], nguoi_tao)).fetchone()
 
 
-def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str):
+def tao_nha_cung_cap(du_lieu: dict, nguoi_tao: str, tai_khoan: str, khoa: str,
+                     duong_dan: str = "POST:/api/v1/nha-cung-cap"):
     with get_conn() as conn:
-        cu = _bat_dau_idempotency(conn, tai_khoan, khoa, "POST:/api/v1/nha-cung-cap")
+        cu = _bat_dau_idempotency(conn, tai_khoan, khoa, duong_dan)
         if cu is not None:
             return cu
         row = dict(_tao_nha_cung_cap(conn, du_lieu, nguoi_tao))
@@ -1306,8 +1295,7 @@ def cap_nhat_nha_cung_cap(id_ncc: str, du_lieu: dict, phien_ban: int, nguoi_sua:
         "ma_ncc", "ten", "ten_khong_dau", "mst", "dia_chi", "nguoi_lien_he", "sdt",
         "fax", "email", "mat_hang", "la_ncc_mua_hang", "la_ncc_gia_cong", "co_hoa_don",
         "cong_no", "tien_mat", "nganh_nghe", "ma_loai_gia_cong", "vung", "so_km",
-        "ky_han_quy_dinh", "dinh_muc_thang", "ghi_chu_dinh_muc", "nhom_hang_chi_tiet",
-        "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
+        "ky_han_quy_dinh", "da_phe_duyet", "ngay_phe_duyet", "phan_loai_ncc", "trang_thai", "ghi_chu",
     }
     cot = [key for key in du_lieu if key in cot_hop_le]
     gan = [sql.SQL("{}={}").format(sql.Identifier(key), sql.Placeholder()) for key in cot]
@@ -1365,109 +1353,6 @@ def cap_nhat_nha_cung_cap(id_ncc: str, du_lieu: dict, phien_ban: int, nguoi_sua:
         return conn.execute(query, (*[du_lieu[key] for key in cot], nguoi_sua, id_ncc, phien_ban)).fetchone()
 
 
-
-def danh_sach_mat_hang_ncc(id_ncc: str | None = None, bo_loc: dict | None = None,
-                           offset: int = 0, limit: int = 100):
-    """Danh sách mặt hàng NCC theo trục F1, dùng được cho cả tab NCC và tra cứu toàn hệ thống."""
-    bo_loc = bo_loc or {}
-    conditions = []
-    params: list = []
-    if id_ncc:
-        conditions.append("m.id_ncc=%s")
-        params.append(id_ncc)
-    if bo_loc.get("trang_thai"):
-        conditions.append("m.trang_thai=%s")
-        params.append(bo_loc["trang_thai"])
-    if bo_loc.get("loai"):
-        conditions.append("m.loai=%s")
-        params.append(bo_loc["loai"])
-    for key in ("nhom_hang_chinh", "nhom_hang_chi_tiet", "ma_loai_gia_cong", "muc_chat_luong"):
-        if bo_loc.get(key):
-            column = "m.muc_chat_luong" if key == "muc_chat_luong" else f"m.{key}"
-            conditions.append(f"{column}=%s")
-            params.append(bo_loc[key])
-    if bo_loc.get("q"):
-        conditions.append("lower(concat_ws(' ',m.ten_hang,n.ten,coalesce(m.ma_vat_tu,''))) LIKE %s")
-        params.append(f"%{str(bo_loc['q']).strip().lower()}%")
-    where = " WHERE " + " AND ".join(conditions) if conditions else ""
-    sql_base = f"""
-        FROM mat_hang_ncc m
-        JOIN nha_cung_cap n ON n.id=m.id_ncc
-        LEFT JOIN chung_loai cl ON cl.ma_chung_loai=m.nhom_hang_chinh
-        LEFT JOIN chung_loai clct ON clct.ma_chung_loai=m.nhom_hang_chi_tiet
-        LEFT JOIN loai_gia_cong lg ON lg.ma=m.ma_loai_gia_cong
-        LEFT JOIN don_vi_tinh dvt ON dvt.dvt=m.dvt
-        {where}
-    """
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"""SELECT m.*, n.ma_ncc, n.ten AS ten_ncc,
-                       cl.ten AS ten_nhom_hang_chinh, clct.ten AS ten_nhom_hang_chi_tiet,
-                       lg.ten AS ten_loai_gia_cong, dvt.ten_dvt
-                {sql_base}
-                ORDER BY n.ten, m.ten_hang, m.id OFFSET %s LIMIT %s""",
-            (*params, offset, limit),
-        ).fetchall()
-        total = conn.execute(f"SELECT count(*) AS n {sql_base}", params).fetchone()["n"]
-        return rows, total
-
-
-def lay_mat_hang_ncc(id_mat_hang: str):
-    with get_conn() as conn:
-        return conn.execute(
-            """SELECT m.*, n.ma_ncc, n.ten AS ten_ncc,
-                      cl.ten AS ten_nhom_hang_chinh, clct.ten AS ten_nhom_hang_chi_tiet,
-                      lg.ten AS ten_loai_gia_cong, dvt.ten_dvt
-               FROM mat_hang_ncc m
-               JOIN nha_cung_cap n ON n.id=m.id_ncc
-               LEFT JOIN chung_loai cl ON cl.ma_chung_loai=m.nhom_hang_chinh
-               LEFT JOIN chung_loai clct ON clct.ma_chung_loai=m.nhom_hang_chi_tiet
-               LEFT JOIN loai_gia_cong lg ON lg.ma=m.ma_loai_gia_cong
-               LEFT JOIN don_vi_tinh dvt ON dvt.dvt=m.dvt
-               WHERE m.id=%s""",
-            (id_mat_hang,),
-        ).fetchone()
-
-
-def tao_mat_hang_ncc(du_lieu: dict, nguoi_tao: str):
-    id_moi = f"MHN-{uuid.uuid4().hex[:20].upper()}"
-    cot = [
-        "id", "id_ncc", "ma_vat_tu", "ten_hang", "loai", "nhom_hang_chinh",
-        "nhom_hang_chi_tiet", "ma_loai_gia_cong", "ma_cong_doan", "dvt",
-        "thong_so_ky_thuat", "diem_ky_thuat", "muc_chat_luong", "diem_chat_luong",
-        "nang_luc_thang", "so_ngay_giao_chuan", "trang_thai", "nguoi_de_xuat",
-        "ngay_de_xuat", "ghi_chu", "nguoi_tao",
-    ]
-    values = {**du_lieu, "id": id_moi, "nguoi_tao": nguoi_tao}
-    query = sql.SQL("INSERT INTO mat_hang_ncc ({}) VALUES ({}) RETURNING *").format(
-        sql.SQL(",").join(map(sql.Identifier, cot)),
-        sql.SQL(",").join(sql.Placeholder() for _ in cot),
-    )
-    with get_conn() as conn:
-        return conn.execute(query, [values.get(key) for key in cot]).fetchone()
-
-
-def cap_nhat_mat_hang_ncc(id_mat_hang: str, du_lieu: dict, phien_ban: int, nguoi_sua: str):
-    cot_hop_le = {
-        "ma_vat_tu", "ten_hang", "loai", "nhom_hang_chinh", "nhom_hang_chi_tiet",
-        "ma_loai_gia_cong", "ma_cong_doan", "dvt", "thong_so_ky_thuat",
-        "diem_ky_thuat", "muc_chat_luong", "diem_chat_luong", "nang_luc_thang",
-        "so_ngay_giao_chuan", "trang_thai", "nguoi_de_xuat", "ngay_de_xuat",
-        "nguoi_duyet", "ngay_duyet", "ghi_chu",
-    }
-    cot = [key for key in du_lieu if key in cot_hop_le]
-    if not cot:
-        return lay_mat_hang_ncc(id_mat_hang)
-    gan = [sql.SQL("{}={}").format(sql.Identifier(key), sql.Placeholder()) for key in cot]
-    gan.extend([
-        sql.SQL("phien_ban=phien_ban+1"),
-        sql.SQL("ngay_sua=now()"),
-        sql.SQL("nguoi_sua={}").format(sql.Placeholder()),
-    ])
-    query = sql.SQL("UPDATE mat_hang_ncc SET {} WHERE id=%s AND phien_ban=%s RETURNING *").format(sql.SQL(",").join(gan))
-    with get_conn() as conn:
-        return conn.execute(query, (*[du_lieu[key] for key in cot], nguoi_sua, id_mat_hang, phien_ban)).fetchone()
-
 def nhap_hang_loat(
     loai: str, danh_sach: list[dict], nguoi_tao: str, tai_khoan: str, khoa: str
 ):
@@ -1488,196 +1373,3 @@ def nhap_hang_loat(
         ket_qua = {"da_luu": True, "loai": loai, "so_dong": len(rows), "items": rows}
         _hoan_tat_idempotency(conn, tai_khoan, khoa, ket_qua)
         return ket_qua
-
-
-
-def _kpi_mat_hang_ncc_conn(conn, id_mat_hang: str):
-    return conn.execute(
-        """SELECT m.id, m.id_ncc, m.ma_vat_tu,
-                  coalesce(del.total,0) AS so_lan_giao,
-                  coalesce(del.dung_han,0) AS so_lan_dung_han,
-                  del.ty_le_iqc AS ty_le_iqc,
-                  coalesce(del.so_lan_khong_phu_hop,0) AS so_lan_khong_phu_hop,
-                  coalesce(gd.gia_tri_12_thang,0) AS gia_tri_12_thang,
-                  extract(months from age(current_date, coalesce(gd.ngay_dau_tien, current_date)))::integer AS thang_hop_tac
-           FROM mat_hang_ncc m
-           LEFT JOIN LATERAL (
-             SELECT count(*) AS total,
-                    count(*) FILTER (WHERE coalesce(nhd.so_ngay_som_tre,0) >= 0) AS dung_han,
-                    100.0 * sum(coalesce(iqc.so_luong_dat,0)) / NULLIF(sum(coalesce(iqc.so_luong_kiem,0)),0) AS ty_le_iqc,
-                    count(DISTINCT hk.id) AS so_lan_khong_phu_hop
-             FROM nhan_hang nh
-             JOIN nhan_hang_dong nhd ON nhd.id_nhan_hang=nh.id
-             LEFT JOIN vat_tu vt ON vt.id=nhd.id_vat_tu
-             LEFT JOIN ket_qua_iqc iqc ON iqc.id_nhan_hang_dong=nhd.id
-             LEFT JOIN hang_khong_phu_hop hk ON hk.id_ket_qua_iqc=iqc.id
-             WHERE nh.id_ncc=m.id_ncc
-               AND m.ma_vat_tu IS NOT NULL AND vt.ma_vat_tu=m.ma_vat_tu
-           ) del ON true
-           LEFT JOIN LATERAL (
-             SELECT sum(dhd.so_luong*dhd.don_gia_co_so) FILTER (WHERE dh.ngay_dat >= current_date - interval '12 months') AS gia_tri_12_thang,
-                    min(dh.ngay_dat) AS ngay_dau_tien
-             FROM don_hang dh
-             JOIN don_hang_dong dhd ON dhd.id_don_hang=dh.id
-             LEFT JOIN vat_tu vt ON vt.id=dhd.id_vat_tu
-             WHERE dh.id_ncc=m.id_ncc
-               AND m.ma_vat_tu IS NOT NULL AND vt.ma_vat_tu=m.ma_vat_tu
-               AND dh.trang_thai NOT IN ('HUY','TU_CHOI')
-           ) gd ON true
-           WHERE m.id=%s""",
-        (id_mat_hang,),
-    ).fetchone()
-
-
-def danh_sach_danh_gia_ncc(id_mat_hang: str | None = None, trang_thai: str | None = None,
-                           offset: int = 0, limit: int = 100):
-    conditions = []
-    params: list = []
-    if id_mat_hang:
-        conditions.append("d.id_mat_hang_ncc=%s")
-        params.append(id_mat_hang)
-    if trang_thai:
-        conditions.append("d.trang_thai=%s")
-        params.append(trang_thai)
-    where = " WHERE " + " AND ".join(conditions) if conditions else ""
-    base = f"""FROM danh_gia_ncc d
-        JOIN nha_cung_cap n ON n.id=d.id_ncc
-        LEFT JOIN mat_hang_ncc m ON m.id=d.id_mat_hang_ncc
-        LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=d.nguoi_danh_gia
-        LEFT JOIN nhan_vien nd ON nd.ma_nhan_vien=d.nguoi_duyet
-        {where}"""
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"""SELECT d.*, n.ma_ncc, n.ten AS ten_ncc, m.ten_hang, m.ma_vat_tu,
-                       nv.ho_va_ten AS ten_nguoi_danh_gia, nd.ho_va_ten AS ten_nguoi_duyet
-                {base} ORDER BY d.ngay_danh_gia DESC, d.id DESC OFFSET %s LIMIT %s""",
-            (*params, offset, limit),
-        ).fetchall()
-        total = conn.execute(f"SELECT count(*) AS n {base}", params).fetchone()["n"]
-        return rows, total
-
-
-def danh_sach_mat_hang_ncc_den_han(offset: int = 0, limit: int = 100):
-    base = """FROM mat_hang_ncc m
-        JOIN nha_cung_cap n ON n.id=m.id_ncc
-        LEFT JOIN LATERAL (
-          SELECT d.ngay_danh_gia
-          FROM danh_gia_ncc d
-          WHERE d.id_mat_hang_ncc=m.id AND d.trang_thai='DA_DUYET'
-          ORDER BY d.ngay_danh_gia DESC,d.id DESC LIMIT 1
-        ) d ON true
-        CROSS JOIN LATERAL (
-          SELECT coalesce(nullif(gia_tri,'')::integer,12) AS thang
-          FROM tham_so_he_thong WHERE ma='CHU_KY_DANH_GIA_NCC_THANG'
-          UNION ALL SELECT 12 WHERE NOT EXISTS (
-            SELECT 1 FROM tham_so_he_thong WHERE ma='CHU_KY_DANH_GIA_NCC_THANG'
-          )
-          LIMIT 1
-        ) chu_ky
-        WHERE m.trang_thai='DA_DUYET'
-          AND (d.ngay_danh_gia IS NULL OR d.ngay_danh_gia + chu_ky.thang * interval '1 month' <= current_date)
-          AND NOT EXISTS (
-            SELECT 1 FROM danh_gia_ncc cho_duyet
-            WHERE cho_duyet.id_mat_hang_ncc=m.id AND cho_duyet.trang_thai='CHO_DUYET'
-          )"""
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"""SELECT m.id,m.id_ncc,n.ma_ncc,n.ten AS ten_ncc,m.ma_vat_tu,
-                       m.ten_hang,m.loai,m.nhom_hang_chinh,m.nhom_hang_chi_tiet,
-                       d.ngay_danh_gia AS ngay_cham_gan_nhat,
-                       (d.ngay_danh_gia + chu_ky.thang * interval '1 month')::date AS ngay_den_han,
-                       CASE WHEN d.ngay_danh_gia IS NULL THEN NULL
-                            ELSE greatest(0,current_date - (d.ngay_danh_gia + chu_ky.thang * interval '1 month')::date) END AS so_ngay_qua_han
-                {base}
-                ORDER BY d.ngay_danh_gia NULLS FIRST,n.ten,m.ten_hang,m.id
-                OFFSET %s LIMIT %s""",
-            (offset, limit),
-        ).fetchall()
-        total = conn.execute(f"SELECT count(*) AS n {base}").fetchone()["n"]
-        return rows, total
-
-
-def danh_sach_so_theo_doi_ncc(id_ncc: str | None = None, trang_thai: str | None = None,
-                               q: str = "", offset: int = 0, limit: int = 100):
-    conditions = []
-    params: list = []
-    if id_ncc:
-        conditions.append("coalesce(hk.id_ncc,nh.id_ncc)=%s")
-        params.append(id_ncc)
-    if trang_thai == "MO":
-        conditions.append("hk.ngay_dong IS NULL")
-    elif trang_thai == "DA_DONG":
-        conditions.append("hk.ngay_dong IS NOT NULL")
-    if q.strip():
-        conditions.append("lower(concat_ws(' ',n.ma_ncc,n.ten,nhd.ten_hang_chup,vt.ma_vat_tu,hk.mo_ta,hk.huong_xu_ly)) LIKE %s")
-        params.append(f"%{q.strip().lower()}%")
-    where = " WHERE " + " AND ".join(conditions) if conditions else ""
-    base = f"""FROM hang_khong_phu_hop hk
-        JOIN ket_qua_iqc iqc ON iqc.id=hk.id_ket_qua_iqc
-        JOIN nhan_hang_dong nhd ON nhd.id=iqc.id_nhan_hang_dong
-        JOIN nhan_hang nh ON nh.id=nhd.id_nhan_hang
-        LEFT JOIN nha_cung_cap n ON n.id=coalesce(hk.id_ncc,nh.id_ncc)
-        LEFT JOIN vat_tu vt ON vt.id=nhd.id_vat_tu
-        LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=hk.nguoi_giam_sat
-        {where}"""
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"""SELECT hk.id,hk.id_ncc,n.ma_ncc,n.ten AS ten_ncc,
-                       nh.ngay_nhan,nhd.ten_hang_chup,vt.ma_vat_tu,
-                       hk.mo_ta,hk.huong_xu_ly,hk.ket_qua,hk.nguoi_giam_sat,
-                       nv.ho_va_ten AS ten_nguoi_giam_sat,hk.ngay_dong,hk.trang_thai
-                {base}
-                ORDER BY nh.ngay_nhan DESC,hk.id DESC OFFSET %s LIMIT %s""",
-            (*params, offset, limit),
-        ).fetchall()
-        total = conn.execute(f"SELECT count(*) AS n {base}", params).fetchone()["n"]
-        return rows, total
-
-
-def tao_danh_gia_ncc(du_lieu: dict, nguoi_tao: str):
-    id_moi = f"DGN-{uuid.uuid4().hex[:20].upper()}"
-    cot = [
-        "id", "id_ncc", "id_mat_hang_ncc", "loai", "ky_danh_gia", "ngay_danh_gia",
-        "nguoi_danh_gia", "diem_chat_luong", "diem_giao_hang", "diem_gia_ca",
-        "diem_thanh_toan", "diem_dich_vu", "diem_tam_voc", "diem_thoi_gian_hop_tac",
-        "diem_gia_tri_giao_dich", "diem_tong", "xep_loai", "ty_le_dung_han",
-        "ty_le_iqc_dat", "so_lan_khong_phu_hop", "ket_luan", "ket_luan_bm06",
-        "trang_thai", "ghi_chu", "ngay_tao", "nguoi_tao",
-    ]
-    values = {**du_lieu, "id": id_moi, "ngay_tao": None, "nguoi_tao": nguoi_tao}
-    query = sql.SQL("INSERT INTO danh_gia_ncc ({}) VALUES ({}) RETURNING *").format(
-        sql.SQL(",").join(map(sql.Identifier, cot)),
-        sql.SQL(",").join(sql.Placeholder() if key != "ngay_tao" else sql.SQL("now()") for key in cot),
-    )
-    with get_conn() as conn:
-        return conn.execute(query, [values.get(key) for key in cot if key != "ngay_tao"]).fetchone()
-
-
-def duyet_danh_gia_ncc(id_danh_gia: str, phien_ban: int, trang_thai: str,
-                       nguoi_duyet: str):
-    with get_conn() as conn:
-        return conn.execute(
-            """UPDATE danh_gia_ncc
-               SET trang_thai=%s, nguoi_duyet=%s, ngay_duyet=current_date,
-                   ngay_sua=now(), nguoi_sua=%s, phien_ban=phien_ban+1
-               WHERE id=%s AND phien_ban=%s RETURNING *""",
-            (trang_thai, nguoi_duyet if trang_thai == 'DA_DUYET' else None,
-             nguoi_duyet, id_danh_gia, phien_ban),
-        ).fetchone()
-
-
-
-def tinh_dinh_muc_ncc(id_ncc: str, ngay_dat):
-    with get_conn() as conn:
-        return conn.execute(
-            """SELECT n.id, n.ma_ncc, n.ten, n.dinh_muc_thang,
-                      coalesce(sum(dhd.so_luong*dhd.don_gia_co_so),0) AS da_dat_thang
-               FROM nha_cung_cap n
-               LEFT JOIN don_hang dh ON dh.id_ncc=n.id
-                 AND dh.trang_thai NOT IN ('HUY','TU_CHOI')
-                 AND date_trunc('month', dh.ngay_dat)=date_trunc('month', %s::date)
-               LEFT JOIN don_hang_dong dhd ON dhd.id_don_hang=dh.id
-               WHERE n.id=%s
-               GROUP BY n.id, n.ma_ncc, n.ten, n.dinh_muc_thang""",
-            (ngay_dat, id_ncc),
-        ).fetchone()

@@ -228,7 +228,7 @@ def cap_nhat_de_nghi(conn, id_dn: str, phien_ban: int, truong_cap_nhat: dict) ->
     set_clauses = [f"{k} = %({k})s" for k in truong_cap_nhat]
     sql = f"""
         UPDATE de_nghi
-        SET {', '.join(set_clauses)}
+        SET {', '.join(set_clauses)}, phien_ban=phien_ban+1
         WHERE id = %(id_dn)s AND phien_ban = %(phien_ban)s
         RETURNING *
     """
@@ -260,6 +260,11 @@ def danh_sach_de_nghi(
         params.append(ho_so["ma_bo_phan"])
 
     # 2. Các bộ lọc
+    if bo_loc.get('da_xu_ly_boi'):
+        where.append("""(dn.nguoi_duyet_bp=%s OR dn.nguoi_duyet_bld=%s OR EXISTS (SELECT 1 FROM lich_su_trang_thai ls
+                       WHERE ls.bang='DE_NGHI' AND ls.id_ban_ghi=dn.id
+                         AND ls.nguoi_thuc_hien=%s AND ls.tu_trang_thai='CHO_DUYET'))""")
+        params.extend([bo_loc['da_xu_ly_boi']] * 3)
     if bo_loc.get("tu_ngay"):
         where.append("dn.ngay_hieu_luc >= %s")
         params.append(bo_loc["tu_ngay"])
@@ -408,8 +413,7 @@ def hang_doi_cho_duyet(conn, ho_so: dict, pham_vi: str, offset: int = 0, limit: 
         params.append(ho_so["ma_bo_phan"])
     elif pham_vi == "ca_nhan":
         # Vai trò chỉ duyệt cá nhân thực tế không duyệt được người khác
-        where.append("dn.nguoi_yeu_cau = %s")
-        params.append(ho_so["ma_nhan_vien"])
+        where.append("false")
     if ho_so.get("vai_tro") == "BAN_LANH_DAO":
         where.append("dn.can_bld_duyet=true AND dn.nguoi_duyet_bp IS NOT NULL AND dn.nguoi_duyet_bld IS NULL")
 

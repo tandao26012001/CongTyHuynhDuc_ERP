@@ -10,9 +10,9 @@ from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
 from backend.services.phan_quyen_service import kiem_quyen
 
 
-def _dong(id_phieu: str, id_dong: str, ho_so: dict) -> dict:
-    kiem_quyen(ho_so, 'dat_ngoai', 'xem')
-    row = dat_ngoai_chi_tiet_repo.lay_dong(id_phieu, id_dong)
+def _dong(id_phieu: str, id_dong: str, ho_so: dict, conn=None) -> dict:
+    kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
+    row = dat_ngoai_chi_tiet_repo.lay_dong(id_phieu, id_dong, conn)
     if not row:
         raise KhongTimThay('Không tìm thấy dòng đặt ngoài thuộc phiếu này.')
     return row
@@ -55,24 +55,60 @@ def sua_dong(id_phieu: str, id_dong: str, data: dict, ho_so: dict) -> dict:
 
 def them_xac_nhan(id_phieu: str, id_dong: str, data: dict,
                   ho_so: dict, khoa: str) -> dict:
-    kiem_quyen(ho_so, 'dat_ngoai', 'xem')
+    with get_conn() as conn:
+        return _them_xac_nhan_trong_ket_noi(id_phieu, id_dong, data, ho_so, khoa, conn)
+
+
+def _them_xac_nhan_trong_ket_noi(id_phieu: str, id_dong: str, data: dict,
+                                 ho_so: dict, khoa: str, conn) -> dict:
+    kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
     prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa,
-                                   f'POST:/api/v1/dat-ngoai/dong/{id_dong}/xac-nhan-kt')
+                                   f'POST:/api/v1/dat-ngoai/dong/{id_dong}/xac-nhan-kt', conn)
     if prior is not None:
         return prior
-    row = _dong(id_phieu, id_dong, ho_so)
-    if row['trang_thai_phieu'] in ('HUY', 'HOAN_THANH'):
-        raise XungDot('Phiếu đã kết thúc, không thể thêm xác nhận.')
-    if not row.get('can_xac_nhan_ky_thuat'):
+    row = _dong(id_phieu, id_dong, ho_so, conn)
+    if row['trang_thai_phieu'] == 'HUY' or (
+        row['trang_thai_phieu'] == 'HOAN_THANH' and not row.get('cho_xac_nhan_kt')
+    ):
+        raise XungDot('Phiếu không có yêu cầu kỹ thuật đang chờ xác nhận.')
+    if not row.get('can_xac_nhan_ky_thuat') and not row.get('cho_xac_nhan_kt'):
         raise XungDot('Mã hàng này không được đánh dấu cần xác nhận kỹ thuật.')
     if ho_so.get('vai_tro') != 'QC':
-        kiem_quyen(ho_so, 'xac_nhan_kt', 'sua')
+        kiem_quyen(ho_so, 'xac_nhan_kt', 'sua', conn)
     content = str(data['noi_dung']).strip()
     if not content:
         raise ThieuDuLieu('Nội dung xác nhận không được để trống.')
-    return dat_ngoai_chi_tiet_repo.them_xac_nhan(
-        id_dong, content, ho_so['ma_nhan_vien'],
-        ho_so['ma_tai_khoan'], khoa)
+    id_yeu_cau = data.get('id_yeu_cau')
+    if row.get('cho_xac_nhan_kt') and not id_yeu_cau:
+        raise ThieuDuLieu('Hãy trả lời trực tiếp trên yêu cầu kỹ thuật đang chờ.')
+    try:
+        return dat_ngoai_chi_tiet_repo.them_xac_nhan(
+            id_dong, content, ho_so['ma_nhan_vien'],
+            ho_so['ma_tai_khoan'], khoa, id_yeu_cau, conn)
+    except ValueError as exc:
+        raise XungDot(str(exc)) from exc
+
+
+def them_yeu_cau_ky_thuat(id_phieu: str, id_dong: str, data: dict,
+                          ho_so: dict, khoa: str) -> dict:
+    kiem_quyen(ho_so, 'dat_ngoai', 'sua')
+    prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa,
+                                   f'POST:/api/v1/dat-ngoai/dong/{id_dong}/yeu-cau-kt')
+    if prior is not None:
+        return prior
+    row = _dong(id_phieu, id_dong, ho_so)
+    if row['trang_thai_phieu'] == 'HUY':
+        raise XungDot('Phiếu đã hủy, không thể yêu cầu kỹ thuật.')
+    if row.get('cho_xac_nhan_kt'):
+        raise XungDot('Mã hàng đang có yêu cầu kỹ thuật chờ xác nhận.')
+    content = str(data['noi_dung']).strip()
+    if not content:
+        raise ThieuDuLieu('Nội dung yêu cầu kỹ thuật không được để trống.')
+    try:
+        return dat_ngoai_chi_tiet_repo.them_yeu_cau_ky_thuat(
+            id_dong, content, ho_so['ma_nhan_vien'], ho_so['ma_tai_khoan'], khoa)
+    except ValueError as exc:
+        raise XungDot(str(exc)) from exc
 
 
 def them_dot_giao(id_phieu: str, id_dong: str, data: dict,

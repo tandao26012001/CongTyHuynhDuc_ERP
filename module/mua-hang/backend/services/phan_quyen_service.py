@@ -1,6 +1,7 @@
 """Kiểm quyền tập trung và quản trị tài khoản."""
 
 from backend.data import auth_repo
+from backend.data.db import get_conn
 from backend.services.loai_tai_khoan import LOAI_TAI_KHOAN, vai_tro_tuong_thich
 from backend.services.errors import KhongCoQuyen, KhongTimThay, ThieuDuLieu, XungDot
 
@@ -15,13 +16,10 @@ def kiem_quyen(ho_so: dict, trang: str, hanh_dong: str, conn=None) -> str:
         raise KhongCoQuyen("Chỉ Quản trị hệ thống được vào màn quản trị.")
     if str(ho_so.get("vai_tro", "")).strip().lower() == "admin":
         return "toan_bo"
-    quyen = next((q for q in auth_repo.lay_quyen(
-        ho_so["vai_tro"], ho_so.get("ma_bo_phan"), conn
-    ) if q["trang"] == trang), None)
+    quyen = next((q for q in auth_repo.lay_quyen(ho_so["vai_tro"], conn) if q["trang"] == trang), None)
     if not quyen or not quyen[cot[hanh_dong]]:
         raise KhongCoQuyen(f"Bạn không có quyền {hanh_dong} ở màn hình này.")
-    cot_pham_vi = "pham_vi_xem" if hanh_dong in ("xem", "xuat") else "pham_vi_sua"
-    return quyen.get(cot_pham_vi, quyen["pham_vi"])
+    return quyen["pham_vi"]
 
 
 def co_quyen_xem_gia(ho_so: dict, loai: str = "giao_dich") -> bool:
@@ -59,12 +57,12 @@ def danh_sach_vai_tro_va_quyen() -> dict:
     }
 
 
-<<<<<<< HEAD
 def danh_sach_quyen_loai_tk() -> dict:
-    loai = auth_repo.danh_sach_loai_tai_khoan()
-    rows = auth_repo.danh_sach_quyen_loai_tk()
-    so_tai_khoan = {row["ma_loai_tk"]: row["so_tai_khoan"]
-                   for row in auth_repo.dem_tai_khoan_theo_loai()}
+    with get_conn() as conn:
+        loai = auth_repo.danh_sach_loai_tai_khoan(conn)
+        rows = auth_repo.danh_sach_quyen_loai_tk(conn)
+        so_tai_khoan = {row["ma_loai_tk"]: row["so_tai_khoan"]
+                       for row in auth_repo.dem_tai_khoan_theo_loai(conn)}
     quyen = {}
     for row in rows:
         quyen.setdefault(row["ma_loai_tk"], []).append(dict(row))
@@ -103,85 +101,6 @@ def cap_nhat_quyen_loai_tk(ma_loai_tk: str, trang: str, phien_ban: int,
     return dict(row)
 
 
-=======
-def danh_sach_loai_tai_khoan() -> dict:
-    loai, bo_phan, _ = auth_repo.danh_sach_loai_tai_khoan_va_bo_phan()
-    return {"items": [dict(row) for row in loai], "bo_phan": [dict(row) for row in bo_phan]}
-
-
-def danh_sach_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str) -> dict:
-    loai, bo_phan, trang = auth_repo.danh_sach_loai_tai_khoan_va_bo_phan()
-    if not any(row["ma"] == ma_loai_tk for row in loai):
-        raise KhongTimThay("Loại tài khoản không tồn tại.")
-    if not any(row["ma"] == ma_bo_phan for row in bo_phan):
-        raise KhongTimThay("Bộ phận không tồn tại.")
-    rows = {row["trang"]: dict(row) for row in auth_repo.danh_sach_quyen_loai_tk(ma_loai_tk, ma_bo_phan)}
-    return {"items": [rows.get(page, {
-        "ma_loai_tk": ma_loai_tk, "ma_bo_phan": ma_bo_phan, "trang": page,
-        "duoc_xem": False, "duoc_sua": False, "duoc_duyet": False, "duoc_xuat": False,
-        "pham_vi_xem": "ca_nhan", "pham_vi_sua": "ca_nhan", "kieu_sua": "THANG",
-        "ma_loai_tk_duyet": None, "phien_ban": 1,
-    }) for page in trang]}
-
-
-def cap_nhat_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str, trang: str,
-                           phien_ban: int, du_lieu: dict, nguoi_sua: str) -> dict:
-    cac_loai, cac_bp, cac_trang = auth_repo.danh_sach_loai_tai_khoan_va_bo_phan()
-    if not any(row["ma"] == ma_loai_tk for row in cac_loai):
-        raise KhongTimThay("Loại tài khoản không tồn tại.")
-    if not any(row["ma"] == ma_bo_phan for row in cac_bp):
-        raise KhongTimThay("Bộ phận không tồn tại.")
-    if trang not in cac_trang:
-        raise KhongTimThay("Màn hình không tồn tại.")
-    for key in ("pham_vi_xem", "pham_vi_sua"):
-        if du_lieu[key] not in ("toan_bo", "bo_phan", "ca_nhan"):
-            raise ThieuDuLieu("Phạm vi quyền không hợp lệ.")
-    if du_lieu["kieu_sua"] != "THANG":
-        raise ThieuDuLieu("Kiểu sửa không hợp lệ.")
-    if du_lieu["duoc_sua"] or du_lieu["duoc_duyet"] or du_lieu["duoc_xuat"]:
-        du_lieu["duoc_xem"] = True
-    row = auth_repo.cap_nhat_quyen_loai_tk(
-        ma_loai_tk, ma_bo_phan, trang, phien_ban, du_lieu, nguoi_sua
-    )
-    if not row:
-        raise XungDot("Quyền vừa được cập nhật. Hãy tải lại rồi thực hiện lại.")
-    return dict(row)
-
-
-def cap_nhat_ma_tran_quyen_loai_tk(ma_loai_tk: str, ma_bo_phan: str,
-                                   items: list[dict], nguoi_sua: str) -> dict:
-    cac_loai, cac_bp, cac_trang = auth_repo.danh_sach_loai_tai_khoan_va_bo_phan()
-    if not any(row["ma"] == ma_loai_tk for row in cac_loai):
-        raise KhongTimThay("Loại tài khoản không tồn tại.")
-    if not any(row["ma"] == ma_bo_phan for row in cac_bp):
-        raise KhongTimThay("Bộ phận không tồn tại.")
-    da_gap = set()
-    chuan = []
-    for item in items:
-        trang = item.get("trang")
-        if trang not in cac_trang or trang in da_gap:
-            raise ThieuDuLieu("Màn hình không hợp lệ hoặc bị lặp trong ma trận quyền.")
-        da_gap.add(trang)
-        if any(item[key] not in ("toan_bo", "bo_phan", "ca_nhan")
-               for key in ("pham_vi_xem", "pham_vi_sua")):
-            raise ThieuDuLieu("Phạm vi quyền không hợp lệ.")
-        if item["kieu_sua"] != "THANG":
-            raise ThieuDuLieu("Kiểu sửa không hợp lệ.")
-        ban_ghi = dict(item)
-        if ban_ghi["duoc_sua"] or ban_ghi["duoc_duyet"] or ban_ghi["duoc_xuat"]:
-            ban_ghi["duoc_xem"] = True
-        chuan.append(ban_ghi)
-    if da_gap != set(cac_trang):
-        raise ThieuDuLieu("Ma trận phải gửi đầy đủ quyền của các màn hình.")
-    try:
-        ket_qua = auth_repo.cap_nhat_quyen_loai_tk_hang_loat(
-            ma_loai_tk, ma_bo_phan, chuan, nguoi_sua
-        )
-    except auth_repo.XungDotMaTran:
-        raise XungDot("Có quyền vừa được cập nhật ở phiên khác. Tải lại ma trận rồi lưu lại.") from None
-    return {"items": ket_qua}
-
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
 def cap_nhat_quyen(vai_tro: str, trang: str, phien_ban: int, du_lieu: dict, nguoi_sua: str) -> dict:
     if trang == "dieu_xe":
         raise ThieuDuLieu("Điều xe đã chuyển sang Hệ thống Kho vận.", "DIEU_XE_DA_CHUYEN")

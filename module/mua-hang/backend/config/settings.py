@@ -16,7 +16,7 @@ TZ = "Asia/Ho_Chi_Minh"
 # Dev points to Supabase; production swaps DATABASE_URL without code change.
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 DB_SCHEMA = os.getenv("DB_SCHEMA", "mua_hang")
-DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "2"))
 DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "15000"))
 
 # Auth

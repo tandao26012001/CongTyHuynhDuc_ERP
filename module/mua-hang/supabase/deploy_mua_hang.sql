@@ -34,9 +34,8 @@ BEGIN;
 \ir migrations/044_sua_trigger_tai_khoan_legacy.sql
 \ir migrations/045_loai_bo_cot_legacy_tai_khoan.sql
 \ir migrations/046_bo_sung_fax_nha_cung_cap.sql
-\ir migrations/047_quyen_theo_loai_tai_khoan_va_bo_phan.sql
+\ir migrations/047_go_dieu_xe_khoi_mua_hang.sql
 \ir migrations/048_nha_cung_cap_theo_mat_hang.sql
-<<<<<<< HEAD
 \ir migrations/049_ncc_cho_kinh_doanh_xem.sql
 \ir migrations/050_dat_ngoai_chi_tiet_v3.sql
 \ir migrations/051_quyen_gia_bao_cao.sql
@@ -52,8 +51,12 @@ BEGIN;
 \ir migrations/061_phan_biet_lan_xac_nhan_ky_thuat.sql
 \ir migrations/062_xac_nhan_ky_thuat_theo_dong_dat_ngoai.sql
 \ir migrations/063_noi_dung_can_xac_nhan_kt_theo_ma.sql
-=======
-\ir migrations/049_khoi_phuc_nguon_nghiep_v1.sql
-\ir migrations/050_dat_ngoai_ho_so_theo_dong.sql
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
+\ir migrations/066_yeu_cau_ky_thuat_nhieu_lan.sql
+\ir migrations/067_yeu_cau_ky_thuat_ban_dau_theo_ma.sql
+\ir migrations/068_tu_dong_chuyen_buoc_sau_xac_nhan_ky_thuat.sql
+\ir migrations/069_chuyen_buoc_theo_ma_sau_xac_nhan_ky_thuat.sql
+\ir migrations/070_sua_lich_su_bao_gia_theo_ma.sql
+\ir migrations/071_tag_nhan_vien_trao_doi.sql
+\ir migrations/072_danh_dau_doc_thong_bao_ky_thuat.sql
+\ir migrations/073_tuong_thich_de_nghi_viec_cua_toi.sql
 COMMIT;

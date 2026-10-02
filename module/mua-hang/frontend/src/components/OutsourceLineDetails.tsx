@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { ChiTietDatNgoaiDong, DongPhieuDatNgoai, layChiTietDatNgoaiDong, NhaCungCapDanhMuc, nhanDotGiaoDatNgoai, PhieuDatNgoai,
-  suaChiTietDatNgoaiDong, suaNgayDuKienDotGiaoDatNgoai, themDotGiaoDatNgoai, themXacNhanDatNgoaiDong } from '../api/client';
+  suaChiTietDatNgoaiDong, suaNgayDuKienDotGiaoDatNgoai, themDotGiaoDatNgoai,
+  themXacNhanDatNgoaiDong, themYeuCauKyThuatDatNgoaiDong } from '../api/client';
 import { OutsourceQuotePanel } from './OutsourceQuotePanel';
 
 function localToday() {
@@ -35,7 +36,6 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
   const [line, setLine] = useState<ChiTietDatNgoaiDong | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
   const [quantity, setQuantity] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [editingDeliveryId, setEditingDeliveryId] = useState<string | null>(null);
@@ -43,6 +43,9 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
   const [deliveryChangeReason, setDeliveryChangeReason] = useState('');
   const [receiveDates, setReceiveDates] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
+  const [technicalRequest, setTechnicalRequest] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
   const [details, setDetails] = useState({ noi_dung_gia_cong: '', yeu_cau_ky_thuat: '',
     yeu_cau_chat_luong: '', ngay_khach_yeu_cau: '', ngay_ncc_cam_ket: '',
     ngay_du_kien_noi_bo: '', ma_hang_thay_the: '', id_su_co: '', ly_do_doi_han: '' });
@@ -65,17 +68,32 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
   }
   useEffect(() => { setLine(null); void load(); }, [idPhieu, idDong]);
 
-  async function addConfirmation(event: FormEvent) {
+  async function addTechnicalRequest(event: FormEvent) {
     event.preventDefault();
-    if (!confirmation.trim()) return;
+    if (!technicalRequest.trim()) return;
     setBusy(true); setError('');
     try {
-      await themXacNhanDatNgoaiDong(idPhieu, idDong, confirmation.trim());
-      setConfirmation('');
+      await themYeuCauKyThuatDatNgoaiDong(idPhieu, idDong, technicalRequest.trim());
+      setTechnicalRequest('');
       await load();
       await onRequestChanged?.();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Không lưu được lần xác nhận kỹ thuật.');
+      setError(reason instanceof Error ? reason.message : 'Không gửi được yêu cầu kỹ thuật.');
+    } finally { setBusy(false); }
+  }
+
+  async function replyToRequest(event: FormEvent, idYeuCau: string) {
+    event.preventDefault();
+    if (!replyContent.trim()) return;
+    setBusy(true); setError('');
+    try {
+      await themXacNhanDatNgoaiDong(idPhieu, idDong, replyContent.trim(), idYeuCau);
+      setReplyContent('');
+      setReplyingTo(null);
+      await load();
+      await onRequestChanged?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không trả lời được yêu cầu kỹ thuật.');
     } finally { setBusy(false); }
   }
 
@@ -151,10 +169,6 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
         <p><strong>Hạn khách yêu cầu / NCC cam kết / nội bộ:</strong> {line.ngay_khach_yeu_cau || '—'} / {line.ngay_ncc_cam_ket || '—'} / {line.ngay_du_kien_noi_bo || '—'}</p>
         <p><strong>Phiếu sự cố:</strong> {line.id_su_co || 'Chưa có'}</p>
       </div>
-      {line.can_xac_nhan_ky_thuat && <div className="rounded border border-[#C6CCE9] bg-[#EEF0F9] p-3">
-        <h5 className="font-bold">NỘI DUNG CẦN KỸ THUẬT XÁC NHẬN</h5>
-        <p className="mt-1 whitespace-pre-wrap">{line.noi_dung_can_xac_nhan_kt || line.yeu_cau_ky_thuat || 'Chưa ghi nội dung.'}</p>
-      </div>}
       {editing && <form onSubmit={(event) => void saveDetails(event)} className="grid sm:grid-cols-2 gap-3 border-t pt-3">
         {([['noi_dung_gia_cong', 'Nội dung gia công'], ['yeu_cau_ky_thuat', 'Yêu cầu kỹ thuật'], ['yeu_cau_chat_luong', 'Yêu cầu chất lượng']] as const).map(([key, label]) => <label key={key}>{label} *<textarea required value={details[key]} onChange={(event) => setDetails({ ...details, [key]: event.target.value })} className="block mt-1 w-full p-2 border rounded" /></label>)}
         {([['ngay_khach_yeu_cau', 'Ngày khách yêu cầu'], ['ngay_ncc_cam_ket', 'Ngày NCC cam kết'], ['ngay_du_kien_noi_bo', 'Ngày dự kiến nội bộ']] as const).map(([key, label]) => <label key={key}>{label}<input type="date" value={details[key]} onChange={(event) => setDetails({ ...details, [key]: event.target.value })} className="block mt-1 h-10 w-full px-2 border rounded" /></label>)}
@@ -163,23 +177,40 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
         <label>Lý do đổi hạn<input value={details.ly_do_doi_han} onChange={(event) => setDetails({ ...details, ly_do_doi_han: event.target.value })} className="block mt-1 h-10 w-full px-2 border rounded" /></label>
         <div className="flex items-end"><button disabled={busy} className="h-10 px-4 bg-[#283A97] text-white rounded">LƯU CHI TIẾT</button></div>
       </form>}
-      <div className="border-t pt-3 space-y-3"><h5 className="font-bold">LỊCH SỬ XÁC NHẬN KỸ THUẬT · {line.ma_hang} ({line.xac_nhan_ky_thuat.length} lần)</h5>
-        {line.xac_nhan_ky_thuat.length === 0 && <p>Chưa có lần xác nhận kỹ thuật nào cho mã hàng này.</p>}
-        {line.xac_nhan_ky_thuat.length > 0 && <ol className="space-y-2">
-          {line.xac_nhan_ky_thuat.map((item, index) => <li key={item.id} className="rounded border border-[#DCE1EC] bg-[#F4F6FA] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <strong>Lần xác nhận {line.xac_nhan_ky_thuat.length - index} · {item.loai === 'PHIEU' ? 'Phiếu' : 'Mã hàng'}</strong>
-              <time className="text-[12px] text-[#59627A]" dateTime={item.thoi_diem}>{displayDateTime(item.thoi_diem)}</time>
-            </div>
-            <p className="mt-1">Đã xác nhận kỹ thuật cho mã hàng này.</p>
-            {item.noi_dung && <p className="mt-1 whitespace-pre-wrap text-[12px] text-[#59627A]">Ghi chú: {item.noi_dung}</p>}
-            <p className="mt-2 text-[12px] text-[#59627A]">Người xác nhận: {item.ten_nguoi_xac_nhan || item.nguoi_xac_nhan} · Phiếu {item.id_phieu}</p>
-          </li>)}
-        </ol>}
-        {canConfirm && line.can_xac_nhan_ky_thuat && request.trang_thai !== 'HUY' && request.trang_thai !== 'HOAN_THANH' && <form onSubmit={(event) => void addConfirmation(event)} className="flex flex-wrap items-end gap-2 border-t pt-3">
-          <label className="min-w-64 flex-1">Nội dung xác nhận lần {line.xac_nhan_ky_thuat.length + 1}<textarea required rows={2} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1 block w-full rounded border px-2 py-2" placeholder="Ghi rõ nội dung kỹ thuật được xác nhận trong lần này" /></label>
-          <button disabled={busy || !confirmation.trim()} className="h-10 rounded bg-[#283A97] px-3 text-white disabled:opacity-50">{busy ? 'ĐANG GHI…' : `GHI XÁC NHẬN LẦN ${line.xac_nhan_ky_thuat.length + 1}`}</button>
+      <div className="border-t pt-3 space-y-3"><h5 className="font-bold">LỊCH SỬ YÊU CẦU / XÁC NHẬN KỸ THUẬT · {line.ma_hang}</h5>
+        {line.cho_xac_nhan_kt && <p className="text-amber-700">Đang chờ kỹ thuật trả lời yêu cầu.</p>}
+        {canEdit && request.trang_thai !== 'HUY' && !line.cho_xac_nhan_kt && <form onSubmit={(event) => void addTechnicalRequest(event)} className="flex flex-wrap items-end gap-2 rounded border border-[#C6CCE9] bg-[#EEF0F9] p-3">
+          <label className="min-w-64 flex-1">Gửi yêu cầu kỹ thuật mới<textarea required rows={2} value={technicalRequest} onChange={(event) => setTechnicalRequest(event.target.value)} className="mt-1 block w-full rounded border px-2 py-2" placeholder="Nội dung cần kỹ thuật kiểm tra hoặc xác nhận" /></label>
+          <button disabled={busy || !technicalRequest.trim()} className="h-10 rounded bg-[#283A97] px-3 text-white disabled:opacity-50">{busy ? 'ĐANG GỬI…' : 'GỬI YÊU CẦU'}</button>
         </form>}
+        {line.xac_nhan_ky_thuat.length === 0 && <p>Chưa có yêu cầu hoặc xác nhận kỹ thuật nào cho mã hàng này.</p>}
+        {line.xac_nhan_ky_thuat.length > 0 && <ol className="space-y-2">
+          {line.xac_nhan_ky_thuat.filter((item) => item.loai !== 'MA_HANG' || !item.id_yeu_cau).map((item) => {
+            const isQuestion = item.loai === 'YEU_CAU' || item.loai === 'YEU_CAU_BAN_DAU';
+            const answer = isQuestion
+              ? line.xac_nhan_ky_thuat.find((entry) => entry.loai === 'MA_HANG' && entry.id_yeu_cau === item.id_yeu_cau)
+              : undefined;
+            return <li key={item.id}><details className="group rounded border border-[#DCE1EC] bg-[#F4F6FA] p-3">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-x-4 gap-y-1 [&::-webkit-details-marker]:hidden">
+                <strong>{item.loai === 'YEU_CAU_BAN_DAU' ? 'Yêu cầu kỹ thuật ban đầu' : isQuestion ? 'Yêu cầu kỹ thuật' : `Xác nhận kỹ thuật · ${item.loai === 'PHIEU' ? 'Phiếu' : 'Mã hàng'}`}</strong>
+                <span className="ml-auto flex items-center gap-2"><time className="text-[12px] text-[#59627A]" dateTime={item.thoi_diem}>{displayDateTime(item.thoi_diem)}</time><span className="material-symbols-outlined text-[18px] text-[#283A97] transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span></span>
+              </summary>
+              <p className="mt-1 whitespace-pre-wrap">{item.noi_dung || 'Chưa ghi nội dung.'}</p>
+              <p className="mt-2 text-[12px] text-[#59627A]">{isQuestion ? 'Người yêu cầu' : 'Người xác nhận'}: {item.ten_nguoi_xac_nhan || item.nguoi_xac_nhan} · Phiếu {item.id_phieu}</p>
+              {answer && <div className="mt-3 rounded border-l-4 border-emerald-600 bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-emerald-800">Trả lời của kỹ thuật</strong><time className="text-[12px] text-[#59627A]" dateTime={answer.thoi_diem}>{displayDateTime(answer.thoi_diem)}</time></div>
+                <p className="mt-1 whitespace-pre-wrap">{answer.noi_dung}</p>
+                <p className="mt-2 text-[12px] text-[#59627A]">Người trả lời: {answer.ten_nguoi_xac_nhan || answer.nguoi_xac_nhan}</p>
+              </div>}
+              {isQuestion && item.id_dong === idDong && !answer && canConfirm && request.trang_thai !== 'HUY' && <div className="mt-3">
+                {replyingTo === item.id_yeu_cau ? <form onSubmit={(event) => void replyToRequest(event, item.id_yeu_cau!)} className="space-y-2">
+                  <label className="block text-[12px] font-bold">Trả lời yêu cầu này<textarea required rows={2} value={replyContent} onChange={(event) => setReplyContent(event.target.value)} className="mt-1 block w-full rounded border bg-white px-2 py-2 font-normal" placeholder="Nhập câu trả lời cho nội dung ở trên" /></label>
+                  <div className="flex gap-2"><button disabled={busy || !replyContent.trim()} className="h-10 rounded bg-[#283A97] px-3 text-white disabled:opacity-50">{busy ? 'ĐANG GỬI…' : 'GỬI TRẢ LỜI'}</button><button type="button" disabled={busy} onClick={() => { setReplyingTo(null); setReplyContent(''); }} className="h-10 rounded border px-3">HỦY</button></div>
+                </form> : <button type="button" onClick={() => { setReplyingTo(item.id_yeu_cau); setReplyContent(''); }} className="h-10 rounded border border-[#283A97] px-3 font-bold text-[#283A97]">TRẢ LỜI</button>}
+              </div>}
+            </details></li>;
+          })}
+        </ol>}
       </div>
       <div className="border-t pt-3 space-y-2"><h5 className="font-bold">CÁC ĐỢT GIAO</h5>
         {line.dot_giao.length === 0 && <p>Chưa lập lịch giao.</p>}

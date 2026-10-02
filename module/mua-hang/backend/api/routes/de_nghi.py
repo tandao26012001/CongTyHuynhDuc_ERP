@@ -137,6 +137,12 @@ def hang_doi_cho_duyet(
     return thanh_cong(data)
 
 
+@router.get('/de-nghi/da-xu-ly', response_model=PhanHoi)
+def da_xu_ly(request: Request, trang: int = Query(default=1, ge=1),
+             kich_thuoc: int = Query(default=PAGE_SIZE_DEFAULT, ge=1, le=PAGE_SIZE_MAX)):
+    return thanh_cong(de_nghi_service.da_xu_ly(lay_ho_so(request), trang, kich_thuoc))
+
+
 @router.get("/de-nghi/soi-ky-han", summary="Kiểm tra nhanh kỳ hạn bất khả thi", response_model=PhanHoi)
 def soi_ky_han_nhanh(
     request: Request,

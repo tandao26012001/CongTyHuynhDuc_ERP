@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ApprovalTask, NavigationTab } from '../types';
-import { INITIAL_APPROVAL_TASKS } from '../data/initialData';
-import { confirmDeleteRows, RowSelectionActions, SelectionCheckbox } from '../components/RowSelection';
-import { HoSo, layHangDoiKyThuatDatNgoai, PhieuDatNgoai } from '../api/client';
+import { NavigationTab } from '../types';
+import { api, chuyenTrangThaiDatNgoai, HoSo, layHangDoiKyThuatDatNgoai, layPhieuDatNgoai, PhieuDatNgoai } from '../api/client';
 
 interface MyTasksViewProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -10,683 +8,196 @@ interface MyTasksViewProps {
   onTasksCountChange?: (count: number) => void;
   currentUser: HoSo;
 }
+interface DeNghi {
+  id: string; loai: string; trang_thai: string; phien_ban: number;
+  ten_bo_phan?: string; ma_bo_phan: string; ten_nguoi_yeu_cau?: string;
+  nguoi_yeu_cau: string; ngay_hieu_luc: string; so_dong: number;
+  ghi_chu?: string | null; ly_do_tra_lai?: string | null;
+}
+interface Page { items: DeNghi[]; tong: number; kich_thuoc: number }
+interface Detail {
+  de_nghi: DeNghi;
+  dong: { id: string; ten_hang_chup: string; ma_vat_tu?: string; so_luong: number; dvt_chup: string; ky_han_yc: string }[];
+  lich_su: { id: string; tu_trang_thai: string | null; sang_trang_thai: string; thoi_diem: string; ghi_chu?: string; ten_nguoi_thuc_hien?: string; nguoi_thuc_hien: string }[];
+}
+const statuses: Record<string, string> = { CHO_DUYET: 'Chờ duyệt', TRA_LAI: 'Trả lại', DA_DUYET: 'Đã duyệt', CHO_KY_BU: 'Chờ ký bù', NHAP: 'Nháp', HUY: 'Đã hủy' };
+const dateText = (value: string) => value ? new Date(value).toLocaleDateString('vi-VN') : '—';
+async function allPages(path: string): Promise<DeNghi[]> {
+  const rows: DeNghi[] = [];
+  for (let page = 1; ; page++) {
+    const result = await api<Page>(path + (path.includes('?') ? '&' : '?') + 'trang=' + page + '&kich_thuoc=100');
+    rows.push(...result.items);
+    if (rows.length >= result.tong || !result.items.length) return rows;
+  }
+}
 
 export const MyTasksView: React.FC<MyTasksViewProps> = ({ onNavigate, onNotify, onTasksCountChange, currentUser }) => {
-  const [tasks, setTasks] = useState<ApprovalTask[]>(INITIAL_APPROVAL_TASKS);
+  const [queues, setQueues] = useState<{ pending: DeNghi[]; supplement: DeNghi[]; history: DeNghi[] }>({ pending: [], supplement: [], history: [] });
   const [technicalQueue, setTechnicalQueue] = useState<PhieuDatNgoai[]>([]);
-  const [technicalError, setTechnicalError] = useState('');
-  const technicalPermission = currentUser.quyen?.xac_nhan_kt as { xem?: boolean; sua?: boolean } | undefined;
-  const canReviewTechnical = technicalPermission?.xem === true && technicalPermission.sua === true;
+  const [outsourceApprovalQueue, setOutsourceApprovalQueue] = useState<PhieuDatNgoai[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [activeSubTab, setActiveSubTab] = useState<'pending' | 'supplement' | 'history'>('pending');
+  const [search, setSearch] = useState('');
+  const [department, setDepartment] = useState('');
+  const [type, setType] = useState('');
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [outsourceDetail, setOutsourceDetail] = useState<PhieuDatNgoai | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [rejecting, setRejecting] = useState<DeNghi | null>(null);
+  const [rejectingOutsource, setRejectingOutsource] = useState<PhieuDatNgoai | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const canView = currentUser.quyen?.de_nghi?.xem === true;
+  const canApprove = currentUser.quyen?.de_nghi?.duyet === true;
+  const canViewTechnical = currentUser.quyen?.xac_nhan_kt?.xem === true;
+  const canApproveOutsource = currentUser.quyen?.dat_ngoai?.duyet === true;
+  const canViewOutsource = currentUser.quyen?.dat_ngoai?.xem === true;
 
-  async function loadTechnicalQueue() {
-    if (!canReviewTechnical) return;
+  useEffect(() => {
+    let active = true;
+    setQueues({ pending: [], supplement: [], history: [] }); setTechnicalQueue([]); setOutsourceApprovalQueue([]);
+    async function load(initial = false) {
+      if (initial) setLoading(true);
+      const results = await Promise.allSettled([
+        canApprove ? allPages('/api/v1/de-nghi/cho-duyet') : Promise.resolve([]),
+        canView ? allPages('/api/v1/de-nghi?trang_thai=TRA_LAI&nguoi_yeu_cau=' + encodeURIComponent(currentUser.ma_nhan_vien)) : Promise.resolve([]),
+        canView ? allPages('/api/v1/de-nghi/da-xu-ly') : Promise.resolve([]),
+        canViewTechnical ? layHangDoiKyThuatDatNgoai() : Promise.resolve([]),
+        canApproveOutsource && canViewOutsource ? layPhieuDatNgoai() : Promise.resolve([]),
+      ]);
+      if (!active) return;
+      const names = ['chờ duyệt', 'cần bổ sung', 'lịch sử xử lý', 'kỹ thuật', 'đặt ngoài chờ duyệt'];
+      setErrors(results.flatMap((result, index) => result.status === 'rejected' ? ['Không tải được ' + names[index] + ': ' + (result.reason instanceof Error ? result.reason.message : 'Lỗi kết nối.')] : []));
+      const [pending, supplement, history, technical, outsource] = results;
+      const outsourcePending = outsource.status === 'fulfilled' ? outsource.value.filter((item) => item.trang_thai === 'CHO_DUYET') : [];
+      setQueues({ pending: pending.status === 'fulfilled' ? pending.value : [],
+        supplement: supplement.status === 'fulfilled' ? supplement.value : [],
+        history: history.status === 'fulfilled' ? history.value : [] });
+      setTechnicalQueue(technical.status === 'fulfilled' ? technical.value : []);
+      setOutsourceApprovalQueue(outsourcePending);
+      onTasksCountChange?.((pending.status === 'fulfilled' ? pending.value.length : 0) + (technical.status === 'fulfilled' ? technical.value.length : 0) + outsourcePending.length);
+      setLoading(false);
+    }
+    void load(true);
+    const timer = globalThis.setInterval(() => void load(), 30_000);
+    return () => { active = false; globalThis.clearInterval(timer); };
+  }, [currentUser.ma_tai_khoan, currentUser.ma_nhan_vien, canView, canApprove, canViewTechnical, canApproveOutsource, canViewOutsource, refresh]);
+
+  async function approveOutsource(item: PhieuDatNgoai) {
+    if (busy) return;
+    setBusy(true);
     try {
-      setTechnicalQueue(await layHangDoiKyThuatDatNgoai());
-      setTechnicalError('');
-    } catch (reason) {
-      setTechnicalError(reason instanceof Error ? reason.message : 'Không tải được hàng đợi kỹ thuật.');
+      await chuyenTrangThaiDatNgoai(item, 'DA_DUYET');
+      onNotify(`Đã duyệt phiếu đặt ngoài ${item.id}.`);
+      setOutsourceDetail(null);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : 'Không duyệt được phiếu đặt ngoài.');
+    } finally {
+      setBusy(false);
+      setRefresh((value) => value + 1);
     }
   }
 
-  useEffect(() => {
-    if (!canReviewTechnical) return;
-    void loadTechnicalQueue();
-    const timer = globalThis.setInterval(() => void loadTechnicalQueue(), 30_000);
-    return () => globalThis.clearInterval(timer);
-  }, [canReviewTechnical]);
-
-  const [activeSubTab, setActiveSubTab] = useState<'pending' | 'supplement' | 'history'>('pending');
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [filterType, setFilterType] = useState('ALL');
-  const [filterDept, setFilterDept] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Rejection modal
-  const [rejectingTask, setRejectingTask] = useState<ApprovalTask | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [quickReason, setQuickReason] = useState('');
-
-  // Filter logic
-  const filteredTasks = tasks.filter((t) => {
-    if (activeSubTab === 'pending' && t.status !== 'pending') return false;
-    if (activeSubTab === 'supplement' && t.status !== 'supplement') return false;
-    if (activeSubTab === 'history' && t.status !== 'approved' && t.status !== 'rejected') return false;
-
-    if (filterType !== 'ALL' && !t.docType.includes(filterType)) return false;
-    if (filterDept !== 'ALL' && !t.department.includes(filterDept)) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        t.docCode.toLowerCase().includes(q) ||
-        t.requester.toLowerCase().includes(q) ||
-        t.department.toLowerCase().includes(q) ||
-        t.lineSummary.toLowerCase().includes(q)
-      );
+  async function returnOutsource(item: PhieuDatNgoai) {
+    if (busy || !reason.trim()) return;
+    setBusy(true);
+    try {
+      await chuyenTrangThaiDatNgoai(item, 'DANG_BAO_GIA', reason.trim());
+      onNotify(`Đã trả lại phiếu đặt ngoài ${item.id} để xử lý báo giá.`);
+      setRejectingOutsource(null); setOutsourceDetail(null); setReason('');
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : 'Không trả lại được phiếu đặt ngoài.');
+    } finally {
+      setBusy(false);
+      setRefresh((value) => value + 1);
     }
-    return true;
-  });
+  }
 
-  const pendingCount = tasks.filter((t) => t.status === 'pending').length;
-  const supplementCount = tasks.filter((t) => t.status === 'supplement').length;
-  const historyCount = tasks.filter((t) => t.status === 'approved' || t.status === 'rejected').length + 18;
+  async function openDetail(item: DeNghi) {
+    setDetailLoading(true);
+    try { setDetail(await api<Detail>('/api/v1/de-nghi/' + encodeURIComponent(item.id))); }
+    catch (error) { onNotify(error instanceof Error ? error.message : 'Không tải được chi tiết.'); }
+    finally { setDetailLoading(false); }
+  }
+  async function process(item: DeNghi, action: 'duyet' | 'tra-lai') {
+    if (busy) return;
+    if (action === 'tra-lai' && !reason.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await api<DeNghi>('/api/v1/de-nghi/' + encodeURIComponent(item.id) + '/' + action, {
+        method: 'POST', body: JSON.stringify({ phien_ban: item.phien_ban, ...(action === 'tra-lai' ? { ly_do: reason.trim() } : { duyet_online: false }) }),
+      });
+      onNotify(action === 'tra-lai' ? 'Đã trả lại phiếu ' + item.id : 'Đã xử lý phiếu ' + item.id + ' · ' + (statuses[updated.trang_thai] || updated.trang_thai));
+      setRejecting(null); setDetail(null); setRefresh((value) => value + 1);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : 'Không lưu được thao tác.');
+      setRefresh((value) => value + 1);
+    } finally { setBusy(false); }
+  }
+  const departments = Array.from(new Map([
+    ...Object.values(queues).flat().map((row): [string, string] => [row.ma_bo_phan, row.ten_bo_phan || row.ma_bo_phan]),
+    ...(outsourceApprovalQueue.length ? [['KD', 'Kinh doanh'] as [string, string]] : []),
+  ]).entries());
+  const filtered = queues[activeSubTab].filter((item) => (!department || item.ma_bo_phan === department) && (!type || item.loai === type)
+    && [item.id, item.ten_bo_phan, item.ten_nguoi_yeu_cau, item.ghi_chu].join(' ').toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi')));
+  const filteredOutsource = activeSubTab === 'pending' ? outsourceApprovalQueue.filter((item) => (!department || department === 'KD') && (!type || type === 'DAT_NGOAI')
+    && [item.id, item.lenh_san_xuat, item.nguoi_lap, item.nha_cung_cap_tom_tat, item.ghi_chu].join(' ').toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))) : [];
+  const filteredCount = filtered.length + filteredOutsource.length;
+  const tabCount = (key: 'pending' | 'supplement' | 'history') => queues[key].length + (key === 'pending' ? outsourceApprovalQueue.length : 0);
+  const tabs = [{ key: 'pending' as const, label: 'Chờ tôi duyệt' }, { key: 'supplement' as const, label: 'Cần xử lý bổ sung' }, { key: 'history' as const, label: 'Đã xử lý' }];
 
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      setSelectedTaskIds(filteredTasks.map((t) => t.id));
-    } else {
-      setSelectedTaskIds([]);
-    }
-  };
-
-  const handleToggleSelect = (id: string) => {
-    setSelectedTaskIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const deleteTasks = (ids: Set<string>) => {
-    if (!ids.size || !confirmDeleteRows(ids.size, 'công việc')) return;
-    setTasks((current) => current.filter((task) => !ids.has(task.id)));
-    setSelectedTaskIds((current) => current.filter((id) => !ids.has(id)));
-    const removedPending = tasks.filter((task) => ids.has(task.id) && task.status === 'pending').length;
-    onTasksCountChange?.(Math.max(0, pendingCount - removedPending));
-    onNotify(`Đã xoá ${ids.size} công việc.`);
-  };
-
-  const handleApproveSingle = (task: ApprovalTask) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, status: 'approved' } : t))
-    );
-    setSelectedTaskIds((prev) => prev.filter((id) => id !== task.id));
-    const nextCount = tasks.filter((t) => t.status === 'pending' && t.id !== task.id).length;
-    onTasksCountChange?.(nextCount);
-    onNotify(`Đã PHÊ DUYỆT chứng từ [${task.docCode}] thành công!`);
-  };
-
-  const handleForwardDirector = (task: ApprovalTask) => {
-    onNotify(`Đã chuyển tiếp chứng từ giá trị lớn [${task.docCode}] (${task.totalValue.toLocaleString('vi-VN')} đ) lên Tổng Giám Đốc phê duyệt hạn mức.`);
-  };
-
-  const handleBatchApprove = () => {
-    if (selectedTaskIds.length === 0) return;
-    setTasks((prev) =>
-      prev.map((t) => (selectedTaskIds.includes(t.id) ? { ...t, status: 'approved' } : t))
-    );
-    const count = selectedTaskIds.length;
-    setSelectedTaskIds([]);
-    const nextCount = tasks.filter((t) => t.status === 'pending' && !selectedTaskIds.includes(t.id)).length;
-    onTasksCountChange?.(nextCount);
-    onNotify(`Đã phê duyệt hàng loạt thành công ${count} chứng từ!`);
-  };
-
-  const handleOpenReject = (task: ApprovalTask) => {
-    setRejectingTask(task);
-    setRejectReason('');
-    setQuickReason('');
-  };
-
-  const handleConfirmReject = () => {
-    if (!rejectingTask) return;
-    if (rejectReason.trim().length < 10) {
-      alert('Vui lòng nhập lý do từ chối tối thiểu 10 ký tự để người tạo phiếu biết chỉnh sửa.');
-      return;
-    }
-    setTasks((prev) =>
-      prev.map((t) => (t.id === rejectingTask.id ? { ...t, status: 'rejected' } : t))
-    );
-    onNotify(`Đã TỪ CHỐI chứng từ [${rejectingTask.docCode}] với lý do: "${rejectReason.trim()}"`);
-    setRejectingTask(null);
-  };
-
-  const handleViewDetail = (task: ApprovalTask) => {
-    if (task.docCode.startsWith('DN')) {
-      onNavigate('request-detail');
-    } else {
-      onNavigate('quotes');
-    }
-  };
-
-  return (
-    <div className="space-y-6 pb-20">
-      {canReviewTechnical && <section className="bg-white border border-[#DCE1EC] rounded shadow-sm overflow-hidden">
-        <header className="p-4 bg-[#EEF0F9] border-b flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="font-bold text-[15px]">PHIẾU ĐẶT NGOÀI CHỜ KỸ THUẬT</h2><p className="text-[12px] text-[#59627A]">Hàng đợi chung cho tài khoản được cấp quyền xác nhận kỹ thuật.</p></div>
-          <span className="pill p-info px-3 py-1">{technicalQueue.length} đang chờ</span>
-        </header>
-        {technicalError && <div role="alert" className="p-3 text-[12px] text-[#C4141F]">{technicalError}</div>}
-        {technicalQueue.length === 0 ? <p className="p-5 text-[13px] text-[#59627A]">Không có phiếu nào đang chờ xác nhận kỹ thuật.</p> : <div className="divide-y">
-          {technicalQueue.map((request) => <article key={request.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
-            <div><strong className="font-mono text-[#283A97]">{request.id}</strong><span className="mx-2 text-[#8A93AA]">·</span><span className="font-mono">LSX {request.lenh_san_xuat}</span><p className="mt-1 text-[12px] text-[#59627A]">{request.noi_dung_ky_thuat || 'Yêu cầu xác nhận kỹ thuật'} · Đã xác nhận {request.dong.filter((line) => line.can_xac_nhan_ky_thuat && line.da_xac_nhan_kt).length}/{request.dong.filter((line) => line.can_xac_nhan_ky_thuat).length} mã cần xác nhận · Người lập: {request.nguoi_lap}</p></div>
-            <button type="button" onClick={() => onNavigate('outsource')} className="min-h-10 px-4 rounded bg-emerald-700 text-white font-bold">MỞ ĐẶT NGOÀI ĐỂ XÁC NHẬN TỪNG MÃ</button>
-          </article>)}
-        </div>}
-      </section>}
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Pending */}
-        <div className="bg-white border border-[#DCE1EC] p-4 rounded shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-[12px] font-condensed font-bold uppercase text-[#59627A]">
-              CHỨNG TỪ CHỜ DUYỆT
-            </div>
-            <div className="text-[32px] font-bold font-mono text-[#0E1220] leading-none mt-1">
-              {pendingCount}
-            </div>
-            <div className="text-[12px] text-[#59627A] mt-1">Thuộc thẩm quyền xưởng</div>
-          </div>
-          <div className="w-12 h-12 bg-[#EEF0F9] text-[#283A97] rounded flex items-center justify-center">
-            <span className="material-symbols-outlined text-[28px]">pending_actions</span>
-          </div>
-        </div>
-
-        {/* Card 2: Urgency */}
-        <div className="bg-white border-l-4 border-l-[#EE202E] border-y border-r border-[#DCE1EC] p-4 rounded shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-[12px] font-condensed font-bold uppercase text-[#EE202E]">
-              SẮP TRỄ HẠN (&lt; 4 GIỜ)
-            </div>
-            <div className="text-[32px] font-bold font-mono text-[#EE202E] leading-none mt-1">
-              1
-            </div>
-            <div className="text-[12px] text-[#59627A] mt-1">Ưu tiên xử lý gấp ca 1</div>
-          </div>
-          <div className="w-12 h-12 bg-[#FDECEE] text-[#EE202E] rounded flex items-center justify-center">
-            <span className="material-symbols-outlined text-[28px]">alarm</span>
-          </div>
-        </div>
-
-        {/* Card 3: Over Budget */}
-        <div className="bg-white border border-[#DCE1EC] p-4 rounded shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-[12px] font-condensed font-bold uppercase text-[#59627A]">
-              VƯỢT HẠN MỨC DUYỆT XƯỞNG
-            </div>
-            <div className="text-[32px] font-bold font-mono text-[#283A97] leading-none mt-1">
-              1
-            </div>
-            <div className="text-[12px] text-[#59627A] mt-1">&gt; 500.000.000 đ (Trình TGĐ)</div>
-          </div>
-          <div className="w-12 h-12 bg-[#EEF0F9] text-[#283A97] rounded flex items-center justify-center">
-            <span className="material-symbols-outlined text-[28px]">account_balance</span>
-          </div>
-        </div>
+  return <div className="space-y-5 pb-16">
+    <div className="flex items-center justify-between"><h1 className="font-bold text-lg">VIỆC CỦA TÔI</h1><button type="button" disabled={loading || busy} onClick={() => setRefresh((value) => value + 1)} className="rounded border bg-white px-4 py-2">Tải lại</button></div>
+    {errors.map((error) => <p key={error} role="alert" className="rounded border border-red-200 bg-white p-3 text-sm text-red-700">{error}</p>)}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{tabs.map((tab) => <button key={tab.key} type="button" onClick={() => setActiveSubTab(tab.key)} className="rounded border bg-white p-4 text-left"><span className="text-sm text-[#59627A]">{tab.label}</span><strong className="block text-3xl text-[#283A97]">{loading ? '—' : tabCount(tab.key)}</strong></button>)}</div>
+    {canViewTechnical && <section className="overflow-hidden rounded border bg-white">
+      <header className="flex items-center justify-between border-b bg-[#EEF0F9] p-4"><h2 className="font-bold">PHIẾU ĐẶT NGOÀI CHỜ KỸ THUẬT</h2><span>{loading ? '—' : technicalQueue.length} đang chờ</span></header>
+      {loading ? <p className="p-4">Đang tải hàng đợi kỹ thuật…</p> : technicalQueue.length === 0 ? <p className="p-4 text-sm text-[#59627A]">{errors.some((error) => error.startsWith('Không tải được kỹ thuật')) ? 'Chưa tải được dữ liệu.' : 'Không có phiếu đang chờ xác nhận kỹ thuật.'}</p> : technicalQueue.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+        <div><strong className="font-mono text-[#283A97]">{item.id} · LSX {item.lenh_san_xuat}</strong><p className="mt-1 text-sm text-[#59627A]">{item.noi_dung_ky_thuat || 'Chờ xác nhận kỹ thuật'} · {item.dong.filter((line) => line.cho_xac_nhan_kt || (line.can_xac_nhan_ky_thuat && !line.da_xac_nhan_kt)).length} mã chờ xác nhận · Người lập: {item.nguoi_lap}</p></div>
+        <button type="button" onClick={() => onNavigate('outsource')} className="rounded bg-emerald-700 px-4 py-2 text-white">Mở đặt ngoài</button>
+      </article>)}
+    </section>}
+    <section className="overflow-hidden rounded border bg-white">
+      <div className="flex flex-wrap gap-2 border-b p-3">{tabs.map((tab) => <button key={tab.key} type="button" onClick={() => setActiveSubTab(tab.key)} className={'rounded px-4 py-2 text-sm font-bold ' + (activeSubTab === tab.key ? 'bg-[#283A97] text-white' : 'bg-[#F4F6FA]')}>{tab.label} ({loading ? '—' : tabCount(tab.key)})</button>)}</div>
+      <div className="flex flex-wrap gap-2 border-b p-3">
+        <input aria-label="Tìm công việc" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã phiếu, người yêu cầu, bộ phận…" className="min-w-60 flex-1 rounded border px-3 py-2 text-sm" />
+        <select aria-label="Loại phiếu" value={type} onChange={(event) => setType(event.target.value)} className="rounded border p-2 text-sm"><option value="">Tất cả loại phiếu</option><option value="MUA_HANG">Mua hàng</option><option value="GIA_CONG_NGOAI">Gia công ngoài</option><option value="DAT_NGOAI">Đặt ngoài</option></select>
+        <select aria-label="Bộ phận" value={department} onChange={(event) => setDepartment(event.target.value)} className="rounded border p-2 text-sm"><option value="">Tất cả bộ phận</option>{departments.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
       </div>
-
-      {/* Main Table Container */}
-      <div className="bg-white border border-[#DCE1EC] rounded shadow-sm overflow-hidden">
-        {/* Sub-tabs Header */}
-        <div className="border-b border-[#DCE1EC] bg-[#F4F6FA] flex flex-wrap items-center justify-between px-4 pt-3 gap-2">
-          <div className="flex space-x-1">
-            <button
-              onClick={() => setActiveSubTab('pending')}
-              className={`font-condensed font-bold text-[13px] uppercase px-4 py-2.5 border-b-2 flex items-center gap-2 transition-colors ${
-                activeSubTab === 'pending'
-                  ? 'border-[#283A97] text-[#283A97] bg-white'
-                  : 'border-transparent text-[#59627A] hover:text-[#0E1220]'
-              }`}
-            >
-              <span>Chờ tôi duyệt</span>
-              <span className="bg-[#EE202E] text-white font-mono text-[10.5px] px-1.5 py-0.2 rounded-full font-bold">
-                {pendingCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab('supplement')}
-              className={`font-condensed font-bold text-[13px] uppercase px-4 py-2.5 border-b-2 flex items-center gap-2 transition-colors ${
-                activeSubTab === 'supplement'
-                  ? 'border-[#283A97] text-[#283A97] bg-white'
-                  : 'border-transparent text-[#59627A] hover:text-[#0E1220]'
-              }`}
-            >
-              <span>Cần xử lý bổ sung</span>
-              <span className="bg-[#8A93AA] text-white font-mono text-[10.5px] px-1.5 py-0.2 rounded-full font-bold">
-                {supplementCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab('history')}
-              className={`font-condensed font-bold text-[13px] uppercase px-4 py-2.5 border-b-2 flex items-center gap-2 transition-colors ${
-                activeSubTab === 'history'
-                  ? 'border-[#283A97] text-[#283A97] bg-white'
-                  : 'border-transparent text-[#59627A] hover:text-[#0E1220]'
-              }`}
-            >
-              <span>Đã duyệt gần đây</span>
-              <span className="font-mono text-[11px] text-[#8A93AA]">({historyCount})</span>
-            </button>
-          </div>
-
-          <div className="pb-2 text-[12px] text-[#59627A]">
-            Hạn mức cá nhân: <strong className="text-[#0E1220] font-mono">500.000.000 VNĐ/chứng từ</strong>
-          </div>
-        </div>
-
-        {/* Filter Controls Bar */}
-        <div className="p-3 border-b border-[#DCE1EC] bg-white flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="h-[34px] text-[12.5px] bg-white border border-[#DCE1EC] rounded px-2.5 text-[#0E1220] outline-none focus:border-[#283A97]"
-            >
-              <option value="ALL">Tất cả loại chứng từ</option>
-              <option value="Đề nghị">Đề nghị vật tư xưởng (DN)</option>
-              <option value="PO">Đơn mua hàng (PO)</option>
-            </select>
-
-            <select
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              className="h-[34px] text-[12.5px] bg-white border border-[#DCE1EC] rounded px-2.5 text-[#0E1220] outline-none focus:border-[#283A97]"
-            >
-              <option value="ALL">Tất cả bộ phận</option>
-              <option value="Gia Công">Gia Công Chính Xác</option>
-              <option value="Cơ khí">Cơ Khí Chế Tạo</option>
-              <option value="Kho Vận">Kho Vận &amp; Đóng Gói</option>
-            </select>
-
-            {/* Bulk Action Controls */}
-            {selectedTaskIds.length > 0 && (
-              <div className="flex items-center gap-2 pl-2 border-l border-[#DCE1EC]">
-                <span className="text-[12px] text-[#283A97] font-bold">
-                  Đã chọn {selectedTaskIds.length} mục:
-                </span>
-                <button
-                  onClick={handleBatchApprove}
-                  className="h-[32px] px-3 bg-[#283A97] text-white rounded font-condensed font-bold text-[11px] uppercase hover:bg-[#1E2C75] flex items-center gap-1 shadow-xs"
-                >
-                  <span className="material-symbols-outlined text-[16px]">done_all</span>
-                  Duyệt đã chọn
-                </button>
-                <button
-                  onClick={() => {
-                    const r = prompt('Nhập lý do từ chối hàng loạt:');
-                    if (r) {
-                      setTasks((prev) =>
-                        prev.map((t) =>
-                          selectedTaskIds.includes(t.id) ? { ...t, status: 'rejected' } : t
-                        )
-                      );
-                      setSelectedTaskIds([]);
-                      onNotify(`Đã từ chối ${selectedTaskIds.length} chứng từ đã chọn.`);
-                    }
-                  }}
-                  className="h-[32px] px-3 bg-white border border-[#EE202E] text-[#EE202E] rounded font-condensed font-bold text-[11px] uppercase hover:bg-[#FDECEE]"
-                >
-                  Từ chối đã chọn
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="relative min-w-[240px]">
-            <input
-              type="text"
-              placeholder="Tìm mã phiếu, người lập, số tiền..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-[34px] pl-8 pr-3 text-[12.5px] border border-[#DCE1EC] rounded outline-none focus:border-[#283A97]"
-            />
-            <span className="material-symbols-outlined absolute left-2.5 top-2 text-[17px] text-[#8A93AA]">
-              search
-            </span>
-          </div>
-        </div>
-
-        <div className="p-3 border-b border-[#DCE1EC]">
-          <RowSelectionActions total={filteredTasks.length} selectedCount={filteredTasks.filter((task) => selectedTaskIds.includes(task.id)).length} allSelected={filteredTasks.length > 0 && filteredTasks.every((task) => selectedTaskIds.includes(task.id))} onToggleAll={() => setSelectedTaskIds(filteredTasks.every((task) => selectedTaskIds.includes(task.id)) ? [] : filteredTasks.map((task) => task.id))} onDeleteSelected={() => deleteTasks(new Set(selectedTaskIds))} onDeleteAll={() => deleteTasks(new Set(filteredTasks.map((task) => task.id)))} />
-        </div>
-
-        {/* Task Items Table for Desktop */}
-        <div className="overflow-x-auto hidden md:block">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#F4F6FA] border-b border-[#DCE1EC] font-condensed font-bold text-[11px] text-[#59627A] uppercase tracking-wider">
-                <th className="p-3 w-10 text-center">
-                  <input
-                    type="checkbox"
-                    onChange={handleSelectAll}
-                    checked={
-                      filteredTasks.length > 0 &&
-                      selectedTaskIds.length === filteredTasks.length
-                    }
-                    className="cursor-pointer rounded border-[#DCE1EC] text-[#283A97] focus:ring-0"
-                  />
-                </th>
-                <th className="p-3">MÃ CHỨNG TỪ &amp; LOẠI PHIẾU</th>
-                <th className="p-3">BỘ PHẬN / NGƯỜI YÊU CẦU</th>
-                <th className="p-3">TÓM TẮT HẠNG MỤC</th>
-                <th className="p-3 text-right">GIÁ TRỊ QUY ĐỔI</th>
-                <th className="p-3">HẠN DUYỆT &amp; CẤP ƯU TIÊN</th>
-                <th className="p-3 text-right">THAO TÁC</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-[#DCE1EC] text-[13px]">
-              {filteredTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#59627A]">
-                    <span className="material-symbols-outlined text-[36px] text-[#8A93AA] block mb-1">
-                      checklist_rtl
-                    </span>
-                    Không có chứng từ nào trong danh sách này.
-                  </td>
-                </tr>
-              ) : (
-                filteredTasks.map((task) => {
-                  const isSelected = selectedTaskIds.includes(task.id);
-                  return (
-                    <tr
-                      key={task.id}
-                      className={`hover:bg-[#EEF0F9]/30 transition-colors ${
-                        task.isOverBudget
-                          ? 'border-l-4 border-l-[#283A97] bg-[#EEF0F9]/20'
-                          : task.urgentTag?.includes('< 4H')
-                          ? 'border-l-4 border-l-[#EE202E] bg-[#FFFDFD]'
-                          : ''
-                      }`}
-                    >
-                      <td className="p-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleToggleSelect(task.id)}
-                          className="cursor-pointer rounded border-[#DCE1EC] text-[#283A97] focus:ring-0"
-                        />
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewDetail(task)}
-                            className="font-mono font-bold text-[#283A97] hover:underline text-[13.5px]"
-                          >
-                            {task.docCode}
-                          </button>
-                          <button type="button" onClick={() => deleteTasks(new Set([task.id]))} aria-label={`Xoá công việc ${task.docCode}`} className="min-w-8 min-h-8 text-[#EE202E] hover:bg-[#FDECEE] rounded"><span className="material-symbols-outlined text-[18px]">delete</span></button>
-                          <span
-                            className={`pill text-[10px] px-2 py-0.2 ${
-                              task.docType.includes('PO')
-                                ? 'bg-[#EEF0F9] text-[#283A97] border border-[#C6CCE9]'
-                                : 'bg-[#F4F6FA] text-[#59627A]'
-                            }`}
-                          >
-                            {task.docType}
-                          </span>
-                        </div>
-                        <div className="text-[11.5px] text-[#8A93AA] mt-0.5">
-                          Tạo lúc 27/08/2026 09:12
-                        </div>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="font-bold text-[#0E1220]">{task.department}</div>
-                        <div className="text-[12px] text-[#59627A] flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[14px]">person</span>
-                          {task.requester}
-                        </div>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="text-[#0E1220] font-medium">{task.lineSummary}</div>
-                        <div className="text-[11.5px] text-[#8A93AA]">Thép S45C, dao phay ngón carbide...</div>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <div className="font-mono text-[14px] font-bold text-[#0E1220]">
-                          {task.totalValue.toLocaleString('vi-VN')} đ
-                        </div>
-                        {task.isOverBudget && (
-                          <span className="pill bg-[#EEF0F9] text-[#283A97] text-[10px] px-1.5 py-0.2 border border-[#C6CCE9]">
-                            VƯỢT HẠN MỨC XƯỞNG
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-1 font-mono text-[12px] text-[#0E1220]">
-                          <span className="material-symbols-outlined text-[14px] text-[#59627A]">calendar_today</span>
-                          {task.deadline}
-                        </div>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span
-                            className={`pill text-[10px] px-1.5 py-0.2 ${
-                              task.urgentTag?.includes('< 4H')
-                                ? 'bg-[#EE202E] text-white'
-                                : 'bg-[#EEF0F9] text-[#283A97]'
-                            }`}
-                          >
-                            {task.urgentTag || task.priorityTag}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {task.isOverBudget ? (
-                            <button
-                              onClick={() => handleForwardDirector(task)}
-                              className="h-[32px] px-3 bg-[#EEF0F9] text-[#283A97] border border-[#283A97] rounded font-condensed font-bold text-[11.5px] uppercase hover:bg-[#283A97] hover:text-white transition-colors flex items-center gap-1"
-                              title="Chuyển hồ sơ lên Tổng Giám Đốc ký duyệt"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">forward</span>
-                              Trình TGĐ
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleApproveSingle(task)}
-                              className="h-[32px] px-3.5 bg-[#283A97] text-white rounded font-condensed font-bold text-[11.5px] uppercase hover:bg-[#1E2C75] transition-colors flex items-center gap-1 shadow-xs"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">check</span>
-                              Duyệt
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => handleOpenReject(task)}
-                            className="h-[32px] px-2.5 bg-white border border-[#DCE1EC] text-[#EE202E] hover:bg-[#FDECEE] rounded font-condensed font-bold text-[11.5px] uppercase transition-colors"
-                            title="Từ chối hoặc yêu cầu sửa"
-                          >
-                            Từ chối
-                          </button>
-
-                          <button
-                            onClick={() => handleViewDetail(task)}
-                            className="h-[32px] w-[32px] text-[#59627A] hover:bg-[#F4F6FA] hover:text-[#0E1220] rounded flex items-center justify-center"
-                            title="Xem chi tiết phiếu"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">visibility</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile View: Cards Layout */}
-        <div className="divide-y divide-[#DCE1EC] md:hidden">
-          {filteredTasks.map((task) => (
-            <div key={task.id} className="p-4 space-y-3 bg-white">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <SelectionCheckbox checked={selectedTaskIds.includes(task.id)} onChange={() => handleToggleSelect(task.id)} label={`Chọn công việc ${task.docCode}`} />
-                    <button
-                      onClick={() => handleViewDetail(task)}
-                      className="font-mono font-bold text-[#283A97] text-[14px]"
-                    >
-                      {task.docCode}
-                    </button>
-                    <span className="pill bg-[#EEF0F9] text-[#283A97] text-[10px] px-2 py-0.2">
-                      {task.docType}
-                    </span>
-                  </div>
-                  <div className="text-[12px] text-[#59627A] mt-0.5">
-                    {task.department} • {task.requester}
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="font-mono font-bold text-[15px] text-[#0E1220]">
-                    {task.totalValue.toLocaleString('vi-VN')} đ
-                  </div>
-                  {task.isOverBudget && (
-                    <span className="pill bg-[#FDECEE] text-[#EE202E] text-[10px] px-1.5 py-0.2">
-                      VƯỢT HẠN MỨC
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-2 bg-[#F4F6FA] rounded text-[12px] text-[#0E1220]">
-                {task.lineSummary} (Hạn: {task.deadline})
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="pill bg-[#EEF0F9] text-[#283A97] text-[10.5px] px-2 py-0.5">
-                  {task.urgentTag || task.priorityTag}
-                </span>
-
-                <div className="flex items-center gap-2">
-                  {task.isOverBudget ? (
-                    <button
-                      onClick={() => handleForwardDirector(task)}
-                      className="h-[34px] px-3 bg-[#EEF0F9] text-[#283A97] border border-[#283A97] rounded font-condensed font-bold text-[12px] uppercase"
-                    >
-                      Trình TGĐ
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleApproveSingle(task)}
-                      className="h-[34px] px-4 bg-[#283A97] text-white rounded font-condensed font-bold text-[12px] uppercase"
-                    >
-                      Duyệt
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleOpenReject(task)}
-                    className="h-[34px] px-3 border border-[#DCE1EC] text-[#EE202E] rounded font-condensed font-bold text-[12px] uppercase"
-                  >
-                    Từ chối
-                  </button>
-                  <button type="button" onClick={() => deleteTasks(new Set([task.id]))} aria-label={`Xoá công việc ${task.docCode}`} className="min-w-10 min-h-10 text-[#EE202E]"><span className="material-symbols-outlined">delete</span></button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer info */}
-        <div className="p-3 bg-[#F4F6FA] border-t border-[#DCE1EC] flex flex-wrap items-center justify-between gap-2 text-[12px] text-[#59627A]">
-          <div>Hiển thị {filteredTasks.length} chứng từ cần xử lý</div>
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 text-[#283A97] font-bold">
-              <span className="material-symbols-outlined text-[16px]">verified_user</span>
-              Chữ ký số nội bộ xưởng hợp lệ
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* REJECTION MODAL */}
-      {rejectingTask && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full border border-[#DCE1EC] shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-4 border-b border-[#DCE1EC] bg-[#FDECEE] flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[#EE202E]">
-                <span className="material-symbols-outlined text-[24px]">cancel</span>
-                <h3 className="text-[16px] font-bold uppercase font-condensed">
-                  TỪ CHỐI CHỨNG TỪ {rejectingTask.docCode}
-                </h3>
-              </div>
-              <button
-                onClick={() => setRejectingTask(null)}
-                className="text-[#59627A] hover:text-[#0E1220]"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <p className="text-[13px] text-[#59627A]">
-                Vui lòng cung cấp lý do cụ thể để người tạo phiếu (
-                <strong className="text-[#0E1220]">{rejectingTask.requester}</strong>) nhận thông báo và tiến hành sửa đổi hoặc lập lại.
-              </p>
-
-              {/* Quick reason chips */}
-              <div>
-                <span className="block font-condensed font-bold text-[11px] uppercase text-[#59627A] mb-1.5">
-                  LÝ DO MẪU NHANH:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Vượt định mức tiêu hao ca sản xuất',
-                    'Sai thông số kỹ thuật bản vẽ',
-                    'Đề nghị đàm phán lại đơn giá NCC',
-                    'Kho xưởng vẫn còn tồn mã tương đương'
-                  ].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => {
-                        setQuickReason(preset);
-                        setRejectReason(preset);
-                      }}
-                      className={`text-[11.5px] px-2.5 py-1 rounded border transition-colors ${
-                        quickReason === preset
-                          ? 'bg-[#283A97] text-white border-[#283A97]'
-                          : 'bg-[#F4F6FA] text-[#0E1220] border-[#DCE1EC] hover:bg-[#EEF0F9]'
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-condensed font-bold text-[12px] uppercase text-[#0E1220] mb-1">
-                  NỘI DUNG LÝ DO TỪ CHỐI (BẮT BUỘC &gt;= 10 KÝ TỰ):
-                </label>
-                <textarea
-                  rows={4}
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Ví dụ: Đề nghị kiểm tra lại số lượng thép tròn vì tồn kho khu B vẫn còn 4 cây..."
-                  className="w-full text-[13px] p-3 border border-[#DCE1EC] rounded outline-none focus:border-[#283A97]"
-                />
-                <div className="text-right text-[11px] text-[#8A93AA] mt-1 font-mono">
-                  {rejectReason.length} / tối thiểu 10 ký tự
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-[#F4F6FA] border-t border-[#DCE1EC] flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setRejectingTask(null)}
-                className="h-[36px] px-4 rounded border border-[#DCE1EC] text-[#0E1220] hover:bg-white font-condensed font-bold text-[12px] uppercase"
-              >
-                HỦY BỎ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReject}
-                className="h-[36px] px-5 rounded bg-[#EE202E] hover:bg-[#C4141F] text-white font-condensed font-bold text-[12px] uppercase flex items-center gap-1.5 shadow-sm"
-              >
-                <span className="material-symbols-outlined text-[18px]">block</span>
-                XÁC NHẬN TỪ CHỐI PHIẾU
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+      {loading ? <p className="p-5">Đang tải công việc…</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-[#F4F6FA] text-left"><tr>{['Mã phiếu', 'Loại', 'Bộ phận / Người yêu cầu', 'Số dòng', 'Ngày lập / hiệu lực', 'Trạng thái', 'Thao tác'].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+        <tbody>{filteredCount === 0 ? <tr><td colSpan={7} className="p-6 text-center text-[#59627A]">{errors.some((error) => error.startsWith('Không tải được ' + (activeSubTab === 'pending' ? 'chờ duyệt' : activeSubTab === 'supplement' ? 'cần bổ sung' : 'lịch sử xử lý')) || (activeSubTab === 'pending' && error.startsWith('Không tải được đặt ngoài chờ duyệt'))) ? 'Chưa tải được dữ liệu. Hãy thử tải lại.' : 'Không có công việc phù hợp.'}</td></tr> : <>{filtered.map((item) => <tr key={'de-nghi-' + item.id} className="border-t">
+          <td className="p-3"><button type="button" disabled={detailLoading} onClick={() => void openDetail(item)} className="font-mono font-bold text-[#283A97] underline">{item.id}</button>{item.ly_do_tra_lai && <p className="mt-1 text-xs text-orange-700">{item.ly_do_tra_lai}</p>}</td>
+          <td className="p-3">{item.loai === 'MUA_HANG' ? 'Mua hàng' : item.loai === 'GIA_CONG_NGOAI' ? 'Gia công ngoài' : item.loai}</td>
+          <td className="p-3">{item.ten_bo_phan || item.ma_bo_phan}<p className="text-xs text-[#59627A]">{item.ten_nguoi_yeu_cau || item.nguoi_yeu_cau}</p></td>
+          <td className="p-3">{item.so_dong}</td><td className="p-3">{dateText(item.ngay_hieu_luc)}</td><td className="p-3">{statuses[item.trang_thai] || item.trang_thai}</td>
+          <td className="p-3"><div className="flex gap-2"><button type="button" disabled={detailLoading || busy} onClick={() => void openDetail(item)} className="whitespace-nowrap rounded border px-3 py-2">Chi tiết</button>{activeSubTab === 'pending' && canApprove && <><button type="button" disabled={busy} onClick={() => void process(item, 'duyet')} className="rounded bg-[#283A97] px-3 py-2 text-white">Duyệt</button><button type="button" disabled={busy} onClick={() => { setRejecting(item); setReason(''); }} className="whitespace-nowrap rounded border px-3 py-2 text-red-700">Trả lại</button></>}{activeSubTab === 'supplement' && <button type="button" onClick={() => onNavigate('requests')} className="whitespace-nowrap rounded border px-3 py-2">Mở đề nghị</button>}</div></td>
+        </tr>)}{filteredOutsource.map((item) => <tr key={'dat-ngoai-' + item.id} className="border-t">
+          <td className="p-3"><button type="button" onClick={() => setOutsourceDetail(item)} className="font-mono font-bold text-[#283A97] underline">{item.id}</button><p className="text-xs text-[#59627A]">LSX {item.lenh_san_xuat}</p></td>
+          <td className="p-3">Đặt ngoài</td>
+          <td className="p-3">Kinh doanh<p className="text-xs text-[#59627A]">{item.nguoi_lap}</p></td>
+          <td className="p-3">{item.dong.length}</td><td className="p-3">{dateText(item.ngay_lap)}</td><td className="p-3">Chờ duyệt</td>
+          <td className="p-3"><div className="flex gap-2"><button type="button" onClick={() => setOutsourceDetail(item)} className="whitespace-nowrap rounded border px-3 py-2">Chi tiết</button><button type="button" disabled={busy} onClick={() => void approveOutsource(item)} className="rounded bg-[#283A97] px-3 py-2 text-white disabled:opacity-50">Duyệt</button>{currentUser.quyen?.dat_ngoai?.sua && <button type="button" disabled={busy} onClick={() => { setRejectingOutsource(item); setReason(''); }} className="whitespace-nowrap rounded border px-3 py-2 text-red-700">Trả lại</button>}</div></td>
+        </tr>)}</>}</tbody></table></div>}
+      <p className="border-t bg-[#F4F6FA] p-3 text-xs text-[#59627A]">Hiển thị {loading ? '—' : filteredCount} phiếu · Dữ liệu cập nhật mỗi 30 giây</p>
+    </section>
+    {detail && <div role="dialog" aria-modal="true" aria-labelledby="task-detail-title" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-3"><section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded bg-white p-5">
+      <header className="mb-4 flex items-center justify-between"><h2 id="task-detail-title" className="font-bold">ĐỀ NGHỊ {detail.de_nghi.id}</h2><button type="button" onClick={() => setDetail(null)} className="rounded border px-3 py-2">Đóng</button></header>
+      <p className="mb-3 text-sm">{statuses[detail.de_nghi.trang_thai] || detail.de_nghi.trang_thai} · {detail.de_nghi.ten_bo_phan || detail.de_nghi.ma_bo_phan} · {detail.de_nghi.ten_nguoi_yeu_cau || detail.de_nghi.nguoi_yeu_cau}</p>
+      {detail.de_nghi.ghi_chu && <p className="mb-3 whitespace-pre-wrap text-sm">{detail.de_nghi.ghi_chu}</p>}
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-[#F4F6FA] text-left"><tr>{['Mã vật tư', 'Tên hàng', 'Số lượng', 'ĐVT', 'Kỳ hạn yêu cầu'].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{detail.dong.map((line) => <tr key={line.id} className="border-t"><td className="p-2">{line.ma_vat_tu || '—'}</td><td className="p-2">{line.ten_hang_chup}</td><td className="p-2">{line.so_luong}</td><td className="p-2">{line.dvt_chup}</td><td className="p-2">{dateText(line.ky_han_yc)}</td></tr>)}</tbody></table></div>
+      <h3 className="mt-5 font-bold">LỊCH SỬ XỬ LÝ</h3>{detail.lich_su.length === 0 ? <p className="mt-2 text-sm">Chưa có lịch sử xử lý.</p> : detail.lich_su.map((entry) => <article key={entry.id} className="mt-2 border-t pt-2 text-sm"><time>{new Date(entry.thoi_diem).toLocaleString('vi-VN')}</time> · {entry.ten_nguoi_thuc_hien || entry.nguoi_thuc_hien}<p>{entry.tu_trang_thai ? (statuses[entry.tu_trang_thai] || entry.tu_trang_thai) + ' → ' : ''}{statuses[entry.sang_trang_thai] || entry.sang_trang_thai}</p><p className="whitespace-pre-wrap">{entry.ghi_chu}</p></article>)}
+    </section></div>}
+    {outsourceDetail && <div role="dialog" aria-modal="true" aria-labelledby="outsource-task-detail-title" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-3"><section className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded bg-white p-5">
+      <header className="mb-4 flex items-center justify-between gap-3"><h2 id="outsource-task-detail-title" className="font-bold">PHIẾU ĐẶT NGOÀI {outsourceDetail.id}</h2><button type="button" onClick={() => setOutsourceDetail(null)} className="rounded border px-3 py-2">Đóng</button></header>
+      <p className="mb-3 text-sm">LSX {outsourceDetail.lenh_san_xuat} · Người lập: {outsourceDetail.nguoi_lap} · Ngày lập: {dateText(outsourceDetail.ngay_lap)} · Hạn trả: {dateText(outsourceDetail.ky_han || '')}</p>
+      <p className="mb-3 text-sm">Nhà cung cấp: {outsourceDetail.nha_cung_cap_tom_tat || 'Theo từng mã hàng'} · Tổng giá trị: <strong>{Number(outsourceDetail.tong_gia_tri || 0).toLocaleString('vi-VN')} đ</strong></p>
+      {outsourceDetail.ghi_chu && <p className="mb-3 whitespace-pre-wrap text-sm">{outsourceDetail.ghi_chu}</p>}
+      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead className="bg-[#F4F6FA] text-left"><tr>{['Mã hàng', 'Tên hàng / Gia công', 'Số lượng', 'Nhà cung cấp', 'Đơn giá', 'Hạn trả'].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{outsourceDetail.dong.map((line) => <tr key={line.id} className="border-t"><td className="p-2 font-mono">{line.ma_hang}</td><td className="p-2">{line.ten_hang}{line.noi_dung_gia_cong && <p className="text-xs text-[#59627A]">{line.noi_dung_gia_cong}</p>}</td><td className="p-2">{Number(line.so_luong).toLocaleString('vi-VN')} {line.dvt}</td><td className="p-2">{line.ten_ncc_chup || '—'}</td><td className="p-2">{line.don_gia == null ? '—' : Number(line.don_gia).toLocaleString('vi-VN') + ' đ'}</td><td className="p-2">{dateText(line.ky_han || '')}</td></tr>)}</tbody></table></div>
+      <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => void approveOutsource(outsourceDetail)} className="rounded bg-[#283A97] px-4 py-2 text-white disabled:opacity-50">Duyệt</button>{currentUser.quyen?.dat_ngoai?.sua && <button type="button" disabled={busy} onClick={() => { setRejectingOutsource(outsourceDetail); setReason(''); }} className="rounded border px-4 py-2 text-red-700">Trả lại</button>}</div>
+    </section></div>}
+    {rejecting && <div role="dialog" aria-modal="true" aria-labelledby="task-return-title" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-3"><section className="w-full max-w-lg rounded bg-white p-5"><h2 id="task-return-title" className="font-bold">TRẢ LẠI {rejecting.id}</h2><label className="mt-4 block text-sm">Lý do trả lại<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="mt-2 w-full rounded border p-3" /></label><div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setRejecting(null)} className="rounded border px-4 py-2">Hủy</button><button type="button" disabled={busy || !reason.trim()} onClick={() => void process(rejecting, 'tra-lai')} className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50">{busy ? 'Đang lưu…' : 'Xác nhận trả lại'}</button></div></section></div>}
+    {rejectingOutsource && <div role="dialog" aria-modal="true" aria-labelledby="outsource-task-return-title" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-3"><section className="w-full max-w-lg rounded bg-white p-5"><h2 id="outsource-task-return-title" className="font-bold">TRẢ LẠI PHIẾU ĐẶT NGOÀI {rejectingOutsource.id}</h2><label className="mt-4 block text-sm">Lý do trả lại để xử lý báo giá<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="mt-2 w-full rounded border p-3" /></label><div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setRejectingOutsource(null)} className="rounded border px-4 py-2">Hủy</button><button type="button" disabled={busy || !reason.trim()} onClick={() => void returnOutsource(rejectingOutsource)} className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50">{busy ? 'Đang lưu…' : 'Xác nhận trả lại'}</button></div></section></div>}
+  </div>;
 };

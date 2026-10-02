@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'ĐIỀU HÀNH',
       items: [
         { tab: 'dashboard', label: 'Tổng quan', icon: 'home', visible: visiblePages.dashboard },
-        { tab: 'my-tasks', label: 'Giao việc', icon: 'checklist', visible: visiblePages.tasks, badge: pendingTasksCount },
+        { tab: 'my-tasks', label: 'Việc của tôi', icon: 'checklist', visible: visiblePages.tasks, badge: pendingTasksCount },
         { tab: 'reports', label: 'Báo cáo', icon: 'pie_chart', visible: visiblePages.reports },
       ],
     },

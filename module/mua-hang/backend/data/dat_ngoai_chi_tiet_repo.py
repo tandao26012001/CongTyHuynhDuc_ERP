@@ -10,7 +10,13 @@ from backend.services.sinh_ma import sinh_ma
 def lay_dong(id_phieu: str, id_dong: str, conn=None) -> dict | None:
     with get_conn() if conn is None else nullcontext(conn) as db:
         row = db.execute(
-            """SELECT d.*,p.trang_thai AS trang_thai_phieu,p.nguoi_lap
+            """SELECT d.*,p.trang_thai AS trang_thai_phieu,p.nguoi_lap,
+                      EXISTS (
+                        SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                        WHERE y.id_dat_ngoai_dong=d.id
+                          AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                          WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+                      ) AS cho_xac_nhan_kt
                FROM dat_ngoai_dong d JOIN dat_ngoai p ON p.id=d.id_dat_ngoai
                WHERE p.id=%s AND d.id=%s""", (id_phieu, id_dong),
         ).fetchone()
@@ -22,26 +28,22 @@ def danh_sach_xac_nhan(id_dong: str, ma_hang: str | None, conn=None) -> list[dic
     gia_tri_dong = ma_hang if ma_hang else id_dong
     with get_conn() if conn is None else nullcontext(conn) as db:
         return [dict(r) for r in db.execute(
-            f"""WITH phieu_ma_hang AS (
-                   SELECT DISTINCT d.id_dat_ngoai
-                   FROM dat_ngoai_dong d WHERE {dieu_kien_dong}
-                 ), lich_su AS (
-                   SELECT 'PHIEU-' || ls.id::text AS id, ls.thoi_diem,
-                          ls.noi_dung, ls.nguoi_thuc_hien AS nguoi_xac_nhan,
-                          ls.id_dat_ngoai AS id_phieu, 'PHIEU' AS loai
-                   FROM dat_ngoai_lich_su ls
-                   JOIN dat_ngoai p ON p.id=ls.id_dat_ngoai
-                   JOIN phieu_ma_hang m ON m.id_dat_ngoai=p.id
-                   WHERE ls.trang_thai_cu='CHO_XAC_NHAN_KY_THUAT'
-                     AND ls.trang_thai_moi='DANG_BAO_GIA'
-                     AND p.can_xac_nhan_ky_thuat
-                   UNION ALL
-                   SELECT 'DONG-' || x.id, x.thoi_diem, x.noi_dung,
-                          x.nguoi_xac_nhan, d.id_dat_ngoai, 'MA_HANG'
+            f"""WITH lich_su AS (
+                   SELECT 'DONG-' || x.id AS id, x.thoi_diem, x.noi_dung,
+                          x.nguoi_xac_nhan, d.id_dat_ngoai AS id_phieu,
+                          'MA_HANG' AS loai, x.id_yeu_cau, d.id AS id_dong
                    FROM dat_ngoai_xac_nhan_kt x
                    JOIN dat_ngoai_dong d ON d.id=x.id_dat_ngoai_dong
                    WHERE x.la_xac_nhan
                      AND {dieu_kien_dong}
+                   UNION ALL
+                   SELECT 'YEU-' || y.id, y.thoi_diem, y.noi_dung,
+                          y.nguoi_yeu_cau, d.id_dat_ngoai,
+                          CASE WHEN y.la_ban_dau THEN 'YEU_CAU_BAN_DAU' ELSE 'YEU_CAU' END,
+                          y.id, d.id
+                   FROM dat_ngoai_yeu_cau_kt y
+                   JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong
+                   WHERE {dieu_kien_dong}
                  )
                SELECT h.*, nv.ho_va_ten AS ten_nguoi_xac_nhan
                FROM lich_su h
@@ -51,31 +53,132 @@ def danh_sach_xac_nhan(id_dong: str, ma_hang: str | None, conn=None) -> list[dic
         )]
 
 
-def them_xac_nhan(id_dong: str, noi_dung: str, nguoi: str,
-                  tai_khoan: str, khoa: str) -> dict:
+def them_yeu_cau_ky_thuat(id_dong: str, noi_dung: str, nguoi: str,
+                          tai_khoan: str, khoa: str) -> dict:
     with get_conn() as conn:
+        path = f'POST:/api/v1/dat-ngoai/dong/{id_dong}/yeu-cau-kt'
+        prior = _bat_dau_idempotency(conn, tai_khoan, khoa, path)
+        if prior is not None:
+            return prior
+        line = conn.execute(
+            """SELECT d.id,p.trang_thai FROM dat_ngoai_dong d
+               JOIN dat_ngoai p ON p.id=d.id_dat_ngoai
+               WHERE d.id=%s FOR UPDATE OF p,d""", (id_dong,),
+        ).fetchone()
+        if not line or line['trang_thai'] == 'HUY':
+            raise ValueError('Phiếu đã kết thúc hoặc mã hàng không tồn tại.')
+        pending = conn.execute(
+            """SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+               WHERE y.id_dat_ngoai_dong=%s
+                 AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                 WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+               LIMIT 1""", (id_dong,),
+        ).fetchone()
+        if pending:
+            raise ValueError('Mã hàng đang có yêu cầu kỹ thuật chờ xác nhận.')
+        row = conn.execute(
+            """INSERT INTO dat_ngoai_yeu_cau_kt
+                 (id,id_dat_ngoai_dong,noi_dung,nguoi_yeu_cau)
+               VALUES (%s,%s,%s,%s) RETURNING *""",
+            (sinh_ma(conn, 'DNYC'), id_dong, noi_dung, nguoi),
+        ).fetchone()
+        result = dict(row)
+        _hoan_tat_idempotency(conn, tai_khoan, khoa, result)
+        return result
+
+
+def them_xac_nhan(id_dong: str, noi_dung: str, nguoi: str,
+                  tai_khoan: str, khoa: str, id_yeu_cau: str | None = None,
+                  conn=None) -> dict:
+    with get_conn() if conn is None else nullcontext(conn) as conn:
         path = f'POST:/api/v1/dat-ngoai/dong/{id_dong}/xac-nhan-kt'
         prior = _bat_dau_idempotency(conn, tai_khoan, khoa, path)
         if prior is not None:
             return prior
         # Giu chuoi id_lan_truoc theo dung thu tu khi hai nguoi xac nhan
         # cung mot ma hang gan nhu dong thoi.
-        conn.execute(
-            'SELECT id FROM dat_ngoai_dong WHERE id=%s FOR UPDATE', (id_dong,)
+        line = conn.execute(
+            """SELECT d.id,d.id_dat_ngoai,d.can_xac_nhan_ky_thuat,
+                      d.trang_thai_dong,p.trang_thai
+               FROM dat_ngoai_dong d JOIN dat_ngoai p ON p.id=d.id_dat_ngoai
+               WHERE d.id=%s FOR UPDATE OF p,d""",
+            (id_dong,),
         ).fetchone()
         previous = conn.execute(
             """SELECT id FROM dat_ngoai_xac_nhan_kt
                WHERE id_dat_ngoai_dong=%s ORDER BY thoi_diem DESC,id DESC LIMIT 1""",
             (id_dong,),
         ).fetchone()
+        pending = conn.execute(
+            """SELECT y.id FROM dat_ngoai_yeu_cau_kt y
+               WHERE y.id_dat_ngoai_dong=%s AND (%s::varchar IS NULL OR y.id=%s)
+                 AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                 WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+               ORDER BY y.thoi_diem,y.id LIMIT 1""",
+            (id_dong, id_yeu_cau, id_yeu_cau),
+        ).fetchone()
+        if id_yeu_cau and not pending:
+            raise ValueError('Yêu cầu kỹ thuật không còn chờ trả lời hoặc không thuộc mã hàng này.')
+        if not id_yeu_cau and pending:
+            raise ValueError('Hãy trả lời trực tiếp trên yêu cầu kỹ thuật đang chờ.')
+        if (not line or line['trang_thai'] == 'HUY'
+                or (line['trang_thai'] == 'HOAN_THANH' and not pending)
+                or (not line['can_xac_nhan_ky_thuat'] and not pending)):
+            raise ValueError('Mã hàng không còn yêu cầu kỹ thuật chờ xác nhận.')
         row = conn.execute(
             """INSERT INTO dat_ngoai_xac_nhan_kt
-                 (id,id_dat_ngoai_dong,noi_dung,nguoi_xac_nhan,id_lan_truoc,la_xac_nhan)
-               VALUES (%s,%s,%s,%s,%s,true) RETURNING *""",
+                 (id,id_dat_ngoai_dong,noi_dung,nguoi_xac_nhan,id_lan_truoc,la_xac_nhan,id_yeu_cau)
+               VALUES (%s,%s,%s,%s,%s,true,%s) RETURNING *""",
             (sinh_ma(conn, 'DNKT'), id_dong, noi_dung, nguoi,
-             previous['id'] if previous else None),
+             previous['id'] if previous else None, pending['id'] if pending else None),
         ).fetchone()
         result = dict(row)
+        if line['trang_thai'] == 'CHO_XAC_NHAN_KY_THUAT':
+            conn.execute(
+                """UPDATE dat_ngoai_dong d SET trang_thai_dong='DANG_BAO_GIA',
+                          ngay_sua=now(),nguoi_sua=%s
+                   WHERE d.id=%s AND d.trang_thai_dong='CHO_XAC_NHAN_KY_THUAT'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                       WHERE y.id_dat_ngoai_dong=d.id
+                         AND NOT EXISTS (
+                           SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                           WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan
+                         )
+                     )""",
+                (nguoi, id_dong),
+            )
+            # Khóa phiếu đã được giữ ở trên: lần xác nhận cuối cùng chuyển bước
+            # trong cùng giao dịch với câu trả lời, kể cả khi nhiều mã được trả lời cùng lúc.
+            advanced = conn.execute(
+                """UPDATE dat_ngoai p SET trang_thai='DANG_BAO_GIA',
+                          nguoi_xac_nhan_ky_thuat=%s,xac_nhan_ky_thuat_luc=now(),
+                          ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
+                   WHERE p.id=%s AND p.trang_thai='CHO_XAC_NHAN_KY_THUAT'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                       JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong
+                       WHERE d.id_dat_ngoai=p.id
+                         AND NOT EXISTS (
+                           SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                           WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan
+                         )
+                     ) RETURNING id""",
+                (nguoi, nguoi, line['id_dat_ngoai']),
+            ).fetchone()
+            if advanced:
+                conn.execute(
+                    """UPDATE dat_ngoai_dong SET trang_thai_dong='DANG_BAO_GIA',
+                              ngay_sua=now(),nguoi_sua=%s WHERE id_dat_ngoai=%s
+                         AND trang_thai_dong='CHO_XAC_NHAN_KY_THUAT'""",
+                    (nguoi, line['id_dat_ngoai']),
+                )
+                conn.execute(
+                    """INSERT INTO dat_ngoai_lich_su
+                         (id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
+                       VALUES (%s,'CHO_XAC_NHAN_KY_THUAT','DANG_BAO_GIA',%s,%s)""",
+                    (line['id_dat_ngoai'], 'Đã xác nhận kỹ thuật tất cả mã hàng.', nguoi),
+                )
         _hoan_tat_idempotency(conn, tai_khoan, khoa, result)
         return result
 

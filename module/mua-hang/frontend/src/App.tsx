@@ -4,7 +4,7 @@ import { INITIAL_REQUESTS } from './data/initialData';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { Toast } from './components/Toast';
-import { dangXuat, HoSo, layHoSo, layToken, PHIEN_HET_HAN_EVENT } from './api/client';
+import { api, dangXuat, HoSo, layHangDoiKyThuatDatNgoai, layHoSo, layToken, PHIEN_HET_HAN_EVENT } from './api/client';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -19,12 +19,14 @@ import { CatalogView } from './views/CatalogView';
 import { ComingSoonView } from './views/ComingSoonView';
 import { OutsourceView } from './views/OutsourceView';
 import { SupplierManagementView } from './views/SupplierManagementView';
+import { ReportsView } from './views/ReportsView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [requests, setRequests] = useState<MaterialRequest[]>(INITIAL_REQUESTS);
   const [selectedRequest, setSelectedRequest] = useState<MaterialRequest>(INITIAL_REQUESTS[0]);
-  const [pendingTasksCount, setPendingTasksCount] = useState<number>(4);
+  const [pendingTasksCount, setPendingTasksCount] = useState<number>(0);
+  const [recordTarget, setRecordTarget] = useState<{ bang: string; id: string; sequence: number } | null>(null);
   const [currentUser, setCurrentUser] = useState<HoSo | null>(null);
   const [dangKiemTraPhien, setDangKiemTraPhien] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -33,6 +35,22 @@ export default function App() {
   const showNotification = (msg: string) => {
     setToastMessage(msg);
   };
+
+  useEffect(() => {
+    let active = true;
+    setPendingTasksCount(0);
+    if (!currentUser) return;
+    const load = async () => {
+      const results = await Promise.allSettled([
+        currentUser.quyen?.de_nghi?.duyet ? api<{ tong: number }>('/api/v1/de-nghi/cho-duyet?kich_thuoc=1') : Promise.resolve({ tong: 0 }),
+        currentUser.quyen?.xac_nhan_kt?.xem ? layHangDoiKyThuatDatNgoai() : Promise.resolve([]),
+      ]);
+      if (active) setPendingTasksCount((results[0].status === 'fulfilled' ? results[0].value.tong : 0) + (results[1].status === 'fulfilled' ? results[1].value.length : 0));
+    };
+    void load();
+    const timer = globalThis.setInterval(() => void load(), 30_000);
+    return () => { active = false; globalThis.clearInterval(timer); };
+  }, [currentUser]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -116,6 +134,10 @@ export default function App() {
     setPendingTasksCount((prev) => Math.max(0, prev - 1));
   };
 
+  if (/^\/dieu-xe(?:\/|$)/i.test(globalThis.location.pathname)) {
+    return <main className="min-h-screen bg-[#F4F6FA] flex items-center justify-center p-4"><section className="bg-white border border-[#DCE1EC] rounded p-6 max-w-lg"><h1 className="text-[20px] font-bold text-[#283A97]">Điều xe đã chuyển sang Hệ thống Kho vận</h1><p className="mt-3 text-[14px]">Các chuyến xe cũ vẫn được lưu để đối chiếu. Hãy mở Hệ thống Kho vận để thực hiện yêu cầu điều xe mới.</p><a href="/" className="inline-flex min-h-11 items-center mt-5 px-5 bg-[#283A97] text-white rounded font-bold">VỀ MUA HÀNG</a></section></main>;
+  }
+
   if (dangKiemTraPhien) {
     return <div className="min-h-screen bg-[#F4F6FA] flex items-center justify-center text-[#59627A]"><div className="flex items-center gap-3"><span className="w-5 h-5 border-2 border-[#C6CCE9] border-t-[#283A97] rounded-full animate-spin" /><span>Đang kiểm tra phiên đăng nhập…</span></div></div>;
   }
@@ -163,6 +185,7 @@ export default function App() {
 
       {/* Topbar Navigation */}
       <Topbar
+        onOpenRecord={(bang, id) => { setRecordTarget((previous) => ({ bang, id, sequence: (previous?.sequence || 0) + 1 })); setActiveTab(bang === 'DAT_NGOAI' ? 'outsource' : 'suppliers'); setIsMobileMenuOpen(false); }}
         activeTab={activeTab}
         currentUser={currentUser}
         onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -255,12 +278,12 @@ export default function App() {
 
           {activeTab === 'company-data' && <CatalogView currentUser={currentUser} onNotify={showNotification} />}
 
-          {activeTab === 'suppliers' && <SupplierManagementView onNotify={showNotification} canEdit={isAdmin || (currentUser.quyen?.ncc as { sua?: boolean } | undefined)?.sua === true} canApprove={isAdmin || (currentUser.quyen?.ncc as { duyet?: boolean } | undefined)?.duyet === true} />}
+          {activeTab === 'suppliers' && <SupplierManagementView recordTarget={recordTarget?.bang === 'NCC' ? recordTarget : null} onNotify={showNotification} canEdit={isAdmin || ['TBP_MUA_HANG', 'NV_MUA_HANG'].includes(currentUser.vai_tro)} canApprove={isAdmin || currentUser.vai_tro === 'TBP_MUA_HANG'} canPropose={currentUser.vai_tro !== 'CHI_XEM'} />}
           {activeTab === 'utilities' && <ComingSoonView title="TIỆN ÍCH" description="Các tiện ích quản trị hệ thống đang được chuẩn bị." />}
-          {activeTab === 'reports' && <ComingSoonView title="BÁO CÁO" description="Báo cáo điều hành sẽ được tính trực tiếp từ dữ liệu giao dịch." />}
+          {activeTab === 'reports' && <ReportsView />}
           {activeTab === 'purchase-orders' && <ComingSoonView title="ĐƠN HÀNG" description="Chức năng quản lý đơn đặt hàng đang được triển khai." />}
           {activeTab === 'payments' && <ComingSoonView title="THANH TOÁN" description="Chức năng theo dõi yêu cầu thanh toán đang được triển khai." />}
-          {activeTab === 'outsource' && <OutsourceView onNotify={showNotification} currentUser={currentUser} />}
+          {activeTab === 'outsource' && <OutsourceView onNotify={showNotification} currentUser={currentUser} recordTarget={recordTarget?.bang === 'DAT_NGOAI' ? recordTarget : null} />}
         </div>
       </main>
 

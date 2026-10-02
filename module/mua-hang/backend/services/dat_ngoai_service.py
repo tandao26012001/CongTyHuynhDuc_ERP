@@ -1,27 +1,28 @@
 """Nghiệp vụ Kinh doanh nạp LSX, báo giá và theo dõi đặt ngoài."""
 
 from collections import defaultdict
+from hashlib import sha256
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
-import re
-import uuid
+from time import perf_counter
 from uuid import uuid4
 
 from backend.data import dat_ngoai_repo
 from backend.data.db import get_conn
+from backend.data.catalog_repo import lay_ket_qua_idempotency
 from backend.services import catalog_service
 from backend.services import phan_quyen_service
-from backend.services.errors import KhongCoQuyen, KhongTimThay, ThieuDuLieu, XungDot
-from backend.config.settings import MAX_UPLOAD_BYTES, UPLOAD_DIR
+from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
+
+logger = logging.getLogger(__name__)
 
 
 CHUYEN_TRANG_THAI = {
-    "NHAP": {"CHO_DUYET", "HUY"},
     "CHO_XAC_NHAN_KY_THUAT": {"DANG_BAO_GIA", "HUY"},
-    "DANG_BAO_GIA": {"CHO_XAC_NHAN_KY_THUAT", "HUY"},
+    "DANG_BAO_GIA": {"HUY"},
     "CHO_DUYET": {"DA_DUYET", "DANG_BAO_GIA", "HUY"},
-    "DA_DUYET": {"DANG_BAO_GIA", "DA_DAT", "HUY"},
+    "DA_DUYET": {"DA_DAT", "HUY"},
     "DA_DAT": {"DANG_LAM", "HUY"},
     "DANG_LAM": {"DA_NHAN", "HUY"},
     "DA_NHAN": {"HOAN_THANH", "HUY"},
@@ -33,49 +34,6 @@ CHUYEN_TRANG_THAI = {
 def _ma(tien_to: str) -> str:
     return f"{tien_to}-{uuid4().hex[:12].upper()}"
 
-def _pham_vi_phieu(id_phieu: str, ho_so: dict, pham_vi: str) -> bool:
-    if pham_vi == "toan_bo":
-        return True
-    with get_conn() as conn:
-        row = conn.execute(
-            """SELECT dn.nguoi_lap,EXISTS(
-                 SELECT 1 FROM tai_khoan tk
-                 WHERE tk.ma_nhan_vien=dn.nguoi_lap AND tk.ma_bo_phan=%s
-               ) AS cung_bo_phan
-               FROM dat_ngoai dn WHERE dn.id=%s""",
-            (ho_so.get("ma_bo_phan"),id_phieu),
-        ).fetchone()
-    if not row:
-        return False
-    if pham_vi == "ca_nhan":
-        return row["nguoi_lap"] == ho_so.get("ma_nhan_vien")
-    return bool(row["cung_bo_phan"])
-
-
-def _loc_phieu_pham_vi(items: list[dict], ho_so: dict, pham_vi: str) -> list[dict]:
-    if pham_vi == "toan_bo" or not items:
-        return items
-    ids = [row["id"] for row in items]
-    with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT dn.id,dn.nguoi_lap,EXISTS(
-                 SELECT 1 FROM tai_khoan tk
-                 WHERE tk.ma_nhan_vien=dn.nguoi_lap AND tk.ma_bo_phan=%s
-               ) AS cung_bo_phan
-               FROM dat_ngoai dn WHERE dn.id=ANY(%s)""",
-            (ho_so.get("ma_bo_phan"),ids),
-        ).fetchall()
-    duoc_xem = {row["id"] for row in rows if
-                (row["nguoi_lap"] == ho_so.get("ma_nhan_vien") if pham_vi == "ca_nhan"
-                 else row["cung_bo_phan"])}
-    return [item for item in items if item["id"] in duoc_xem]
-
-def _kiem_pham_vi_lsx(row: dict, ho_so: dict, pham_vi: str) -> bool:
-    if pham_vi == "toan_bo":
-        return True
-    if pham_vi == "ca_nhan":
-        return False
-    return row.get("ma_bo_phan") == ho_so.get("ma_bo_phan")
 
 def _ngay_excel(value, ten_cot: str):
     if value in (None, ""):
@@ -102,7 +60,7 @@ def _ngay_excel(value, ten_cot: str):
 
 
 def nhap_lsx(rows: list[dict], ho_so: dict) -> dict:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     if not rows:
         raise ThieuDuLieu("Danh sách LSX không được rỗng.")
     if len(rows) > 500:
@@ -113,8 +71,6 @@ def nhap_lsx(rows: list[dict], ho_so: dict) -> dict:
     for stt, row in enumerate(rows, 1):
         try:
             du_lieu = dict(row)
-            if not _kiem_pham_vi_lsx(du_lieu, ho_so, pham_vi):
-                raise ValueError("Bộ phận của LSX nằm ngoài phạm vi được cấp")
             for cot in ("so_po", "ma_khach_hang", "ten_khach_hang_chup", "ma_bo_phan", "ten_bo_phan_chup",
                         "ki_han_khach_hang", "muc_do_uu_tien", "ngay_nhan_lenh", "so_so",
                         "ngay_so", "trang_thai_don", "ma_cong_doan", "ma_ban_ve", "ghi_chu",
@@ -181,9 +137,8 @@ def nhap_lsx(rows: list[dict], ho_so: dict) -> dict:
 
 
 def danh_sach_lsx(tu_khoa: str, ho_so: dict) -> list[dict]:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
-    rows = [row for row in dat_ngoai_repo.danh_sach_lsx(str(tu_khoa or "").strip().lower())
-            if _kiem_pham_vi_lsx(row, ho_so, pham_vi)]
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
+    rows = dat_ngoai_repo.danh_sach_lsx(str(tu_khoa or "").strip().lower())
     nhom = {}
     for row in rows:
         ma = row["lenh_san_xuat"]
@@ -207,12 +162,15 @@ def danh_sach_lsx(tu_khoa: str, ho_so: dict) -> list[dict]:
     return list(nhom.values())
 
 
-def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, ghi_chu: str | None, ho_so: dict, *, id_ncc: str | None = None, ky_han: date | None = None, noi_dung_gia_cong: str | None = None, yeu_cau_ky_thuat: str | None = None, yeu_cau_chat_luong: str | None = None) -> dict:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: bool,
+                noi_dung: str | None, ghi_chu: str | None, ho_so: dict, khoa: str) -> dict:
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa, 'POST:/api/v1/dat-ngoai')
+    if prior is not None:
+        return {'so_phieu': len(prior), 'items': prior}
     ds_ma = list(dict.fromkeys(str(ma).strip() for ma in ma_vach if str(ma).strip()))
     if not ds_ma:
         raise ThieuDuLieu("Hãy chọn ít nhất một mã hàng để báo giá.")
-<<<<<<< HEAD
     details = {str(item['ma_vach']).strip(): item for item in chi_tiet_dong}
     if len(details) != len(chi_tiet_dong) or set(details) != set(ds_ma):
         raise ThieuDuLieu('Mỗi mã hàng được chọn phải có đúng một bộ nội dung gia công, kỹ thuật và chất lượng.')
@@ -231,98 +189,123 @@ def tao_bao_gia(ma_vach: list[str], can_xac_nhan: bool, noi_dung: str | None, gh
             item['noi_dung_can_xac_nhan_kt'] = str(content).strip()
         else:
             item['noi_dung_can_xac_nhan_kt'] = None
-=======
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
     with get_conn() as conn:
         if not dat_ngoai_repo.san_sang(conn):
             raise ThieuDuLieu("Cơ sở dữ liệu chưa có bảng Đặt ngoài. Hãy chạy migration 031 và 032.", "CHUA_MIGRATE_DAT_NGOAI")
         rows = [dict(row) for row in dat_ngoai_repo.lay_dong_lsx(conn, ds_ma)]
-    if len(rows) != len(ds_ma) or any(not _kiem_pham_vi_lsx(row, ho_so, pham_vi) for row in rows):
+    if len(rows) != len(ds_ma):
         raise KhongTimThay("Có mã hàng không còn tồn tại trong LSX.", "KHONG_TIM_THAY_MA_HANG_LSX")
     trung = next((row for row in rows if row["da_lap_bao_gia"]), None)
     if trung:
         raise XungDot(f"Mã hàng {trung['ma_vach']} đã có trong một báo giá đang xử lý.", "MA_HANG_DA_BAO_GIA")
-    ncc = None
-    if id_ncc:
-        ncc = catalog_service.lay_nha_cung_cap(id_ncc)
-        if not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG":
-            raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
     theo_lsx = defaultdict(list)
     for row in rows:
         theo_lsx[row["lenh_san_xuat"]].append(row)
-<<<<<<< HEAD
-=======
-    trang_thai = "NHAP"
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
     ds_phieu = []
     for lsx, dong in theo_lsx.items():
         can_xac_nhan_phieu = any(details[item['ma_vach']]['can_xac_nhan_ky_thuat'] for item in dong)
         trang_thai = "CHO_XAC_NHAN_KY_THUAT" if can_xac_nhan_phieu else "DANG_BAO_GIA"
         ds_phieu.append({
             "id": _ma("DNG"), "lenh_san_xuat": lsx, "trang_thai": trang_thai,
-<<<<<<< HEAD
             "can_xac_nhan_ky_thuat": can_xac_nhan_phieu, "noi_dung_ky_thuat": noi_dung,
             "ghi_chu": ghi_chu,
             "dong": [{**item, **details[item['ma_vach']], "id": _ma("DNGD")} for item in dong],
-=======
-            "can_xac_nhan_ky_thuat": can_xac_nhan, "noi_dung_ky_thuat": noi_dung,
-            "id_ncc": id_ncc, "ten_ncc_chup": ncc.get("ten") if ncc else None,
-            "ky_han": ky_han, "ghi_chu": ghi_chu, "f3_yeu_cau_moi": True,
-            "dong": [{**item, "id": _ma("DNGD"), "noi_dung_gia_cong": noi_dung_gia_cong,
-                      "yeu_cau_ky_thuat": yeu_cau_ky_thuat, "yeu_cau_chat_luong": yeu_cau_chat_luong} for item in dong],
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
         })
-    items = dat_ngoai_repo.tao_dat_ngoai(ds_phieu, ho_so["ma_nhan_vien"])
+    items = dat_ngoai_repo.tao_dat_ngoai(ds_phieu, ho_so["ma_nhan_vien"],
+                                           ho_so['ma_tai_khoan'], khoa)
     return {"so_phieu": len(items), "items": items}
 
 
 def danh_sach(ho_so: dict) -> list[dict]:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
-    return _loc_phieu_pham_vi(
-        [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()], ho_so, pham_vi
-    )
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
+    return [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()]
 
 
 def hang_doi_xac_nhan_ky_thuat(ho_so: dict) -> list[dict]:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "xem")
-    items = [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()
-             if row["trang_thai"] == "CHO_XAC_NHAN_KY_THUAT"]
-    return _loc_phieu_pham_vi(items, ho_so, pham_vi)
+    started = perf_counter()
+    timings = [started]
+    try:
+        with get_conn() as conn:
+            timings.append(perf_counter())
+            phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "xem", conn)
+            timings.append(perf_counter())
+            items = [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai(conn)
+                    if row["trang_thai"] == "CHO_XAC_NHAN_KY_THUAT"
+                    or (row["trang_thai"] != "HUY"
+                        and any(dong.get('cho_xac_nhan_kt') for dong in row['dong']))]
+            timings.append(perf_counter())
+            markers = {row['id_phieu']: row['dau_yeu_cau'] for row in conn.execute(
+                'SELECT id_phieu,dau_yeu_cau FROM thong_bao_ky_thuat_da_doc WHERE nguoi_nhan=%s',
+                (ho_so['ma_nhan_vien'],),
+            ).fetchall()}
+            timings.append(perf_counter())
+    finally:
+        total = perf_counter() - started
+        if total >= 2:
+            phases = ('connect', 'permission', 'listing', 'read_markers')
+            details = ' '.join(f'{phase}={end - begin:.2f}s'
+                               for phase, begin, end in zip(phases, timings, timings[1:]))
+            logger.warning('Slow technical queue: total=%.2fs %s close=%.2fs',
+                           total, details, total - (timings[-1] - started))
+    for item in items:
+        # A new request becomes unread; quotes and confirmations do not reset read state.
+        requests = sorted(str(row.get('thoi_diem')) + ':' + str(row.get('ma_hang'))
+                          for row in item.get('lich_su', []) if row.get('loai') == 'YEU_CAU_KY_THUAT')
+        item['dau_yeu_cau'] = sha256((item['id'] + '|'.join(requests)).encode()).hexdigest()
+        item['thong_bao_da_doc'] = markers.get(item['id']) == item['dau_yeu_cau']
+    return items
+
+
+def doc_thong_bao_ky_thuat(id_phieu: str, dau_yeu_cau: str, ho_so: dict) -> dict:
+    items = hang_doi_xac_nhan_ky_thuat(ho_so)
+    if not any(item['id'] == id_phieu and item['dau_yeu_cau'] == dau_yeu_cau for item in items):
+        raise XungDot('Thông báo đã thay đổi. Hãy tải lại danh sách thông báo.')
+    with get_conn() as conn:
+        conn.execute('''INSERT INTO thong_bao_ky_thuat_da_doc(nguoi_nhan,id_phieu,dau_yeu_cau)
+                        VALUES (%s,%s,%s) ON CONFLICT (nguoi_nhan,id_phieu)
+                        DO UPDATE SET dau_yeu_cau=excluded.dau_yeu_cau,thoi_diem=now()''',
+                     (ho_so['ma_nhan_vien'], id_phieu, dau_yeu_cau))
+    return {'id': id_phieu}
 
 
 def nha_cung_cap_co_the_chon(ho_so: dict) -> list[dict]:
-    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    danh_muc = catalog_service.lay_danh_muc("nha-cung-cap", 1, 100)
-    return [item for item in danh_muc["items"]
-            if item.get("la_ncc_gia_cong") and item.get("trang_thai") == "HOAT_DONG"]
-
-
-def chon_nha_cung_cap(id_phieu: str, id_ncc: str, phien_ban: int, ho_so: dict) -> dict:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    if not _pham_vi_phieu(id_phieu, ho_so, pham_vi):
-        raise KhongTimThay("Không tìm thấy phiếu đặt ngoài trong phạm vi được cấp.")
-    ncc = catalog_service.lay_nha_cung_cap(id_ncc)
-    if not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG":
-        raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
-    row = dat_ngoai_repo.chon_nha_cung_cap(
-        id_phieu, phien_ban, id_ncc, ncc.get("ma_ncc"), ncc.get("ten"), ho_so["ma_nhan_vien"],
-    )
-    if not row:
-        raise XungDot("Phiếu không còn ở bước Đang xử lý / Báo giá hoặc vừa được cập nhật. Hãy tải lại.", "PHIEU_VUA_CAP_NHAT")
-    return row
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
+    result = []
+    page = 1
+    while True:
+        danh_muc = catalog_service.lay_danh_muc("nha-cung-cap", page, 100)
+        result.extend(item for item in danh_muc["items"]
+                      if item.get("la_ncc_gia_cong") and item.get("trang_thai") == "HOAT_DONG"
+                      and item.get('trang_thai_xet_duyet') != 'DE_XUAT')
+        if page * 100 >= danh_muc['tong'] or not danh_muc['items']:
+            break
+        page += 1
+    return result
 
 
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, ho_so: dict) -> dict:
-    pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    if not _pham_vi_phieu(id_phieu, ho_so, pham_vi):
-        raise KhongTimThay("Không tìm thấy phiếu đặt ngoài trong phạm vi được cấp.")
-    if not str(du_lieu.get("ten_ncc") or "").strip():
-        raise ThieuDuLieu("Nhà cung cấp là bắt buộc.")
-    if not du_lieu.get("dong") or any(item.get("don_gia") is None or item["don_gia"] < 0 for item in du_lieu["dong"]):
-        raise ThieuDuLieu("Phải nhập đơn giá hợp lệ cho tất cả mã hàng.")
+    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    dong = du_lieu.get("dong") or []
+    if not dong or any(item.get("don_gia") is None or item["don_gia"] < 0 for item in dong):
+        raise ThieuDuLieu("Phải nhập đơn giá hợp lệ cho từng mã được lưu báo giá.")
+    if any(not str(item.get("id_ncc") or "").strip() for item in dong):
+        raise ThieuDuLieu("Phải chọn nhà cung cấp cho từng mã hàng.", "THIEU_NCC_THEO_MA")
+    if len({item["id"] for item in dong}) != len(dong):
+        raise ThieuDuLieu("Mỗi mã hàng chỉ được cập nhật một lần trong một lượt lưu.", "TRUNG_DONG_BAO_GIA")
+    suppliers = {}
+    for id_ncc in {item["id_ncc"] for item in dong}:
+        ncc = catalog_service.lay_nha_cung_cap(id_ncc)
+        if (not ncc.get("la_ncc_gia_cong") or ncc.get("trang_thai") != "HOAT_DONG"
+                or ncc.get("trang_thai_xet_duyet") == "DE_XUAT"):
+            raise ThieuDuLieu("Chỉ chọn nhà cung cấp gia công đang hoạt động.", "NCC_KHONG_HOAT_DONG")
+        suppliers[id_ncc] = ncc
+    for item in dong:
+        ncc = suppliers[item["id_ncc"]]
+        item["ma_ncc"] = ncc.get("ma_ncc")
+        item["ten_ncc"] = ncc.get("ten")
     row = dat_ngoai_repo.cap_nhat_bao_gia(id_phieu, phien_ban, du_lieu, ho_so["ma_nhan_vien"])
     if not row:
-        raise XungDot("Không thể lưu báo giá. Hãy tải lại phiếu, kiểm tra trạng thái Đang báo giá, nhà cung cấp và đầy đủ dòng hàng.")
+        raise XungDot("Không thể lưu báo giá mã hàng. Hãy tải lại phiếu và kiểm tra mã đã xác nhận kỹ thuật, không còn yêu cầu đang chờ.")
     return row
 
 
@@ -339,11 +322,10 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
     if hien_tai == "HUY" or (not la_huy and trang_thai_moi not in CHUYEN_TRANG_THAI.get(hien_tai, set())):
         raise XungDot(f"Không thể chuyển từ {hien_tai} sang {trang_thai_moi}.", "CHUYEN_TRANG_THAI_KHONG_HOP_LE")
     if la_huy:
-        pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+        phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     elif trang_thai_moi == "DA_DUYET":
-        pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "duyet")
+        phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "duyet")
     elif hien_tai == "CHO_XAC_NHAN_KY_THUAT" and trang_thai_moi == "DANG_BAO_GIA":
-<<<<<<< HEAD
         phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "sua")
         chua_xac_nhan = dat_ngoai_repo.dong_chua_xac_nhan_ky_thuat(id_phieu)
         if chua_xac_nhan:
@@ -352,102 +334,16 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
                 f"Cần xác nhận kỹ thuật từng mã hàng trước khi chuyển bước: {ma_hang}.",
                 "CON_MA_HANG_CHUA_XAC_NHAN_KY_THUAT",
             )
-=======
-        pham_vi = phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "sua")
-    elif hien_tai == "DA_DUYET" and trang_thai_moi == "DANG_BAO_GIA":
-        pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
     else:
-        pham_vi = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
-    if not _pham_vi_phieu(id_phieu, ho_so, pham_vi):
-        raise KhongTimThay("Không tìm thấy phiếu đặt ngoài trong phạm vi được cấp.")
+        phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     if la_huy and not str(noi_dung or "").strip():
         raise ThieuDuLieu("Phải nhập lý do huỷ.", "THIEU_LY_DO_HUY")
-    row = dat_ngoai_repo.chuyen_trang_thai(
-        id_phieu, phien_ban, trang_thai_moi, noi_dung, ho_so["ma_nhan_vien"]
-    )
+    try:
+        row = dat_ngoai_repo.chuyen_trang_thai(
+            id_phieu, phien_ban, trang_thai_moi, noi_dung, ho_so["ma_nhan_vien"]
+        )
+    except ValueError as exc:
+        raise XungDot(str(exc)) from exc
     if not row:
         raise XungDot("Phiếu vừa được người khác cập nhật. Hãy tải lại.")
     return row
-
-
-
-def gui_duyet(id_phieu: str, phien_ban: int, ho_so: dict) -> dict:
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài trong phạm vi được cấp.")
-    row=dat_ngoai_repo.gui_duyet(id_phieu,phien_ban,ho_so["ma_nhan_vien"])
-    if row and row.get("thieu_yeu_cau"): raise ThieuDuLieu("Cần nhập đủ nội dung gia công, yêu cầu kỹ thuật và yêu cầu chất lượng cho từng dòng trước khi gửi duyệt.","THIEU_YEU_CAU_DONG")
-    if not row: raise XungDot("Phiếu không ở trạng thái Nháp hoặc vừa được cập nhật.")
-    return row
-
-
-def cap_nhat_yeu_cau_dong(id_phieu,id_dong,data,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    row=dat_ngoai_repo.cap_nhat_yeu_cau(id_phieu,id_dong,data,ho_so["ma_nhan_vien"])
-    if not row: raise XungDot("Chỉ được sửa yêu cầu khi phiếu ở trạng thái Nháp.")
-    return dict(row)
-
-
-def them_xac_nhan_ky_thuat(id_phieu,data,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"xac_nhan_kt","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    row=dat_ngoai_repo.them_xac_nhan_ky_thuat(id_phieu,data,ho_so["ma_nhan_vien"])
-    if not row: raise KhongTimThay("Không tìm thấy mã hàng trong phiếu.")
-    return dict(row)
-
-
-def ghi_dot_giao(id_phieu,data,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    row=dat_ngoai_repo.ghi_dot_giao(id_phieu,data,ho_so["ma_nhan_vien"])
-    if not row: raise KhongTimThay("Không tìm thấy mã hàng trong phiếu.")
-    return dict(row)
-
-
-def gan_su_co(id_phieu,id_dong,id_su_co,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    row=dat_ngoai_repo.gan_su_co(id_phieu,id_dong,id_su_co,ho_so["ma_nhan_vien"])
-    if row is None: raise KhongTimThay("Không tìm thấy mã hàng trong phiếu.")
-    if row is False: raise KhongTimThay("Không tìm thấy phiếu sự cố.")
-    return dict(row)
-
-
-def doi_ma_dong(id_phieu,id_dong,ma_moi,ly_do,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    row=dat_ngoai_repo.doi_ma_dong(id_phieu,id_dong,ma_moi.strip(),ly_do.strip(),ho_so["ma_nhan_vien"])
-    if not row: raise KhongTimThay("Không tìm thấy mã hàng trong phiếu.")
-    return dict(row)
-
-
-def them_trao_doi(id_phieu,noi_dung,ho_so):
-    noi_dung=(noi_dung or "").strip()
-    if not noi_dung: raise ThieuDuLieu("Nội dung trao đổi là bắt buộc.")
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","xem")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    return dict(dat_ngoai_repo.them_trao_doi(id_phieu,noi_dung,ho_so["ma_nhan_vien"]))
-
-
-def luu_tep(id_phieu,ten_tep,noi_dung,mime,ho_so):
-    if not noi_dung or len(noi_dung)>MAX_UPLOAD_BYTES: raise ThieuDuLieu(f"Tệp phải có dung lượng từ 1 đến {MAX_UPLOAD_BYTES//(1024*1024)} MB.","TEP_KHONG_HOP_LE")
-    if mime not in {"application/pdf","image/jpeg","image/png","image/webp"}: raise ThieuDuLieu("Chỉ nhận PDF, JPG, PNG hoặc WEBP.","LOAI_TEP_KHONG_HOP_LE")
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","sua")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    safe=re.sub(r"[^A-Za-z0-9._-]","_",Path(ten_tep).name)[:180]
-    folder=(Path(UPLOAD_DIR)/"dat_ngoai"/id_phieu).resolve(); folder.mkdir(parents=True,exist_ok=True)
-    path=folder/f"{uuid.uuid4().hex}_{safe}"; path.write_bytes(noi_dung)
-    try: return dict(dat_ngoai_repo.them_tep(id_phieu,Path(ten_tep).name,str(path),len(noi_dung),mime,ho_so["ma_nhan_vien"]))
-    except Exception: path.unlink(missing_ok=True); raise
-
-
-def tai_tep(id_phieu,id_tep,ho_so):
-    pham_vi=phan_quyen_service.kiem_quyen(ho_so,"dat_ngoai","xem")
-    if not _pham_vi_phieu(id_phieu,ho_so,pham_vi): raise KhongTimThay("Không tìm thấy phiếu đặt ngoài.")
-    tep=dat_ngoai_repo.lay_tep(id_phieu,id_tep)
-    if not tep: raise KhongTimThay("Không tìm thấy tệp đính kèm.")
-    path=Path(tep["duong_dan"]).resolve(); root=Path(UPLOAD_DIR).resolve()
-    if not path.is_relative_to(root): raise KhongCoQuyen("Đường dẫn tệp không hợp lệ.","DUONG_DAN_TEP_KHONG_HOP_LE")
-    if not path.is_file(): raise KhongTimThay("Tệp vật lý không còn tồn tại.","TEP_KHONG_TON_TAI")
-    return path.read_bytes(),tep["ten_tep"],tep.get("loai_mime") or "application/octet-stream"

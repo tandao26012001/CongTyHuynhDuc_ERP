@@ -30,7 +30,7 @@ export interface HoSo {
   ma_loai_tk?: string | null;
   trang_thai: string;
   phien_ban: number;
-  quyen?: Record<string, unknown>;
+  quyen?: Record<string, { xem?: boolean; sua?: boolean; duyet?: boolean; xuat?: boolean; pham_vi?: string }>;
 }
 
 interface ApiEnvelope<T> {
@@ -93,6 +93,60 @@ export async function api<T>(path: string, init: RequestInit = {}, timeoutMs = A
     globalThis.clearTimeout(timeoutId);
     init.signal?.removeEventListener('abort', abortFromCaller);
   }
+}
+
+export interface TuongTacHoSo {
+  co_the_trao_doi?: boolean;
+  trao_doi: Array<{ id: string; noi_dung: string; nguoi_gui: string;
+    thoi_diem: string; ten_nguoi_gui: string | null;
+    nguoi_duoc_tag?: Array<{ ma_nhan_vien: string; ho_va_ten: string }> }>;
+  tep: Array<{ id: string; ten_tep: string; kich_thuoc: number;
+    loai_mime: string; nguoi_tai_len: string; thoi_diem: string }>;
+}
+
+export async function layTuongTacHoSo(loai: 'ncc' | 'dat-ngoai', id: string) {
+  return api<TuongTacHoSo>(`/api/v1/ho-so/${loai}/${encodeURIComponent(id)}/tuong-tac`);
+}
+
+export interface NguoiTag { ma_nhan_vien: string; ho_va_ten: string; ma_bo_phan: string; ten_bo_phan: string | null; vai_tro: string }
+export const layNguoiCoTheTag = (loai: string, id: string) => api<NguoiTag[]>(`/api/v1/ho-so/${loai}/${encodeURIComponent(id)}/nguoi-co-the-tag`);
+export interface ThongBaoTag { id: string; tieu_de: string; noi_dung: string; bang: string; id_ban_ghi: string; da_doc: boolean; thoi_diem: string }
+export const layThongBaoTag = () => api<ThongBaoTag[]>('/api/v1/thong-bao');
+export const docThongBaoTag = (id: string) => api(`/api/v1/thong-bao/${encodeURIComponent(id)}/da-doc`, { method: 'PATCH' });
+export const docThongBaoKyThuat = (id: string, dauYeuCau: string) => api(`/api/v1/dat-ngoai/${encodeURIComponent(id)}/thong-bao/da-doc`, { method: 'PATCH', body: JSON.stringify({ dau_yeu_cau: dauYeuCau }) });
+
+export async function themTraoDoiHoSo(loai: 'ncc' | 'dat-ngoai', id: string, noiDung: string, nguoiDuocTag: string[] = []) {
+  return api(`/api/v1/ho-so/${loai}/${encodeURIComponent(id)}/trao-doi`, {
+    method: 'POST', body: JSON.stringify({ noi_dung: noiDung, nguoi_duoc_tag: nguoiDuocTag }),
+  });
+}
+
+export async function themTepHoSo(loai: 'ncc' | 'dat-ngoai', id: string, file: File) {
+  const headers = new Headers();
+  const token = layToken();
+  if (token) headers.set('X-Phien', token);
+  const body = new FormData(); body.set('tep', file);
+  const response = await fetch(`/api/v1/ho-so/${loai}/${encodeURIComponent(id)}/tep`, {
+    method: 'POST', headers, body,
+  });
+  const result = await response.json() as ApiEnvelope<unknown>;
+  if (!response.ok || !result.ok) throw new ApiError(result.error || 'Không tải được tệp lên.', result.ma_loi, response.status);
+  return result.data;
+}
+
+export async function taiTepHoSo(loai: 'ncc' | 'dat-ngoai', id: string, idTep: string) {
+  const headers = new Headers();
+  const token = layToken();
+  if (token) headers.set('X-Phien', token);
+  const response = await fetch(`/api/v1/ho-so/${loai}/${encodeURIComponent(id)}/tep/${encodeURIComponent(idTep)}`, { headers });
+  if (!response.ok) throw new ApiError('Không tải được tệp đính kèm.', null, response.status);
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url; link.download = match?.[1] || 'tep-dinh-kem'; link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function dangNhap(maTaiKhoan: string, matKhau: string) {
@@ -276,11 +330,9 @@ export interface VaiTroQuanTri {
   ten: string;
   thu_tu: number | null;
   mo_ta: string | null;
-  ma_loai_tk?: string | null;
   quyen: QuyenVaiTro[];
 }
 
-<<<<<<< HEAD
 export interface QuyenLoaiTaiKhoan {
   ma_loai_tk: string;
   trang: string;
@@ -294,33 +346,12 @@ export interface QuyenLoaiTaiKhoan {
 }
 
 export interface LoaiTaiKhoanQuanTri {
-=======
-export interface LoaiTaiKhoanQuyen {
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
   ma: string;
   ten: string;
   thu_tu: number;
   mo_ta: string | null;
-<<<<<<< HEAD
   so_tai_khoan: number;
   quyen: QuyenLoaiTaiKhoan[];
-=======
-}
-
-export interface QuyenLoaiTaiKhoan {
-  ma_loai_tk: string;
-  ma_bo_phan: string;
-  trang: string;
-  duoc_xem: boolean;
-  duoc_sua: boolean;
-  duoc_duyet: boolean;
-  duoc_xuat: boolean;
-  pham_vi_xem: 'toan_bo' | 'bo_phan' | 'ca_nhan';
-  pham_vi_sua: 'toan_bo' | 'bo_phan' | 'ca_nhan';
-  kieu_sua: 'THANG' | 'CAN_DUYET';
-  ma_loai_tk_duyet: string | null;
-  phien_ban: number;
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
 }
 
 export async function layTaiKhoanQuanTri(trang = 1, kichThuoc = 25, q = '', trangThai = '') {
@@ -374,27 +405,6 @@ export async function capNhatPhanQuyen(quyen: QuyenVaiTro) {
   return api<QuyenVaiTro>(`/api/v1/phan-quyen/${encodeURIComponent(quyen.vai_tro)}/${encodeURIComponent(quyen.trang)}`, {
     method: 'PATCH', headers: idempotencyHeaders(), body: JSON.stringify(quyen),
   });
-}
-
-export async function layLoaiTaiKhoanVaBoPhan() {
-  return api<{ items: LoaiTaiKhoanQuyen[]; bo_phan: Array<{ ma: string; ten: string; trang_thai: string }> }>(
-    '/api/v1/loai-tai-khoan',
-  );
-}
-
-export async function layQuyenLoaiTaiKhoan(maLoai: string, maBoPhan: string) {
-  return api<{ items: QuyenLoaiTaiKhoan[] }>(
-    `/api/v1/phan-quyen/${encodeURIComponent(maLoai)}/${encodeURIComponent(maBoPhan)}`,
-  );
-}
-
-export async function capNhatMaTranQuyenLoaiTaiKhoan(
-  maLoai: string, maBoPhan: string, items: QuyenLoaiTaiKhoan[],
-) {
-  return api<{ items: QuyenLoaiTaiKhoan[] }>(
-    "/api/v1/phan-quyen/" + encodeURIComponent(maLoai) + "/" + encodeURIComponent(maBoPhan),
-    { method: "PUT", headers: idempotencyHeaders(), body: JSON.stringify({ items }) },
-  );
 }
 
 export async function dangXuat() {
@@ -762,11 +772,16 @@ export interface DongPhieuDatNgoai {
   can_xac_nhan_ky_thuat?: boolean;
   noi_dung_can_xac_nhan_kt?: string | null;
   da_xac_nhan_kt?: boolean;
+  so_lan_xac_nhan_kt?: number;
+  cho_xac_nhan_kt?: boolean;
   ma_vach: string;
   ma_hang: string;
   ten_hang: string;
   dvt: string;
   so_luong: number;
+  id_ncc: string | null;
+  ma_ncc_chup: string | null;
+  ten_ncc_chup: string | null;
   don_gia: number | null;
   ky_han: string | null;
   ngay_nhan: string | null;
@@ -775,17 +790,19 @@ export interface DongPhieuDatNgoai {
   noi_dung_gia_cong?: string | null;
   yeu_cau_ky_thuat?: string | null;
   yeu_cau_chat_luong?: string | null;
+  ngay_khach_yeu_cau?: string | null;
+  ngay_ncc_cam_ket?: string | null;
+  ngay_du_kien_noi_bo?: string | null;
   ma_hang_goc?: string | null;
   ma_hang_thay_the?: string | null;
-<<<<<<< HEAD
   id_su_co?: string | null;
 }
 
 export interface ChiTietDatNgoaiDong extends DongPhieuDatNgoai {
   phien_ban: number;
-  xac_nhan_ky_thuat: Array<{ id: string; noi_dung: string | null; loai: 'PHIEU' | 'MA_HANG';
+  xac_nhan_ky_thuat: Array<{ id: string; noi_dung: string | null; loai: 'PHIEU' | 'MA_HANG' | 'YEU_CAU' | 'YEU_CAU_BAN_DAU';
     nguoi_xac_nhan: string; ten_nguoi_xac_nhan: string | null; thoi_diem: string;
-    id_phieu: string }>;
+    id_phieu: string; id_yeu_cau: string | null; id_dong: string | null }>;
   dot_giao: Array<{ id: string; dot_so: number; so_luong: number;
     ngay_du_kien: string; ngay_thuc_te: string | null; phien_ban: number;
     lich_su: Array<{ id: string; ngay_cu: string; ngay_moi: string; ly_do: string;
@@ -807,8 +824,14 @@ export async function suaChiTietDatNgoaiDong(idPhieu: string, idDong: string, da
   });
 }
 
-export async function themXacNhanDatNgoaiDong(idPhieu: string, idDong: string, noiDung: string) {
+export async function themXacNhanDatNgoaiDong(idPhieu: string, idDong: string, noiDung: string, idYeuCau?: string) {
   return api(`/api/v1/dat-ngoai/${encodeURIComponent(idPhieu)}/dong/${encodeURIComponent(idDong)}/xac-nhan-kt`, {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ noi_dung: noiDung, id_yeu_cau: idYeuCau || null }),
+  });
+}
+
+export async function themYeuCauKyThuatDatNgoaiDong(idPhieu: string, idDong: string, noiDung: string) {
+  return api(`/api/v1/dat-ngoai/${encodeURIComponent(idPhieu)}/dong/${encodeURIComponent(idDong)}/yeu-cau-kt`, {
     method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify({ noi_dung: noiDung }),
   });
 }
@@ -832,22 +855,19 @@ export async function suaNgayDuKienDotGiaoDatNgoai(idPhieu: string, idDong: stri
   return api(`/api/v1/dat-ngoai/${encodeURIComponent(idPhieu)}/dong/${encodeURIComponent(idDong)}/dot-giao/${encodeURIComponent(idDot)}/lich`, {
     method: 'PATCH', body: JSON.stringify({ phien_ban: phienBan, ngay_du_kien: ngayDuKien, ly_do: lyDo }),
   });
-=======
-  so_su_co?: number;
-  su_co?: Array<{ id: string; mo_ta: string; loai: string; thoi_diem: string }>;
-  xac_nhan_ky_thuat?: Array<{ id: string; noi_dung: string; ket_qua: string; nguoi_xac_nhan: string; thoi_diem: string; ghi_chu: string | null }>;
-  dot_giao?: Array<{ id: string; lan_giao: number; ngay_du_kien: string; so_luong_du_kien: number | null; ngay_thuc_te: string | null; so_luong_thuc_te: number | null; ghi_chu: string | null }>;
-  lich_su_ky_han?: Array<{ ky_han_cu: string | null; ky_han_moi: string; ly_do: string; nguoi_sua: string; thoi_diem: string }>;
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
 }
 
 export interface PhieuDatNgoai {
+  thong_bao_da_doc?: boolean;
+  dau_yeu_cau?: string;
   id: string;
+  /** Legacy header supplier fields; new quotes assign suppliers per detail line. */
   id_ncc: string | null;
   lenh_san_xuat: string;
   nguoi_lap: string;
   ngay_lap: string;
   ten_ncc_chup: string | null;
+  nha_cung_cap_tom_tat: string | null;
   ky_han: string | null;
   trang_thai: string;
   can_xac_nhan_ky_thuat: boolean;
@@ -856,9 +876,6 @@ export interface PhieuDatNgoai {
   ly_do_huy: string | null;
   tong_gia_tri: number;
   phien_ban: number;
-  f3_yeu_cau_moi?: boolean;
-  trao_doi?: Array<{ id: string; noi_dung: string; nguoi_gui: string; ten_nguoi_gui: string | null; thoi_diem: string }>;
-  tep?: Array<{ id: string; ten_tep: string; kich_thuoc: number | null; loai_mime: string | null; nguoi_tai_len: string; thoi_diem: string }>;
   dong: DongPhieuDatNgoai[];
   lich_su: Array<{
     trang_thai_cu: string | null;
@@ -866,6 +883,8 @@ export interface PhieuDatNgoai {
     noi_dung: string | null;
     nguoi_thuc_hien: string;
     thoi_diem: string;
+    ma_hang?: string | null;
+    loai?: 'PHIEU' | 'YEU_CAU_KY_THUAT' | 'XAC_NHAN_KY_THUAT';
   }>;
 }
 
@@ -880,10 +899,6 @@ export interface NhaCungCapDanhMuc {
   email?: string | null;
   ghi_chu?: string | null;
   ngay_phe_duyet?: string | null;
-  dinh_muc_thang?: number | null;
-  da_dat_thang?: number | null;
-  ghi_chu_dinh_muc?: string | null;
-  nhom_hang_chi_tiet?: string[] | null;
   la_ncc_mua_hang: boolean;
   la_ncc_gia_cong: boolean;
   da_phe_duyet: boolean;
@@ -904,13 +919,227 @@ export interface DuLieuNhaCungCap {
   da_phe_duyet: boolean;
   trang_thai: string;
   ghi_chu?: string;
-  dinh_muc_thang?: number | null;
-  ghi_chu_dinh_muc?: string | null;
-  nhom_hang_chi_tiet?: string[] | null;
   xac_nhan_trung?: boolean;
 }
 
-export interface NhaCungCapQuanLy extends NhaCungCapDanhMuc { phien_ban: number }
+export interface NhaCungCapQuanLy extends NhaCungCapDanhMuc {
+  phien_ban: number;
+  trang_thai_xet_duyet?: 'CHUA_DUYET' | 'DE_XUAT' | 'DA_DUYET';
+}
+
+export async function deXuatNhaCungCap(input: DuLieuNhaCungCap) {
+  return api<{ da_luu: boolean; can_xac_nhan?: boolean; canh_bao_trung?: unknown[]; item?: NhaCungCapQuanLy }>(
+    '/api/v1/nha-cung-cap/de-xuat', { method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify(input) },
+  );
+}
+
+export async function duyetDeXuatNhaCungCap(item: NhaCungCapQuanLy) {
+  return api<NhaCungCapQuanLy>(`/api/v1/nha-cung-cap/${encodeURIComponent(item.ma)}/duyet-de-xuat`, {
+    method: 'POST', body: JSON.stringify({ phien_ban: item.phien_ban }),
+  });
+}
+
+export interface MatHangNcc {
+  id: string;
+  id_ncc: string;
+  ma_ncc: string;
+  ten_ncc: string;
+  ma_vat_tu: string | null;
+  ten_hang: string;
+  loai: 'HANG_HOA' | 'GIA_CONG';
+  nhom_hang_chinh: string | null;
+  nhom_hang_chi_tiet: string | null;
+  ma_loai_gia_cong: string | null;
+  ma_cong_doan: string | null;
+  dvt: string;
+  thong_so_ky_thuat: string | null;
+  diem_ky_thuat: number | null;
+  muc_chat_luong: string | null;
+  diem_chat_luong: number | null;
+  nang_luc_thang: number | null;
+  so_ngay_giao_chuan: number | null;
+  trang_thai: 'DE_XUAT' | 'DA_DUYET' | 'TAM_NGUNG';
+  phien_ban: number;
+}
+
+export type TaoMatHangNcc = Pick<MatHangNcc, 'id_ncc' | 'ten_hang' | 'loai' | 'dvt'> &
+  Partial<Pick<MatHangNcc, 'ma_vat_tu' | 'nhom_hang_chinh' | 'nhom_hang_chi_tiet' |
+    'ma_loai_gia_cong' | 'ma_cong_doan' | 'thong_so_ky_thuat' | 'diem_ky_thuat' |
+    'muc_chat_luong' | 'diem_chat_luong' | 'nang_luc_thang' | 'so_ngay_giao_chuan'>>;
+
+export interface DanhMucMatHangNcc {
+  nhom_hang: Array<{ ma: string; ten: string; ma_cha: string | null }>;
+  loai_gia_cong: Array<{ ma: string; ten: string }>;
+  cong_doan: Array<{ ma: string; ten: string }>;
+  don_vi_tinh: Array<{ dvt: string; ten_dvt: string }>;
+}
+
+export async function layDanhMucMatHangNcc() {
+  return api<DanhMucMatHangNcc>('/api/v1/mat-hang-ncc/danh-muc');
+}
+
+export async function layMatHangNcc(idNcc?: string, q = '', trangThai = '') {
+  const params = new URLSearchParams();
+  if (idNcc) params.set('id_ncc', idNcc);
+  if (q) params.set('q', q);
+  if (trangThai) params.set('trang_thai', trangThai);
+  return api<MatHangNcc[]>(`/api/v1/mat-hang-ncc?${params}`);
+}
+
+export async function taoMatHangNcc(input: TaoMatHangNcc) {
+  return api<MatHangNcc>('/api/v1/mat-hang-ncc', {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify(input),
+  });
+}
+
+export async function duyetMatHangNcc(item: MatHangNcc) {
+  return api<MatHangNcc>(`/api/v1/mat-hang-ncc/${encodeURIComponent(item.id)}/duyet`, {
+    method: 'POST', body: JSON.stringify({ phien_ban: item.phien_ban }),
+  });
+}
+
+export interface DiemNcc {
+  id: string;
+  id_mat_hang_ncc: string;
+  diem_chat_luong: number | null;
+  diem_giao_hang: number | null;
+  diem_gia_ca: number;
+  diem_tam_voc: number;
+  diem_thanh_toan: number;
+  diem_dich_vu: number;
+  diem_thoi_gian_hop_tac: number | null;
+  diem_gia_tri_giao_dich: number | null;
+  diem_tong: number;
+  trong_so_du_lieu: number;
+  xep_loai: string;
+  trang_thai_duyet: 'CHO_DUYET' | 'DA_DUYET';
+  ngay_danh_gia: string;
+  phien_ban: number;
+}
+
+export type DiemNhapNcc = Pick<DiemNcc, 'diem_gia_ca' | 'diem_tam_voc' | 'diem_thanh_toan' | 'diem_dich_vu'> & { ghi_chu?: string };
+export interface NguonDiemNcc {
+  id: string;
+  ten_ncc: string;
+  ten_hang: string;
+  so_lan_giao: number;
+  so_lan_iqc: number;
+  diem_xem_truoc: DiemNhapNcc & {
+    diem_chat_luong: number | null;
+    diem_giao_hang: number | null;
+    diem_thoi_gian_hop_tac: number | null;
+    diem_gia_tri_giao_dich: number | null;
+    giai_thich_tu_dong: Record<string, string>;
+    trong_so_du_lieu: number;
+  };
+}
+
+export async function layNguonDiemNcc(idMatHang: string) {
+  return api<NguonDiemNcc>(`/api/v1/mat-hang-ncc/${encodeURIComponent(idMatHang)}/nguon-diem`);
+}
+
+export async function layDanhGiaMatHangNcc(idMatHang: string) {
+  return api<DiemNcc[]>(`/api/v1/mat-hang-ncc/${encodeURIComponent(idMatHang)}/danh-gia`);
+}
+
+export async function taoDanhGiaMatHangNcc(idMatHang: string, input: DiemNhapNcc) {
+  return api<DiemNcc>(`/api/v1/mat-hang-ncc/${encodeURIComponent(idMatHang)}/danh-gia`, {
+    method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify(input),
+  });
+}
+
+export async function duyetDanhGiaMatHangNcc(item: DiemNcc) {
+  return api<DiemNcc>(`/api/v1/danh-gia-ncc/${encodeURIComponent(item.id)}/duyet`, {
+    method: 'POST', body: JSON.stringify({ phien_ban: item.phien_ban }),
+  });
+}
+
+export interface DanhGiaNccDenHan {
+  id: string; id_ncc: string; ten_ncc: string; ten_hang: string;
+  ma_vat_tu: string | null; ngay_cham_gan_nhat: string | null;
+  diem_tong: number | null; xep_loai: string | null;
+  chu_ky_thang: number; ngay_den_han: string | null;
+}
+
+export async function layDanhGiaNccDenHan() {
+  return api<DanhGiaNccDenHan[]>('/api/v1/nha-cung-cap/danh-gia-den-han');
+}
+
+export interface SuCoNccBm08 {
+  id: string; ten_ncc: string | null; ngay_nhan: string; ma_vat_tu: string | null;
+  ten_hang: string; van_de: string; huong_xu_ly: string | null;
+  ket_qua: string | null; ket_luan_bm08: string; nguoi_giam_sat: string | null;
+  ngay_dong: string | null; trang_thai: string;
+}
+
+export async function laySoBm08() {
+  return api<SuCoNccBm08[]>('/api/v1/nha-cung-cap/so-bm08');
+}
+
+export interface DinhMucNcc {
+  id: string;
+  ten: string;
+  dinh_muc_thang: number | null;
+  ghi_chu_dinh_muc: string | null;
+  da_dat_thang_nay: number | null;
+  con_lai: number | null;
+  phien_ban: number;
+}
+
+export async function layDinhMucNcc(idNcc: string) {
+  return api<DinhMucNcc>(`/api/v1/nha-cung-cap/${encodeURIComponent(idNcc)}/dinh-muc`);
+}
+
+export async function datDinhMucNcc(item: DinhMucNcc, dinhMuc: number | null, ghiChu: string) {
+  return api<DinhMucNcc>(`/api/v1/nha-cung-cap/${encodeURIComponent(item.id)}/dinh-muc`, {
+    method: 'PATCH', body: JSON.stringify({ phien_ban: item.phien_ban,
+      dinh_muc_thang: dinhMuc, ghi_chu_dinh_muc: ghiChu }),
+  });
+}
+
+export interface BaoCaoF2 {
+  tab: string;
+  title: string;
+  metrics: Array<{ label: string; value: number | null; unit: string }>;
+  chart: Array<{ label: string; value: number }>;
+  columns: string[];
+  rows: Array<Record<string, string | number | boolean | null>>;
+  truncated: boolean;
+  show_prices: boolean;
+}
+export interface BoLocBaoCaoF2 { tu_ngay: string; den_ngay: string; id_ncc: string; trang_thai: string }
+
+function reportQuery(filters: BoLocBaoCaoF2) {
+  const params = new URLSearchParams();
+  if (filters.tu_ngay) params.set('tu_ngay', filters.tu_ngay);
+  if (filters.den_ngay) params.set('den_ngay', filters.den_ngay);
+  if (filters.id_ncc) params.set('id_ncc', filters.id_ncc);
+  if (filters.trang_thai) params.set('trang_thai', filters.trang_thai);
+  return params;
+}
+
+export async function layBaoCaoF2(tab: string, filters: BoLocBaoCaoF2) {
+  return api<BaoCaoF2>(`/api/v1/bao-cao/f2/${encodeURIComponent(tab)}?${reportQuery(filters)}`);
+}
+
+export async function taiBaoCaoF2(tab: string, filters: BoLocBaoCaoF2, format: 'xlsx' | 'pdf') {
+  const params = reportQuery(filters);
+  params.set('dinh_dang', format);
+  const response = await fetch(`/api/v1/bao-cao/f2/${encodeURIComponent(tab)}/tai?${params}`, {
+    headers: { 'X-Phien': layToken() },
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => null) as ApiEnvelope<unknown> | null;
+    throw new ApiError(result?.error || 'Không tải được báo cáo.', result?.ma_loi || null, response.status);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `bao-cao-${tab}-${filters.tu_ngay}-${filters.den_ngay}.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export async function layPhieuDatNgoai() {
   return api<PhieuDatNgoai[]>('/api/v1/dat-ngoai');
@@ -918,58 +1147,6 @@ export async function layPhieuDatNgoai() {
 
 export async function layNhaCungCapDatNgoai() {
   return api<NhaCungCapDanhMuc[]>('/api/v1/dat-ngoai/nha-cung-cap');
-}
-
-export async function chonNhaCungCapDatNgoai(phieu: PhieuDatNgoai, idNcc: string) {
-  return api<PhieuDatNgoai>(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/nha-cung-cap`, {
-    method: 'PATCH', body: JSON.stringify({ id_ncc: idNcc, phien_ban: phieu.phien_ban }),
-  });
-}
-
-export async function guiDuyetDatNgoai(phieu: PhieuDatNgoai) {
-  return api<PhieuDatNgoai>(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/gui-duyet`, { method: 'POST', body: JSON.stringify({ phien_ban: phieu.phien_ban }) });
-}
-
-export async function capNhatYeuCauDongDatNgoai(phieuId: string, dongId: string, input: { noi_dung_gia_cong: string; yeu_cau_ky_thuat: string; yeu_cau_chat_luong: string }) {
-  return api<DongPhieuDatNgoai>(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/dong/${encodeURIComponent(dongId)}/yeu-cau`, { method: 'PATCH', body: JSON.stringify(input) });
-}
-
-export async function ghiXacNhanKyThuatDong(phieuId: string, input: { id_dat_ngoai_dong: string; noi_dung: string; ket_qua: string; ghi_chu?: string }) {
-  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/xac-nhan-ky-thuat`, { method: 'POST', body: JSON.stringify(input) });
-}
-
-export async function ghiDotGiaoDatNgoai(phieuId: string, input: { id_dat_ngoai_dong: string; lan_giao: number; ngay_du_kien: string; so_luong_du_kien?: number; ngay_thuc_te?: string; so_luong_thuc_te?: number; ghi_chu?: string }) {
-  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/dot-giao`, { method: 'POST', body: JSON.stringify(input) });
-}
-
-export async function ganSuCoDatNgoai(phieuId: string, id_dat_ngoai_dong: string, id_su_co: string) {
-  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/gan-su-co`, { method: 'POST', body: JSON.stringify({ id_dat_ngoai_dong, id_su_co }) });
-}
-
-export async function doiMaDatNgoai(phieuId: string, dongId: string, ma_hang_thay_the: string, ly_do: string) {
-  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/dong/${encodeURIComponent(dongId)}/doi-ma`, { method: 'PATCH', body: JSON.stringify({ ma_hang_thay_the, ly_do }) });
-}
-
-export async function themTraoDoiDatNgoai(phieuId: string, noi_dung: string) {
-  return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/trao-doi`, { method: 'POST', body: JSON.stringify({ noi_dung }) });
-}
-
-export async function taiTepDatNgoai(phieuId: string, file: File) {
-  const headers = new Headers(); headers.set('Accept', 'application/json');
-  const token = layToken(); if (token) headers.set('X-Phien', token);
-  const body = new FormData(); body.append('tep', file);
-  const response = await fetch(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/tep`, { method: 'POST', headers, body });
-  const result = await response.json() as ApiEnvelope<unknown>;
-  if (!response.ok || !result.ok) throw new ApiError(result.error || 'Không tải được tệp.', result.ma_loi, response.status);
-  return result.data;
-}
-
-export async function taiNoiDungTepDatNgoai(phieuId: string, tepId: string) {
-  const headers = new Headers(); headers.set('Accept', '*/*');
-  const token = layToken(); if (token) headers.set('X-Phien', token);
-  const response = await fetch(`/api/v1/dat-ngoai/${encodeURIComponent(phieuId)}/tep/${encodeURIComponent(tepId)}`, { headers });
-  if (!response.ok) throw new ApiError('Không tải được tệp.', null, response.status);
-  return response.blob();
 }
 
 export async function layHangDoiKyThuatDatNgoai() {
@@ -986,7 +1163,6 @@ export async function chuyenTrangThaiDatNgoai(phieu: PhieuDatNgoai, trangThai: s
   });
 }
 
-<<<<<<< HEAD
 export interface ChiTietDongDatNgoai {
   ma_vach: string;
   can_xac_nhan_ky_thuat?: boolean;
@@ -1001,10 +1177,6 @@ export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; chi_tiet_don
   return api<{ so_phieu: number }>('/api/v1/dat-ngoai', {
     method: 'POST', headers: idempotencyHeaders(), body: JSON.stringify(input),
   });
-=======
-export async function taoBaoGiaDatNgoai(input: { ma_vach: string[]; can_xac_nhan_ky_thuat?: boolean; noi_dung_ky_thuat?: string; ghi_chu?: string; id_ncc?: string; ky_han?: string; noi_dung_gia_cong?: string; yeu_cau_ky_thuat?: string; yeu_cau_chat_luong?: string }) {
-  return api<{ so_phieu: number }>('/api/v1/dat-ngoai', { method: 'POST', body: JSON.stringify(input) });
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
 }
 
 export async function layNhaCungCapDanhMuc() {
@@ -1033,196 +1205,13 @@ export async function suaNhaCungCap(id: string, duLieu: Partial<DuLieuNhaCungCap
   );
 }
 
-
-export interface MatHangNcc {
-  id: string;
-  id_ncc: string;
-  ma_ncc: string;
-  ten_ncc: string;
-  ma_vat_tu: string | null;
-  ten_hang: string;
-  loai: 'HANG_HOA' | 'GIA_CONG';
-  nhom_hang_chinh: string | null;
-  nhom_hang_chi_tiet: string | null;
-  ma_loai_gia_cong: string | null;
-  ma_cong_doan: string | null;
-  dvt: string;
-  ten_nhom_hang_chinh?: string | null;
-  ten_nhom_hang_chi_tiet?: string | null;
-  ten_loai_gia_cong?: string | null;
-  ten_dvt?: string | null;
-  thong_so_ky_thuat: string | null;
-  diem_ky_thuat: number | null;
-  muc_chat_luong: string | null;
-  diem_chat_luong: number | null;
-  nang_luc_thang: number | null;
-  so_ngay_giao_chuan: number | null;
-  trang_thai: 'DE_XUAT' | 'DA_DUYET' | 'TAM_NGUNG';
-  nguoi_de_xuat: string | null;
-  ngay_de_xuat: string | null;
-  nguoi_duyet: string | null;
-  ngay_duyet: string | null;
-  ghi_chu: string | null;
-  phien_ban: number;
-}
-
-export type DuLieuMatHangNcc = Omit<MatHangNcc, 'id' | 'ma_ncc' | 'ten_ncc' | 'ten_nhom_hang_chinh' | 'ten_nhom_hang_chi_tiet' | 'ten_loai_gia_cong' | 'ten_dvt' | 'nguoi_duyet' | 'ngay_duyet' | 'phien_ban'> & {
-  id_ncc?: string;
-};
-
-export async function layDanhSachMatHangNcc(options: {
-  idNcc?: string; q?: string; loai?: string; nhomHangChinh?: string;
-  nhomHangChiTiet?: string; maLoaiGiaCong?: string; mucChatLuong?: string;
-  trangThai?: string; trang?: number; kichThuoc?: number;
-} = {}) {
-  const params = new URLSearchParams({
-    trang: String(options.trang || 1), kich_thuoc: String(options.kichThuoc || 100),
-  });
-  if (options.idNcc) params.set('id_ncc', options.idNcc);
-  if (options.q) params.set('q', options.q);
-  if (options.loai) params.set('loai', options.loai);
-  if (options.nhomHangChinh) params.set('nhom_hang_chinh', options.nhomHangChinh);
-  if (options.nhomHangChiTiet) params.set('nhom_hang_chi_tiet', options.nhomHangChiTiet);
-  if (options.maLoaiGiaCong) params.set('ma_loai_gia_cong', options.maLoaiGiaCong);
-  if (options.mucChatLuong) params.set('muc_chat_luong', options.mucChatLuong);
-  if (options.trangThai) params.set('trang_thai', options.trangThai);
-  return api<{ items: MatHangNcc[]; tong: number; trang: number; kich_thuoc: number }>(`/api/v1/mat-hang-ncc?${params}`);
-}
-
-export async function taoMatHangNcc(idNcc: string, input: DuLieuMatHangNcc) {
-  return api<{ da_luu: boolean; item: MatHangNcc }>(`/api/v1/nha-cung-cap/${encodeURIComponent(idNcc)}/mat-hang`, {
-    method: 'POST', body: JSON.stringify({ ...input, id_ncc: idNcc }),
-  });
-}
-
-export async function suaMatHangNcc(id: string, input: Partial<DuLieuMatHangNcc>, phienBan: number) {
-  return api<{ da_luu: boolean; item: MatHangNcc }>(`/api/v1/mat-hang-ncc/${encodeURIComponent(id)}`, {
-    method: 'PATCH', body: JSON.stringify({ ...input, phien_ban: phienBan }),
-  });
-}
-
-export async function duyetMatHangNcc(id: string, phienBan: number, trangThai = 'DA_DUYET') {
-  return api<{ da_luu: boolean; item: MatHangNcc }>(`/api/v1/mat-hang-ncc/${encodeURIComponent(id)}/duyet`, {
-    method: 'POST', body: JSON.stringify({ phien_ban: phienBan, trang_thai: trangThai }),
-  });
-}
-
-
-export interface DanhGiaNcc {
-  id: string;
-  id_ncc: string;
-  id_mat_hang_ncc: string | null;
-  ma_ncc?: string;
-  ten_ncc?: string;
-  ten_hang?: string | null;
-  ma_vat_tu?: string | null;
-  loai: string;
-  ngay_danh_gia: string;
-  diem_chat_luong: number | null;
-  diem_giao_hang: number | null;
-  diem_gia_ca: number | null;
-  diem_tam_voc: number | null;
-  diem_thanh_toan: number | null;
-  diem_dich_vu: number | null;
-  diem_thoi_gian_hop_tac: number | null;
-  diem_gia_tri_giao_dich: number | null;
-  diem_tong: number | null;
-  ket_luan_bm06: string | null;
-  trang_thai: 'CHO_DUYET' | 'DA_DUYET' | 'TU_CHOI';
-  ty_le_dung_han: number | null;
-  ty_le_iqc_dat: number | null;
-  so_lan_khong_phu_hop: number | null;
-  ghi_chu: string | null;
-  phien_ban: number;
-}
-
-export async function layDanhSachDanhGiaNcc(options: { idMatHang?: string; trangThai?: string } = {}) {
-  const params = new URLSearchParams({ trang: '1', kich_thuoc: '200' });
-  if (options.idMatHang) params.set('id_mat_hang', options.idMatHang);
-  if (options.trangThai) params.set('trang_thai', options.trangThai);
-  return api<{ items: DanhGiaNcc[]; tong: number }>(`/api/v1/danh-gia-ncc?${params}`);
-}
-
-export interface MatHangNccDenHan {
-  id: string;
-  id_ncc: string;
-  ma_ncc: string;
-  ten_ncc: string;
-  ma_vat_tu: string | null;
-  ten_hang: string;
-  loai: string;
-  ngay_cham_gan_nhat: string | null;
-  ngay_den_han: string | null;
-  so_ngay_qua_han: number | null;
-}
-
-export async function layDanhSachMatHangNccDenHan(trang = 1, kichThuoc = 100) {
-  const params = new URLSearchParams({ trang: String(trang), kich_thuoc: String(kichThuoc) });
-  return api<{ items: MatHangNccDenHan[]; tong: number; trang: number; kich_thuoc: number }>(
-    `/api/v1/danh-gia-ncc/den-han?${params}`,
-  );
-}
-
-export interface SuCoNcc {
-  id: string;
-  id_ncc: string | null;
-  ma_ncc: string | null;
-  ten_ncc: string | null;
-  ngay_nhan: string;
-  ten_hang_chup: string;
-  ma_vat_tu: string | null;
-  mo_ta: string;
-  huong_xu_ly: string | null;
-  ket_qua: string | null;
-  nguoi_giam_sat: string | null;
-  ten_nguoi_giam_sat: string | null;
-  ngay_dong: string | null;
-  trang_thai: string;
-}
-
-export async function laySoTheoDoiNcc(options: {
-  idNcc?: string; trangThai?: string; q?: string; trang?: number; kichThuoc?: number;
-} = {}) {
-  const params = new URLSearchParams({
-    trang: String(options.trang || 1), kich_thuoc: String(options.kichThuoc || 100),
-  });
-  if (options.idNcc) params.set('id_ncc', options.idNcc);
-  if (options.trangThai) params.set('trang_thai', options.trangThai);
-  if (options.q) params.set('q', options.q);
-  return api<{ items: SuCoNcc[]; tong: number; trang: number; kich_thuoc: number }>(
-    `/api/v1/so-theo-doi-ncc?${params}`,
-  );
-}
-
-export async function taoDanhGiaNcc(input: {
-  id_mat_hang_ncc: string; loai?: string; ky_danh_gia?: string;
-  ngay_danh_gia?: string; diem_gia_ca?: number; diem_tam_voc?: number;
-  diem_thanh_toan?: number; diem_dich_vu?: number; ghi_chu?: string;
-}) {
-  return api<{ da_luu: boolean; item: DanhGiaNcc; kpi?: Record<string, unknown> }>('/api/v1/danh-gia-ncc', {
-    method: 'POST', body: JSON.stringify(input),
-  });
-}
-
-
-export async function kiemTraDinhMucNcc(idNcc: string, giaTriDon: number, ngayDat?: string) {
-  return api<{ id_ncc: string; ma_ncc: string; ten_ncc: string; dinh_muc_thang: number | null; da_dat_thang: number; con_lai: number | null; gia_tri_don: number; vuot_dinh_muc: boolean; co_ap_dung: boolean }>(`/api/v1/nha-cung-cap/${encodeURIComponent(idNcc)}/kiem-tra-dinh-muc`, {
-    method: 'POST', body: JSON.stringify({ gia_tri_don: giaTriDon, ngay_dat: ngayDat }),
-  });
-}
-
-export async function duyetDanhGiaNcc(id: string, phienBan: number, trangThai = 'DA_DUYET') {
-  return api<{ da_luu: boolean; item: DanhGiaNcc }>(`/api/v1/danh-gia-ncc/${encodeURIComponent(id)}/duyet`, {
-    method: 'POST', body: JSON.stringify({ phien_ban: phienBan, trang_thai: trangThai }),
-  });
-}
-
 export async function luuBaoGiaDatNgoai(phieu: PhieuDatNgoai, input: {
-  ky_han: string | null; ghi_chu: string | null;
-  dong: Array<{ id: string; don_gia: number; ghi_chu: string | null }>;
+  ghi_chu: string | null;
+  dong: Array<{ id: string; id_ncc: string; ma_ncc?: string; ten_ncc?: string;
+    don_gia: number; ky_han: string | null; ghi_chu: string | null }>;
 }) {
   return api(`/api/v1/dat-ngoai/${encodeURIComponent(phieu.id)}/bao-gia`, {
-    method: 'PATCH', body: JSON.stringify({ ...input, phien_ban: phieu.phien_ban, ten_ncc: phieu.ten_ncc_chup }),
+    method: 'PATCH', body: JSON.stringify({ ...input, phien_ban: phieu.phien_ban }),
   });
 }
 

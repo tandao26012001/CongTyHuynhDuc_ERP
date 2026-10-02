@@ -23,6 +23,22 @@ class PhanHoi(BaseModel):
 
 class TraoDoiIn(BaseModel):
     noi_dung: str = Field(min_length=1, max_length=5000)
+    nguoi_duoc_tag: list[str] = Field(default_factory=list, max_length=30)
+
+
+@router.get('/thong-bao', response_model=PhanHoi)
+def thong_bao(request: Request):
+    return thanh_cong(tuong_tac_ho_so_service.thong_bao(lay_ho_so(request)))
+
+
+@router.patch('/thong-bao/{id_thong_bao}/da-doc', response_model=PhanHoi)
+def doc_thong_bao(id_thong_bao: str, request: Request):
+    return thanh_cong(tuong_tac_ho_so_service.doc_thong_bao(id_thong_bao, lay_ho_so(request)))
+
+
+@router.get('/ho-so/{loai}/{id_ho_so}/nguoi-co-the-tag', response_model=PhanHoi)
+def nguoi_co_the_tag(loai: str, id_ho_so: str, request: Request):
+    return thanh_cong(tuong_tac_ho_so_service.nguoi_co_the_tag(loai, id_ho_so, lay_ho_so(request)))
 
 
 @router.get('/ho-so/{loai}/{id_ho_so}/tuong-tac', response_model=PhanHoi)
@@ -34,7 +50,7 @@ def danh_sach(loai: str, id_ho_so: str, request: Request):
 @router.post('/ho-so/{loai}/{id_ho_so}/trao-doi', response_model=PhanHoi)
 def them_trao_doi(loai: str, id_ho_so: str, body: TraoDoiIn, request: Request):
     return thanh_cong(tuong_tac_ho_so_service.them_trao_doi(
-        loai, id_ho_so, body.noi_dung, lay_ho_so(request)))
+        loai, id_ho_so, body.noi_dung, lay_ho_so(request), body.nguoi_duoc_tag))
 
 
 @router.post('/ho-so/{loai}/{id_ho_so}/tep', response_model=PhanHoi)

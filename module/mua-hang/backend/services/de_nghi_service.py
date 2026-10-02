@@ -469,6 +469,17 @@ def nhac_ky_bu_den_han() -> int:
         return repo.gui_nhac_ky_bu_den_han(conn)
 
 
+def da_xu_ly(ho_so: dict, trang: int, kich_thuoc: int) -> dict:
+    pham_vi = kiem_quyen(ho_so, 'de_nghi', 'xem')
+    kich_thuoc = min(max(kich_thuoc, 1), PAGE_SIZE_MAX)
+    trang = max(trang, 1)
+    with get_conn() as conn:
+        items, tong = repo.danh_sach_de_nghi(
+            conn, {'da_xu_ly_boi': ho_so['ma_nhan_vien']}, pham_vi, ho_so,
+            (trang - 1) * kich_thuoc, kich_thuoc)
+    return {'items': [dict(item) for item in items], 'tong': tong, 'trang': trang, 'kich_thuoc': kich_thuoc}
+
+
 def soi_ky_han_nhanh(du_lieu: dict, ho_so: dict) -> dict:
     loai = du_lieu.get("loai", "MUA_HANG")
     ngay_hieu_luc = du_lieu.get("ngay_hieu_luc")

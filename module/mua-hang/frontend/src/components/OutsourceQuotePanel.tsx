@@ -13,7 +13,10 @@ export function OutsourceQuotePanel({ request, row, suppliers, canEdit, onChange
   const [note, setNote] = useState(request.ghi_chu || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const editable = canEdit && request.trang_thai === 'DANG_BAO_GIA';
+  const quoteStage = ['CHO_XAC_NHAN_KY_THUAT', 'DANG_BAO_GIA'].includes(request.trang_thai);
+  const lineReady = ['DANG_BAO_GIA', 'CHO_DUYET'].includes(row.trang_thai)
+    && !row.cho_xac_nhan_kt;
+  const editable = canEdit && quoteStage && lineReady;
   const lineTotal = price.trim() && Number.isFinite(Number(price))
     ? Number(row.so_luong) * Number(price)
     : null;
@@ -52,7 +55,8 @@ export function OutsourceQuotePanel({ request, row, suppliers, canEdit, onChange
       <span className="text-[12px] text-[#59627A]">{row.trang_thai === 'CHO_DUYET' ? 'Đã lưu báo giá' : 'Chưa báo giá'}</span>
     </div>
     {error && <p role="alert" className="p-3 bg-[#FDECEE] text-[#C4141F] border-l-4 border-[#EE202E] text-[13px]">{error}</p>}
-    {request.trang_thai === 'CHO_XAC_NHAN_KY_THUAT' && <p className="text-[12px] text-[#59627A]">Cần xác nhận kỹ thuật trước khi nhập báo giá.</p>}
+    {quoteStage && !lineReady && <p className="text-[12px] text-[#59627A]">Cần xác nhận kỹ thuật mã này trước khi nhập báo giá.</p>}
+    {!canEdit && quoteStage && lineReady && <p className="text-[12px] text-amber-700">Tài khoản của bạn chưa có quyền sửa Đặt ngoài để nhập báo giá.</p>}
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
       <label className="text-[12px] font-bold">NHÀ CUNG CẤP
         {editable ? <select aria-label={`Nhà cung cấp ${row.ma_hang}`} value={supplierId} disabled={busy} onChange={(event) => setSupplierId(event.target.value)} className="mt-1 w-full min-h-11 px-2 border rounded bg-white font-normal">

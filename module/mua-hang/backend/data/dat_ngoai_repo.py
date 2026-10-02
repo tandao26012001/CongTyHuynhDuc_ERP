@@ -2,8 +2,10 @@
 
 import logging
 
+from psycopg.types.json import Jsonb
 
 from backend.data.db import get_conn
+from backend.data.catalog_repo import _bat_dau_idempotency, _hoan_tat_idempotency
 
 log = logging.getLogger(__name__)
 
@@ -119,24 +121,27 @@ def lay_dong_lsx(conn, ma_vach: list[str]) -> list[dict]:
     ).fetchall()
 
 
-def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str) -> list[dict]:
+def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str,
+                  tai_khoan: str, khoa: str) -> list[dict]:
     with get_conn() as conn:
+        cu = _bat_dau_idempotency(conn, tai_khoan, khoa, 'POST:/api/v1/dat-ngoai')
+        if cu is not None:
+            return cu
         ket_qua = []
         for phieu in ds_phieu:
             row = conn.execute(
                 """INSERT INTO dat_ngoai(
                        id,lenh_san_xuat,nguoi_lap,ngay_lap,trang_thai,ghi_chu,nguoi_tao,
-                       can_xac_nhan_ky_thuat,noi_dung_ky_thuat,f3_yeu_cau_moi,id_ncc,ten_ncc_chup,ky_han)
-                   VALUES(%s,%s,%s,current_date,%s,%s,%s,%s,%s,true,%s,%s,%s) RETURNING *""",
+                       can_xac_nhan_ky_thuat,noi_dung_ky_thuat)
+                   VALUES(%s,%s,%s,current_date,%s,%s,%s,%s,%s) RETURNING *""",
                 (phieu["id"], phieu["lenh_san_xuat"], nguoi_tao, phieu["trang_thai"],
                  phieu.get("ghi_chu"), nguoi_tao, phieu["can_xac_nhan_ky_thuat"],
-                 phieu.get("noi_dung_ky_thuat"), phieu.get("id_ncc"), phieu.get("ten_ncc_chup"), phieu.get("ky_han")),
+                 phieu.get("noi_dung_ky_thuat")),
             ).fetchone()
             for stt, dong in enumerate(phieu["dong"], 1):
                 conn.execute(
                     """INSERT INTO dat_ngoai_dong(
                            id,id_dat_ngoai,stt_dong,ma_vach,ma_hang,ten_hang_chup,dvt_chup,
-<<<<<<< HEAD
                            so_luong,trang_thai_dong,nguoi_tao,noi_dung_gia_cong,
                            yeu_cau_ky_thuat,yeu_cau_chat_luong,ma_hang_goc,
                            can_xac_nhan_ky_thuat,noi_dung_can_xac_nhan_kt)
@@ -146,15 +151,14 @@ def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str) -> list[dict]:
                      phieu["trang_thai"], nguoi_tao, dong['noi_dung_gia_cong'],
                      dong['yeu_cau_ky_thuat'], dong['yeu_cau_chat_luong'], dong['ma_hang'],
                      dong['can_xac_nhan_ky_thuat'], dong['noi_dung_can_xac_nhan_kt']),
-=======
-                           so_luong,trang_thai_dong,nguoi_tao,noi_dung_gia_cong,yeu_cau_ky_thuat,yeu_cau_chat_luong,ky_han)
-                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (dong["id"], phieu["id"], stt, dong["ma_vach"], dong["ma_hang"],
-                     dong["ten_hang"], dong["dvt"], dong["so_luong_po"],
-                     phieu["trang_thai"], nguoi_tao, dong.get("noi_dung_gia_cong"),
-                     dong.get("yeu_cau_ky_thuat"), dong.get("yeu_cau_chat_luong"), phieu.get("ky_han")),
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
                 )
+                if dong['can_xac_nhan_ky_thuat']:
+                    conn.execute(
+                        """INSERT INTO dat_ngoai_yeu_cau_kt
+                             (id,id_dat_ngoai_dong,noi_dung,nguoi_yeu_cau,la_ban_dau)
+                           VALUES ('DNBD-' || substr(md5(%s),1,19),%s,%s,%s,true)""",
+                        (dong['id'], dong['id'], dong['noi_dung_can_xac_nhan_kt'], nguoi_tao),
+                    )
             conn.execute(
                 """INSERT INTO dat_ngoai_lich_su(
                        id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
@@ -162,14 +166,17 @@ def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str) -> list[dict]:
                 (phieu["id"], phieu["trang_thai"], 'Khởi tạo từ LSX', nguoi_tao),
             )
             ket_qua.append(dict(row))
+        _hoan_tat_idempotency(conn, tai_khoan, khoa, ket_qua)
         return ket_qua
 
 
-def danh_sach_dat_ngoai() -> list[dict]:
-    with get_conn() as conn:
-        if not san_sang(conn):
-            return []
-        return conn.execute(
+def danh_sach_dat_ngoai(conn=None) -> list[dict]:
+    if conn is None:
+        with get_conn() as own_conn:
+            return danh_sach_dat_ngoai(own_conn)
+    if not san_sang(conn):
+        return []
+    return conn.execute(
             """SELECT dn.*,
                       coalesce(jsonb_agg(jsonb_build_object(
                         'id',dd.id,'ma_vach',dd.ma_vach,'ma_hang',dd.ma_hang,
@@ -177,36 +184,63 @@ def danh_sach_dat_ngoai() -> list[dict]:
                         'noi_dung_can_xac_nhan_kt',dd.noi_dung_can_xac_nhan_kt,
                         'da_xac_nhan_kt',EXISTS (
                           SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                          JOIN dat_ngoai_yeu_cau_kt y ON y.id=x.id_yeu_cau
+                          WHERE x.id_dat_ngoai_dong=dd.id AND x.la_xac_nhan AND y.la_ban_dau
+                        ),
+                        'so_lan_xac_nhan_kt',(
+                          SELECT count(*) FROM dat_ngoai_xac_nhan_kt x
                           WHERE x.id_dat_ngoai_dong=dd.id AND x.la_xac_nhan
                         ),
+                        'cho_xac_nhan_kt',EXISTS (
+                          SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                          WHERE y.id_dat_ngoai_dong=dd.id
+                            AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                            WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+                        ),
                         'ten_hang',dd.ten_hang_chup,'dvt',dd.dvt_chup,'so_luong',dd.so_luong,
+                        'id_ncc',dd.id_ncc,'ma_ncc_chup',dd.ma_ncc_chup,'ten_ncc_chup',dd.ten_ncc_chup,
                         'don_gia',dd.don_gia,'ky_han',dd.ky_han,'ngay_nhan',dd.ngay_nhan,
                         'trang_thai',dd.trang_thai_dong,'ghi_chu',dd.ghi_chu,
-                        'noi_dung_gia_cong',dd.noi_dung_gia_cong,'yeu_cau_ky_thuat',dd.yeu_cau_ky_thuat,
-                        'yeu_cau_chat_luong',dd.yeu_cau_chat_luong,'ma_hang_goc',dd.ma_hang_goc,
+                        'noi_dung_gia_cong',dd.noi_dung_gia_cong,
+                        'yeu_cau_ky_thuat',dd.yeu_cau_ky_thuat,
+                        'yeu_cau_chat_luong',dd.yeu_cau_chat_luong,
+                        'ngay_khach_yeu_cau',dd.ngay_khach_yeu_cau,
+                        'ngay_ncc_cam_ket',dd.ngay_ncc_cam_ket,
+                        'ngay_du_kien_noi_bo',dd.ngay_du_kien_noi_bo,
+                        'ma_hang_goc',dd.ma_hang_goc,
                         'ma_hang_thay_the',dd.ma_hang_thay_the,
-                        'so_su_co',(SELECT count(*) FROM dat_ngoai_su_co_dong sc WHERE sc.id_dat_ngoai_dong=dd.id),
-                        'su_co',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',sc.id,'mo_ta',sc.mo_ta,'loai',sc.loai,'thoi_diem',lk.thoi_diem) ORDER BY lk.thoi_diem DESC),'[]'::jsonb) FROM dat_ngoai_su_co_dong lk JOIN su_co sc ON sc.id=lk.id_su_co WHERE lk.id_dat_ngoai_dong=dd.id),
-                        'xac_nhan_ky_thuat',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',x.id,'noi_dung',x.noi_dung,'ket_qua',x.ket_qua,'nguoi_xac_nhan',x.nguoi_xac_nhan,'thoi_diem',x.thoi_diem,'ghi_chu',x.ghi_chu) ORDER BY x.thoi_diem DESC),'[]'::jsonb) FROM dat_ngoai_xac_nhan_ky_thuat x WHERE x.id_dat_ngoai_dong=dd.id),
-                        'dot_giao',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',g.id,'lan_giao',g.lan_giao,'ngay_du_kien',g.ngay_du_kien,'so_luong_du_kien',g.so_luong_du_kien,'ngay_thuc_te',g.ngay_thuc_te,'so_luong_thuc_te',g.so_luong_thuc_te,'ghi_chu',g.ghi_chu) ORDER BY g.lan_giao),'[]'::jsonb) FROM dat_ngoai_dot_giao g WHERE g.id_dat_ngoai_dong=dd.id),
-                        'lich_su_ky_han',(SELECT coalesce(jsonb_agg(jsonb_build_object('ky_han_cu',h.ky_han_cu,'ky_han_moi',h.ky_han_moi,'ly_do',h.ly_do,'nguoi_sua',h.nguoi_sua,'thoi_diem',h.thoi_diem) ORDER BY h.thoi_diem DESC),'[]'::jsonb) FROM dat_ngoai_lich_su_ky_han h WHERE h.id_dat_ngoai_dong=dd.id)
+                        'id_su_co',dd.id_su_co
                       ) ORDER BY dd.stt_dong) FILTER (WHERE dd.id IS NOT NULL),'[]'::jsonb) AS dong,
                       coalesce((
-                        SELECT jsonb_agg(jsonb_build_object(
-                          'trang_thai_cu',ls.trang_thai_cu,
-                          'trang_thai_moi',ls.trang_thai_moi,
-                          'noi_dung',ls.noi_dung,
-                          'nguoi_thuc_hien',ls.nguoi_thuc_hien,
-                          'thoi_diem',ls.thoi_diem
-                        ) ORDER BY ls.thoi_diem DESC)
-                        FROM dat_ngoai_lich_su ls WHERE ls.id_dat_ngoai=dn.id
+                        SELECT jsonb_agg(to_jsonb(ls) ORDER BY ls.thoi_diem DESC)
+                        FROM (
+                          SELECT l.trang_thai_cu,l.trang_thai_moi,l.noi_dung,
+                                 l.nguoi_thuc_hien,l.thoi_diem,NULL::varchar AS ma_hang,
+                                 'PHIEU'::varchar AS loai
+                          FROM dat_ngoai_lich_su l
+                          WHERE l.id_dat_ngoai=dn.id
+                          UNION ALL
+                          SELECT NULL,'CHO_XAC_NHAN_KY_THUAT',
+                                 'Yêu cầu kỹ thuật: ' || y.noi_dung,
+                                 y.nguoi_yeu_cau,y.thoi_diem,d.ma_hang,'YEU_CAU_KY_THUAT'
+                          FROM dat_ngoai_yeu_cau_kt y
+                          JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong
+                          WHERE d.id_dat_ngoai=dn.id
+                          UNION ALL
+                          SELECT 'CHO_XAC_NHAN_KY_THUAT','DANG_BAO_GIA',
+                                 'Đã xác nhận kỹ thuật: ' || x.noi_dung,
+                                 x.nguoi_xac_nhan,x.thoi_diem,d.ma_hang,'XAC_NHAN_KY_THUAT'
+                          FROM dat_ngoai_xac_nhan_kt x
+                          JOIN dat_ngoai_dong d ON d.id=x.id_dat_ngoai_dong
+                          WHERE d.id_dat_ngoai=dn.id AND x.la_xac_nhan
+                        ) ls
                       ),'[]'::jsonb) AS lich_su,
-                      coalesce((SELECT jsonb_agg(jsonb_build_object('id',t.id,'noi_dung',t.noi_dung,'nguoi_gui',t.nguoi_gui,'ten_nguoi_gui',nv.ho_va_ten,'thoi_diem',t.thoi_diem) ORDER BY t.thoi_diem) FROM trao_doi t LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=t.nguoi_gui WHERE t.bang='DAT_NGOAI' AND t.id_ban_ghi=dn.id),'[]'::jsonb) AS trao_doi,
-                      coalesce((SELECT jsonb_agg(jsonb_build_object('id',t.id,'ten_tep',t.ten_tep,'kich_thuoc',t.kich_thuoc,'loai_mime',t.loai_mime,'nguoi_tai_len',t.nguoi_tai_len,'thoi_diem',t.thoi_diem) ORDER BY t.thoi_diem) FROM tep_dinh_kem t WHERE t.bang='DAT_NGOAI' AND t.id_ban_ghi=dn.id),'[]'::jsonb) AS tep,
                       coalesce(sum(dd.so_luong*dd.don_gia),0)::bigint AS tong_gia_tri
+                      ,coalesce(string_agg(DISTINCT dd.ten_ncc_chup,', ' ORDER BY dd.ten_ncc_chup)
+                                FILTER (WHERE dd.ten_ncc_chup IS NOT NULL),dn.ten_ncc_chup) AS nha_cung_cap_tom_tat
                FROM dat_ngoai dn LEFT JOIN dat_ngoai_dong dd ON dd.id_dat_ngoai=dn.id
                GROUP BY dn.id ORDER BY dn.ngay_tao DESC,dn.id DESC"""
-        ).fetchall()
+    ).fetchall()
 
 
 def lay_dat_ngoai(conn, id_phieu: str, khoa: bool = False):
@@ -216,68 +250,88 @@ def lay_dat_ngoai(conn, id_phieu: str, khoa: bool = False):
     return conn.execute(sql, (id_phieu,)).fetchone()
 
 
-<<<<<<< HEAD
 def dong_chua_xac_nhan_ky_thuat(id_phieu: str) -> list[dict]:
     with get_conn() as conn:
         return [dict(row) for row in conn.execute(
             """SELECT d.id,d.ma_hang FROM dat_ngoai_dong d
                WHERE d.id_dat_ngoai=%s AND d.can_xac_nhan_ky_thuat
                  AND NOT EXISTS (
-                   SELECT 1 FROM dat_ngoai_xac_nhan_kt x
-                   WHERE x.id_dat_ngoai_dong=d.id AND x.la_xac_nhan
+                   SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                   JOIN dat_ngoai_xac_nhan_kt x ON x.id_yeu_cau=y.id AND x.la_xac_nhan
+                   WHERE y.id_dat_ngoai_dong=d.id AND y.la_ban_dau
                  ) ORDER BY d.stt_dong""", (id_phieu,),
         )]
-=======
-def chon_nha_cung_cap(id_phieu: str, phien_ban: int, id_ncc: str, ma_ncc: str, ten_ncc: str, nguoi_sua: str):
-    with get_conn() as conn:
-        phieu = lay_dat_ngoai(conn, id_phieu, True)
-        if not phieu or phieu["trang_thai"] not in ("NHAP", "DANG_BAO_GIA") or phieu["phien_ban"] != phien_ban:
-            return None
-        row = conn.execute(
-            """UPDATE dat_ngoai SET id_ncc=%s,ten_ncc_chup=%s,ngay_sua=now(),nguoi_sua=%s,
-                      phien_ban=phien_ban+1 WHERE id=%s AND phien_ban=%s RETURNING *""",
-            (id_ncc, ten_ncc, nguoi_sua, id_phieu, phien_ban),
-        ).fetchone()
-        conn.execute(
-            """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
-               VALUES(%s,%s,%s,%s,%s)""",
-            (id_phieu, phieu["trang_thai"], phieu["trang_thai"],
-             f"Chọn nhà cung cấp gia công {ma_ncc} - {ten_ncc}", nguoi_sua),
-        )
-        return dict(row) if row else None
->>>>>>> 3161f51fb7cd5a9588d7eb1642db7e90454e8fbb
 
 
 def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, nguoi_sua: str):
     with get_conn() as conn:
         phieu = lay_dat_ngoai(conn, id_phieu, True)
-        if not phieu or phieu["phien_ban"] != phien_ban or phieu["trang_thai"] != "DANG_BAO_GIA" or not phieu.get("id_ncc"):
+        if (not phieu or phieu["phien_ban"] != phien_ban
+                or phieu["trang_thai"] not in ("CHO_XAC_NHAN_KY_THUAT", "DANG_BAO_GIA")):
             return None
         ids = [dong["id"] for dong in du_lieu["dong"]]
         expected = {dong["id"] for dong in conn.execute(
-            "SELECT id FROM dat_ngoai_dong WHERE id_dat_ngoai=%s", (id_phieu,),
+            """SELECT d.id FROM dat_ngoai_dong d
+               WHERE d.id_dat_ngoai=%s AND d.trang_thai_dong IN ('DANG_BAO_GIA','CHO_DUYET')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                   WHERE y.id_dat_ngoai_dong=d.id
+                     AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                     WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+                 )""", (id_phieu,),
         ).fetchall()}
-        if not expected or len(ids) != len(set(ids)) or set(ids) != expected:
+        if not expected or not ids or len(ids) != len(set(ids)) or not set(ids).issubset(expected):
             return None
         for dong in du_lieu["dong"]:
+            old_line = conn.execute(
+                "SELECT ma_hang,trang_thai_dong FROM dat_ngoai_dong WHERE id=%s AND id_dat_ngoai=%s",
+                (dong["id"], id_phieu),
+            ).fetchone()
             conn.execute(
-                """UPDATE dat_ngoai_dong SET don_gia=%s,ky_han=%s,ghi_chu=%s,
+                """UPDATE dat_ngoai_dong SET id_ncc=%s,ma_ncc_chup=%s,ten_ncc_chup=%s,
+                       don_gia=%s,ky_han=%s,ghi_chu=%s,
                        trang_thai_dong='CHO_DUYET',ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
                    WHERE id=%s AND id_dat_ngoai=%s""",
-                (dong["don_gia"], du_lieu.get("ky_han"), dong.get("ghi_chu"),
-                 nguoi_sua, dong["id"], id_phieu),
+                (dong["id_ncc"], dong["ma_ncc"], dong["ten_ncc"], dong["don_gia"],
+                 dong.get("ky_han"), dong.get("ghi_chu"), nguoi_sua, dong["id"], id_phieu),
             )
-        row = conn.execute(
-            """UPDATE dat_ngoai SET ten_ncc_chup=%s,ky_han=%s,ghi_chu=%s,
-                      trang_thai='CHO_DUYET',ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
-               WHERE id=%s RETURNING *""",
-            (phieu["ten_ncc_chup"], du_lieu.get("ky_han"), du_lieu.get("ghi_chu"), nguoi_sua, id_phieu),
+            conn.execute(
+                """INSERT INTO dat_ngoai_lich_su
+                     (id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
+                   VALUES(%s,%s,'CHO_DUYET',%s,%s)""",
+                (id_phieu, old_line["trang_thai_dong"],
+                 f"Mã {old_line['ma_hang']}: đã lưu báo giá cho NCC {dong['ten_ncc']}", nguoi_sua),
+            )
+        summary = conn.execute(
+            """SELECT string_agg(DISTINCT ten_ncc_chup,', ' ORDER BY ten_ncc_chup) AS nha_cung_cap,
+                      min(ky_han) AS ky_han,
+                      bool_and(id_ncc IS NOT NULL AND don_gia IS NOT NULL) AS da_bao_gia_day_du,
+                      EXISTS (
+                        SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+                        JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong
+                        WHERE d.id_dat_ngoai=%s
+                          AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                          WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+                      ) AS con_cho_ky_thuat
+               FROM dat_ngoai_dong WHERE id_dat_ngoai=%s""",
+            (id_phieu, id_phieu),
         ).fetchone()
-        conn.execute(
-            """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
-               VALUES(%s,%s,'CHO_DUYET',%s,%s)""",
-            (id_phieu, phieu["trang_thai"], 'Đã nhập báo giá', nguoi_sua),
-        )
+        trang_thai = ("CHO_XAC_NHAN_KY_THUAT" if summary["con_cho_ky_thuat"]
+                      and phieu["trang_thai"] == "CHO_XAC_NHAN_KY_THUAT"
+                      else "CHO_DUYET" if summary["da_bao_gia_day_du"] else "DANG_BAO_GIA")
+        row = conn.execute(
+            """UPDATE dat_ngoai SET id_ncc=NULL,ten_ncc_chup=%s,ky_han=%s,ghi_chu=%s,
+                      trang_thai=%s,ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1
+               WHERE id=%s RETURNING *""",
+            (summary["nha_cung_cap"], summary["ky_han"], du_lieu.get("ghi_chu"), trang_thai, nguoi_sua, id_phieu),
+        ).fetchone()
+        if phieu["trang_thai"] != trang_thai:
+            conn.execute(
+                """INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien)
+                   VALUES(%s,%s,%s,%s,%s)""",
+                (id_phieu, phieu["trang_thai"], trang_thai,
+                 'Tất cả mã hàng đã hoàn tất bước hiện tại.', nguoi_sua),
+            )
         return dict(row)
 
 
@@ -286,6 +340,15 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
         phieu = lay_dat_ngoai(conn, id_phieu, True)
         if not phieu or phieu["phien_ban"] != phien_ban:
             return None
+        if trang_thai_moi == 'HOAN_THANH' and conn.execute(
+            """SELECT 1 FROM dat_ngoai_yeu_cau_kt y
+               JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong
+               WHERE d.id_dat_ngoai=%s
+                 AND NOT EXISTS (SELECT 1 FROM dat_ngoai_xac_nhan_kt x
+                                 WHERE x.id_yeu_cau=y.id AND x.la_xac_nhan)
+               LIMIT 1""", (id_phieu,),
+        ).fetchone():
+            raise ValueError('Còn yêu cầu kỹ thuật chưa được xác nhận.')
         row = conn.execute(
             """UPDATE dat_ngoai SET trang_thai=%s,
                       nguoi_duyet=CASE WHEN %s='DA_DUYET' THEN %s ELSE nguoi_duyet END,
@@ -304,7 +367,7 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
              nguoi, id_phieu),
         ).fetchone()
         conn.execute(
-            "UPDATE dat_ngoai_dong SET trang_thai_dong=%s,ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1 WHERE id_dat_ngoai=%s",
+            "UPDATE dat_ngoai_dong SET trang_thai_dong=%s,ngay_sua=now(),nguoi_sua=%s WHERE id_dat_ngoai=%s",
             (trang_thai_moi, nguoi, id_phieu),
         )
         conn.execute(
@@ -313,77 +376,3 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
             (id_phieu, phieu["trang_thai"], trang_thai_moi, noi_dung, nguoi),
         )
         return dict(row)
-
-
-
-def gui_duyet(id_phieu: str, phien_ban: int, nguoi: str):
-    with get_conn() as conn:
-        p = lay_dat_ngoai(conn, id_phieu, True)
-        if not p or p["phien_ban"] != phien_ban or p["trang_thai"] != "NHAP":
-            return None
-        if p.get("f3_yeu_cau_moi") and conn.execute(
-            """SELECT count(*) AS n FROM dat_ngoai_dong WHERE id_dat_ngoai=%s AND
-               (nullif(trim(noi_dung_gia_cong),'') IS NULL OR nullif(trim(yeu_cau_ky_thuat),'') IS NULL
-                OR nullif(trim(yeu_cau_chat_luong),'') IS NULL)""", (id_phieu,)
-        ).fetchone()["n"]:
-            return {"thieu_yeu_cau": True}
-        row=conn.execute("UPDATE dat_ngoai SET trang_thai='CHO_DUYET',ngay_gui_duyet=now(),ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1 WHERE id=%s RETURNING *",(nguoi,id_phieu)).fetchone()
-        conn.execute("UPDATE dat_ngoai_dong SET trang_thai_dong='CHO_DUYET',phien_ban=phien_ban+1 WHERE id_dat_ngoai=%s",(id_phieu,))
-        conn.execute("INSERT INTO dat_ngoai_lich_su(id_dat_ngoai,trang_thai_cu,trang_thai_moi,noi_dung,nguoi_thuc_hien) VALUES(%s,'NHAP','CHO_DUYET','Gửi duyệt phiếu',%s)",(id_phieu,nguoi))
-        return dict(row)
-
-
-def cap_nhat_yeu_cau(id_phieu: str,id_dong: str,data: dict,nguoi: str):
-    with get_conn() as conn:
-        return conn.execute("""UPDATE dat_ngoai_dong dd SET noi_dung_gia_cong=%s,yeu_cau_ky_thuat=%s,yeu_cau_chat_luong=%s,nguoi_sua=%s,ngay_sua=now(),phien_ban=phien_ban+1 FROM dat_ngoai dn WHERE dd.id=%s AND dd.id_dat_ngoai=%s AND dn.id=dd.id_dat_ngoai AND dn.trang_thai='NHAP' RETURNING dd.*""",(data["noi_dung_gia_cong"],data["yeu_cau_ky_thuat"],data["yeu_cau_chat_luong"],nguoi,id_dong,id_phieu)).fetchone()
-
-
-def them_xac_nhan_ky_thuat(id_phieu: str,data: dict,nguoi: str):
-    with get_conn() as conn:
-        if not conn.execute("SELECT 1 FROM dat_ngoai_dong WHERE id=%s AND id_dat_ngoai=%s",(data["id_dat_ngoai_dong"],id_phieu)).fetchone(): return None
-        return conn.execute("""INSERT INTO dat_ngoai_xac_nhan_ky_thuat(id,id_dat_ngoai_dong,noi_dung,ket_qua,nguoi_xac_nhan,ghi_chu) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *""",(_ma_repo("XKT"),data["id_dat_ngoai_dong"],data["noi_dung"],data["ket_qua"],nguoi,data.get("ghi_chu"))).fetchone()
-
-
-def ghi_dot_giao(id_phieu: str,data: dict,nguoi: str):
-    with get_conn() as conn:
-        dd=conn.execute("SELECT dd.id,dd.ky_han FROM dat_ngoai_dong dd WHERE dd.id=%s AND dd.id_dat_ngoai=%s FOR UPDATE",(data["id_dat_ngoai_dong"],id_phieu)).fetchone()
-        if not dd:return None
-        old=conn.execute("SELECT * FROM dat_ngoai_dot_giao WHERE id_dat_ngoai_dong=%s AND lan_giao=%s",(dd["id"],data["lan_giao"])).fetchone()
-        row=conn.execute("""INSERT INTO dat_ngoai_dot_giao(id,id_dat_ngoai_dong,lan_giao,ngay_du_kien,so_luong_du_kien,ngay_thuc_te,so_luong_thuc_te,ghi_chu,nguoi_tao) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(id_dat_ngoai_dong,lan_giao) DO UPDATE SET ngay_du_kien=excluded.ngay_du_kien,so_luong_du_kien=excluded.so_luong_du_kien,ngay_thuc_te=excluded.ngay_thuc_te,so_luong_thuc_te=excluded.so_luong_thuc_te,ghi_chu=excluded.ghi_chu RETURNING *""",(_ma_repo("DNGG"),dd["id"],data["lan_giao"],data["ngay_du_kien"],data.get("so_luong_du_kien"),data.get("ngay_thuc_te"),data.get("so_luong_thuc_te"),data.get("ghi_chu"),nguoi)).fetchone()
-        if not old or old["ngay_du_kien"]!=data["ngay_du_kien"]:
-            conn.execute("INSERT INTO dat_ngoai_lich_su_ky_han(id,id_dat_ngoai_dong,ky_han_cu,ky_han_moi,ly_do,nguoi_sua) VALUES(%s,%s,%s,%s,%s,%s)",(_ma_repo("KH"),dd["id"],old["ngay_du_kien"] if old else dd["ky_han"],data["ngay_du_kien"],data.get("ghi_chu") or "Cập nhật đợt giao",nguoi))
-        conn.execute("UPDATE dat_ngoai_dong SET ky_han=%s,ngay_nhan=coalesce(%s,ngay_nhan),ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1 WHERE id=%s",(data["ngay_du_kien"],data.get("ngay_thuc_te"),nguoi,dd["id"]))
-        return row
-
-
-def gan_su_co(id_phieu: str,id_dong: str,id_su_co: str,nguoi: str):
-    with get_conn() as conn:
-        if not conn.execute("SELECT 1 FROM dat_ngoai_dong WHERE id=%s AND id_dat_ngoai=%s",(id_dong,id_phieu)).fetchone():return None
-        if not conn.execute("SELECT 1 FROM su_co WHERE id=%s",(id_su_co,)).fetchone():return False
-        return conn.execute("INSERT INTO dat_ngoai_su_co_dong(id_dat_ngoai_dong,id_su_co,nguoi_gan) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING RETURNING id_su_co",(id_dong,id_su_co,nguoi)).fetchone() or {"id_su_co":id_su_co}
-
-
-def doi_ma_dong(id_phieu: str,id_dong: str,ma_moi: str,ly_do: str,nguoi: str):
-    with get_conn() as conn:
-        row=conn.execute("""UPDATE dat_ngoai_dong SET ma_hang_goc=coalesce(ma_hang_goc,ma_hang),ma_hang_thay_the=%s,ma_hang=%s,ghi_chu=concat_ws(E'\n',ghi_chu,%s),thoi_diem_doi_ma=now(),nguoi_doi_ma=%s,ngay_sua=now(),nguoi_sua=%s,phien_ban=phien_ban+1 WHERE id=%s AND id_dat_ngoai=%s RETURNING *""",(ma_moi,ma_moi,"Lý do đổi mã: "+ly_do,nguoi,nguoi,id_dong,id_phieu)).fetchone()
-        return row
-
-
-def _ma_repo(prefix):
-    import uuid
-    return f"{prefix}-{uuid.uuid4().hex[:18].upper()}"
-
-
-def them_trao_doi(id_phieu,noi_dung,nguoi):
-    with get_conn() as conn:
-        return conn.execute("INSERT INTO trao_doi(id,bang,id_ban_ghi,noi_dung,nguoi_gui) VALUES(%s,'DAT_NGOAI',%s,%s,%s) RETURNING *",(_ma_repo("TD"),id_phieu,noi_dung,nguoi)).fetchone()
-
-
-def them_tep(id_phieu,ten_tep,duong_dan,kich_thuoc,mime,nguoi):
-    with get_conn() as conn:
-        return conn.execute("INSERT INTO tep_dinh_kem(id,bang,id_ban_ghi,ten_tep,duong_dan,kich_thuoc,loai_mime,nguoi_tai_len) VALUES(%s,'DAT_NGOAI',%s,%s,%s,%s,%s,%s) RETURNING id,ten_tep,kich_thuoc,loai_mime,nguoi_tai_len,thoi_diem",(_ma_repo("TEP"),id_phieu,ten_tep,duong_dan,kich_thuoc,mime,nguoi)).fetchone()
-
-
-def lay_tep(id_phieu,id_tep):
-    with get_conn() as conn:
-        return conn.execute("SELECT * FROM tep_dinh_kem WHERE bang='DAT_NGOAI' AND id_ban_ghi=%s AND id=%s",(id_phieu,id_tep)).fetchone()

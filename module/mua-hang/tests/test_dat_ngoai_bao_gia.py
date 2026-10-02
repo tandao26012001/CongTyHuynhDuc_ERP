@@ -8,9 +8,11 @@ from backend.services.errors import ThieuDuLieu
 
 
 class TestBaoGiaDatNgoaiRepo(TestCase):
-    def call(self, status="DANG_BAO_GIA", ids=None, version=1):
+    def call(self, status="DANG_BAO_GIA", ids=None, version=1, ready_ids=None, pending=False):
         conn = MagicMock()
         conn.summary_complete = ids is None or set(ids) == {"D1", "D2"}
+        conn.ready_ids = ready_ids if ready_ids is not None else ["D1", "D2"]
+        conn.pending = pending
         conn.execute.side_effect = lambda sql, params=None: self.cursor_for(sql, conn)
         phieu = {"phien_ban": 1, "trang_thai": status, "id_ncc": None}
         payload = {"ghi_chu": "Ghi chú", "dong": [
@@ -27,11 +29,12 @@ class TestBaoGiaDatNgoaiRepo(TestCase):
     @staticmethod
     def cursor_for(sql, conn):
         cursor = MagicMock()
-        if "SELECT id FROM dat_ngoai_dong" in sql:
-            cursor.fetchall.return_value = [{"id": "D1"}, {"id": "D2"}]
+        if "SELECT d.id FROM dat_ngoai_dong" in sql:
+            cursor.fetchall.return_value = [{"id": id_dong} for id_dong in conn.ready_ids]
         elif "string_agg(DISTINCT ten_ncc_chup" in sql:
             cursor.fetchone.return_value = {"nha_cung_cap": "Nhà cung cấp 1, Nhà cung cấp 2", "ky_han": None,
-                                            "da_bao_gia_day_du": conn.summary_complete}
+                                            "da_bao_gia_day_du": conn.summary_complete,
+                                            "con_cho_ky_thuat": conn.pending}
         elif "UPDATE dat_ngoai SET" in sql:
             cursor.fetchone.return_value = {"id": "TEST", "trang_thai": "CHO_DUYET" if conn.summary_complete else "DANG_BAO_GIA"}
         return cursor
@@ -67,6 +70,21 @@ class TestBaoGiaDatNgoaiRepo(TestCase):
         self.assertIn("trang_thai=%s", header_update.args[0])
         self.assertEqual(header_update.args[1][3], "DANG_BAO_GIA")
 
+    def test_ready_line_can_be_quoted_while_other_lines_wait_for_technical(self):
+        _, conn = self.call(status="CHO_XAC_NHAN_KY_THUAT", ids=["D1"],
+                            ready_ids=["D1"], pending=True)
+        header_update = next(call for call in conn.execute.call_args_list if "UPDATE dat_ngoai SET" in call.args[0])
+        self.assertEqual(header_update.args[1][3], "CHO_XAC_NHAN_KY_THUAT")
+        line_updates = [call for call in conn.execute.call_args_list if "UPDATE dat_ngoai_dong" in call.args[0]]
+        self.assertEqual(len(line_updates), 1)
+        self.assertEqual(line_updates[0].args[1][-2], "D1")
+
+    def test_pending_line_cannot_be_quoted_in_mixed_request(self):
+        result, conn = self.call(status="CHO_XAC_NHAN_KY_THUAT", ids=["D2"],
+                                 ready_ids=["D1"], pending=True)
+        self.assertIsNone(result)
+        self.assertEqual(conn.execute.call_count, 1)
+
 
 class TestBaoGiaDatNgoaiService(TestCase):
     def setUp(self):
@@ -75,6 +93,17 @@ class TestBaoGiaDatNgoaiService(TestCase):
             {"id": "D1", "id_ncc": "NCC_1", "don_gia": 100, "ky_han": None},
             {"id": "D2", "id_ncc": "NCC_2", "don_gia": 200, "ky_han": None},
         ]}
+
+    def test_danh_sach_ncc_chi_can_quyen_xem_dat_ngoai(self):
+        with patch.object(dat_ngoai_service.phan_quyen_service, "kiem_quyen") as check_permission, \
+                patch.object(dat_ngoai_service.catalog_service, "lay_danh_muc", return_value={
+                    "items": [{"ma": "NCC-1", "la_ncc_gia_cong": True,
+                               "trang_thai": "HOAT_DONG", "trang_thai_xet_duyet": "DA_DUYET"}],
+                    "tong": 1,
+                }):
+            rows = dat_ngoai_service.nha_cung_cap_co_the_chon(self.profile)
+        check_permission.assert_called_once_with(self.profile, "dat_ngoai", "xem")
+        self.assertEqual([row["ma"] for row in rows], ["NCC-1"])
 
     def test_requires_supplier_for_every_line(self):
         payload = {"ghi_chu": None, "dong": [{"id": "D1", "id_ncc": "", "don_gia": 100}]}

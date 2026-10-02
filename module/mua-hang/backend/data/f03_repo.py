@@ -130,7 +130,6 @@ def bo_chon_khac(conn, id_bao_gia, ids_dong):
 def lich_su_gia(conn, id_vat_tu):
     return conn.execute(
         """SELECT b.ngay_bao_gia,b.id AS id_bao_gia,n.id AS id_ncc,n.ma_ncc,n.ten AS ten_ncc,
-                  bd.id_de_nghi_dong,
                   bd.don_gia_co_so,bd.don_vi_gia,bd.trong_luong,b.duoc_chon
            FROM bao_gia_dong bd JOIN bao_gia b ON b.id=bd.id_bao_gia
            JOIN nha_cung_cap n ON n.id=b.id_ncc
