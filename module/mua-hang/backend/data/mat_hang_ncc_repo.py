@@ -3,6 +3,7 @@
 from backend.data.db import get_conn
 from backend.data.catalog_repo import _bat_dau_idempotency, _hoan_tat_idempotency
 from backend.services.sinh_ma import sinh_ma
+from backend.data.mat_hang_ncc_edit_repo import ghi
 
 
 def danh_muc_phan_loai() -> dict:
@@ -19,16 +20,21 @@ def danh_muc_phan_loai() -> dict:
         }
 
 
-def danh_sach(id_ncc: str | None, tu_khoa: str, trang_thai: str | None) -> list[dict]:
+def danh_sach(id_ncc: str | None, tu_khoa: str, trang_thai: str | None, filters: dict | None = None) -> list[dict]:
+    fields = ('nhom_hang_chinh','nhom_hang_chi_tiet','ma_loai_gia_cong','muc_chat_luong')
+    filters = filters or {}
+    clauses = ''.join(f' AND (%s::text IS NULL OR m.{key}=%s)' for key in fields)
+    params = tuple(value for key in fields for value in (filters.get(key) or None,)*2)
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT m.*, n.ten AS ten_ncc, n.ma_ncc
+            f"""SELECT m.*, n.ten AS ten_ncc, n.ma_ncc
                FROM mat_hang_ncc m JOIN nha_cung_cap n ON n.id=m.id_ncc
-               WHERE (%s IS NULL OR m.id_ncc=%s)
+               WHERE (%s::text IS NULL OR m.id_ncc=%s)
                  AND (%s='' OR m.ten_hang ILIKE '%%'||%s||'%%' OR n.ten ILIKE '%%'||%s||'%%')
-                 AND (%s IS NULL OR m.trang_thai=%s)
+                 AND (%s::text IS NULL OR m.trang_thai=%s)
+               {clauses}
                ORDER BY m.ngay_tao DESC, m.id DESC LIMIT 500""",
-            (id_ncc, id_ncc, tu_khoa, tu_khoa, tu_khoa, trang_thai, trang_thai),
+            (id_ncc, id_ncc, tu_khoa, tu_khoa, tu_khoa, trang_thai, trang_thai) + params,
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -40,12 +46,12 @@ def tao(du_lieu: dict, nguoi: str, tai_khoan: str, khoa: str) -> dict:
             return cu
         row = conn.execute(
             """INSERT INTO mat_hang_ncc (
-                 id,id_ncc,ma_vat_tu,ten_hang,loai,nhom_hang_chinh,nhom_hang_chi_tiet,
+                 id,id_ncc,ma_vat_tu,ten_hang,loai,pham_vi_danh_gia,nhom_hang_chinh,nhom_hang_chi_tiet,
                  ma_loai_gia_cong,ma_cong_doan,dvt,thong_so_ky_thuat,diem_ky_thuat,
                  muc_chat_luong,diem_chat_luong,nang_luc_thang,so_ngay_giao_chuan,
                  trang_thai,nguoi_de_xuat,ngay_de_xuat,nguoi_duyet,ngay_duyet,nguoi_tao)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,
-                       CASE WHEN %s IS NULL THEN NULL ELSE now() END,%s)
+               VALUES (%s,%s,%s,%s,%s,'NHOM_HANG',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,
+                       CASE WHEN %s::text IS NULL THEN NULL ELSE now() END,%s)
                RETURNING *""",
             (sinh_ma(conn, "MHN"), du_lieu["id_ncc"], du_lieu.get("ma_vat_tu"),
              du_lieu["ten_hang"], du_lieu["loai"], du_lieu.get("nhom_hang_chinh"),
@@ -57,12 +63,14 @@ def tao(du_lieu: dict, nguoi: str, tai_khoan: str, khoa: str) -> dict:
              du_lieu.get("nguoi_duyet"), du_lieu.get("nguoi_duyet"), nguoi),
         ).fetchone()
         result = dict(row)
+        ghi(conn, None, result, "TAO", nguoi)
         _hoan_tat_idempotency(conn, tai_khoan, khoa, result)
         return result
 
 
 def duyet(id_mat_hang: str, phien_ban: int, nguoi: str) -> dict | None:
     with get_conn() as conn:
+        old = conn.execute('SELECT * FROM mat_hang_ncc WHERE id=%s FOR UPDATE',(id_mat_hang,)).fetchone()
         row = conn.execute(
             """UPDATE mat_hang_ncc
                SET trang_thai='DA_DUYET',nguoi_duyet=%s,ngay_duyet=now(),
@@ -71,6 +79,8 @@ def duyet(id_mat_hang: str, phien_ban: int, nguoi: str) -> dict | None:
                RETURNING *""",
             (nguoi, nguoi, id_mat_hang, phien_ban),
         ).fetchone()
+        if row:
+            ghi(conn, dict(old), dict(row), "DUYET", nguoi)
         return dict(row) if row else None
 
 
@@ -119,6 +129,7 @@ def duyet_de_xuat_ncc(id_ncc: str, phien_ban: int, nguoi: str) -> dict | None:
         row = conn.execute(
             """UPDATE nha_cung_cap
                SET trang_thai='HOAT_DONG',trang_thai_xet_duyet='DA_DUYET',
+                   da_phe_duyet=true,ngay_phe_duyet=current_date,
                    nguoi_duyet=%s,ngay_duyet=now(),ngay_sua=now(),
                    nguoi_sua=%s,phien_ban=phien_ban+1
                WHERE id=%s AND phien_ban=%s AND trang_thai_xet_duyet='DE_XUAT'
@@ -131,7 +142,8 @@ def duyet_de_xuat_ncc(id_ncc: str, phien_ban: int, nguoi: str) -> dict | None:
 def danh_gia_den_han() -> list[dict]:
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(
-            """SELECT m.id,m.id_ncc,n.ten AS ten_ncc,m.ten_hang,m.ma_vat_tu,
+            """SELECT m.id,m.id_ncc,n.ten AS ten_ncc,m.ten_hang,m.ma_vat_tu,m.pham_vi_danh_gia,
+                      m.nhom_hang_chinh,m.nhom_hang_chi_tiet,m.ma_loai_gia_cong,m.ma_cong_doan,
                       dg.ngay_danh_gia AS ngay_cham_gan_nhat,
                       dg.diem_tong,dg.xep_loai,
                       coalesce((SELECT gia_tri::integer FROM tham_so_he_thong

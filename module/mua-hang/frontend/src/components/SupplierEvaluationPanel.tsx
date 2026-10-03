@@ -1,3 +1,4 @@
+import { SupplierFormDownload } from './SupplierFormDownload';
 import { FormEvent, useEffect, useState } from 'react';
 import { DiemNhapNcc, DiemNcc, duyetDanhGiaMatHangNcc, layDanhGiaMatHangNcc,
   layMatHangNcc, layNguonDiemNcc, MatHangNcc, NguonDiemNcc,
@@ -67,14 +68,16 @@ export function SupplierEvaluationPanel({ supplier, canEdit, canApprove, onNotif
 
   const auto = source?.diem_xem_truoc;
   return <section className="bg-white border border-[#DCE1EC] rounded p-4 space-y-4">
-    <h2 className="font-bold">ĐÁNH GIÁ THEO MẶT HÀNG · BM06</h2>
+    <h2 className="font-bold">ĐÁNH GIÁ NHÓM HÀNG CỦA NCC · BM06</h2>
+    <p className="text-sm text-[#59627A]">Nhóm chi tiết được chấm riêng; khi chỉ chọn nhóm chính, số liệu bao gồm các nhóm con. Hồ sơ cũ theo mã vật tư giữ nguyên lịch sử.</p>
     <label className="block text-sm">Mặt hàng của NCC
       <select value={itemId} onChange={(event) => void load(event.target.value)} className="block mt-1 h-11 w-full border rounded px-3 bg-white">
         <option value="">Chọn mặt hàng đã duyệt</option>
-        {items.map((item) => <option key={item.id} value={item.id}>{item.ten_ncc} · {item.ten_hang} {item.ma_vat_tu ? `(${item.ma_vat_tu})` : ''}</option>)}
+        {items.map((item) => <option key={item.id} value={item.id}>{item.ten_ncc} · {item.ten_hang} · {item.pham_vi_danh_gia === 'NHOM_HANG' ? (item.nhom_hang_chi_tiet || item.nhom_hang_chinh || item.ma_cong_doan || item.ma_loai_gia_cong) : `Hồ sơ cũ: ${item.ma_vat_tu || 'chưa có mã'}`}</option>)}
       </select>
     </label>
     {error && <p role="alert" className="p-3 rounded bg-[#FDECEE] text-[#C4141F]">{error}</p>}
+    {source?.pham_vi_danh_gia === 'NHOM_HANG' && items.find((item) => item.id === itemId)?.loai === 'GIA_CONG' && <p className="p-3 bg-[#FFF7E6] text-sm rounded">Dữ liệu giao nhận chưa liên kết loại gia công/công đoạn. Các tiêu chí tự động tạm chưa có dữ liệu; bảng điểm ghi rõ tỷ lệ hệ số được tính.</p>}
     {itemId && <>{source && <div className="p-3 bg-[#F4F6FA] rounded text-sm"><strong>{source.ten_ncc} · {source.ten_hang}</strong><p>{source.so_lan_giao} lần giao · {source.so_lan_iqc} lần kiểm IQC. Điểm sẽ tính trên {auto?.trong_so_du_lieu ?? 0}% hệ số có dữ liệu.</p></div>}
       {source &&
       <form onSubmit={(event) => void save(event)} className="space-y-3">
@@ -85,7 +88,7 @@ export function SupplierEvaluationPanel({ supplier, canEdit, canApprove, onNotif
         })}</tbody></table></div>
         {canEdit && <div className="flex flex-wrap gap-3 items-end"><label className="text-sm flex-1">Ghi chú<input value={form.ghi_chu || ''} onChange={(event) => setForm({ ...form, ghi_chu: event.target.value })} className="block mt-1 w-full h-11 border rounded px-3" /></label><button disabled={busy} className="h-11 px-4 rounded bg-[#283A97] text-white font-bold">LƯU BẢNG ĐIỂM</button></div>}
       </form>}
-      <div className="space-y-2"><h3 className="font-bold">LỊCH SỬ ĐÁNH GIÁ</h3>{history.length === 0 ? <p className="text-sm text-[#59627A]">Chưa có bảng điểm.</p> : history.map((score) => <div key={score.id} className="border rounded p-3 flex flex-wrap items-center justify-between gap-2 text-sm"><span>{score.ngay_danh_gia} · <strong>{score.diem_tong}/100</strong> · {RANKS[score.xep_loai] || score.xep_loai} · {score.trong_so_du_lieu}% dữ liệu · {score.trang_thai_duyet === 'DA_DUYET' ? 'Đã duyệt' : 'Chờ duyệt'}</span>{canApprove && score.trang_thai_duyet === 'CHO_DUYET' && <button type="button" disabled={busy} onClick={() => void approve(score)} className="h-10 px-3 border border-[#283A97] rounded text-[#283A97] font-bold">DUYỆT</button>}</div>)}</div>
+      <div className="space-y-2"><h3 className="font-bold">LỊCH SỬ ĐÁNH GIÁ</h3>{history.length === 0 ? <p className="text-sm text-[#59627A]">Chưa có bảng điểm.</p> : history.map((score) => <div key={score.id} className="border rounded p-3 flex flex-wrap items-center justify-between gap-2 text-sm"><span>{score.ngay_danh_gia} · <strong>{score.diem_tong}/100</strong> · {RANKS[score.xep_loai] || score.xep_loai} · {score.trong_so_du_lieu}% dữ liệu · {score.trang_thai_duyet === 'DA_DUYET' ? 'Đã duyệt' : 'Chờ duyệt'}</span>{score.trang_thai_duyet === 'DA_DUYET' && <SupplierFormDownload form="BM06" scoreId={score.id} />} {canApprove && score.trang_thai_duyet === 'CHO_DUYET' && <button type="button" disabled={busy} onClick={() => void approve(score)} className="h-10 px-3 border border-[#283A97] rounded text-[#283A97] font-bold">DUYỆT</button>}</div>)}</div>
     </>}
   </section>;
 }

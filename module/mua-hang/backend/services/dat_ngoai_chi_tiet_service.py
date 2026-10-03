@@ -8,13 +8,15 @@ from backend.data.catalog_repo import lay_ket_qua_idempotency
 from backend.data.db import get_conn
 from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
 from backend.services.phan_quyen_service import kiem_quyen
+from backend.services.dat_ngoai_scope import kiem_scope
 
 
-def _dong(id_phieu: str, id_dong: str, ho_so: dict, conn=None) -> dict:
-    kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
+def _dong(id_phieu: str, id_dong: str, ho_so: dict, conn=None, hanh_dong='xem', trang='dat_ngoai') -> dict:
+    scope = kiem_quyen(ho_so, trang, hanh_dong, conn)
     row = dat_ngoai_chi_tiet_repo.lay_dong(id_phieu, id_dong, conn)
     if not row:
         raise KhongTimThay('Không tìm thấy dòng đặt ngoài thuộc phiếu này.')
+    kiem_scope(scope, row, ho_so)
     return row
 
 
@@ -22,19 +24,20 @@ def chi_tiet(id_phieu: str, id_dong: str, ho_so: dict) -> dict:
     # Mot lan xem chi tiet gom quyen, dong, lich su va dot giao. Dung chung mot
     # ket noi de tranh nhieu lan bat tay voi database qua mang.
     with get_conn() as conn:
-        kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
+        scope = kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
         row = dat_ngoai_chi_tiet_repo.lay_dong(id_phieu, id_dong, conn)
         if not row:
             raise KhongTimThay('Không tìm thấy dòng đặt ngoài thuộc phiếu này.')
+        kiem_scope(scope, row, ho_so)
         return {**row,
                 'xac_nhan_ky_thuat': dat_ngoai_chi_tiet_repo.danh_sach_xac_nhan(
-                    id_dong, row.get('ma_hang') or None, conn),
+                    id_dong, (row.get('ma_hang') or None) if scope == 'toan_bo' else None, conn),
                 'dot_giao': dat_ngoai_chi_tiet_repo.danh_sach_dot_giao(id_dong, conn)}
 
 
 def sua_dong(id_phieu: str, id_dong: str, data: dict, ho_so: dict) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'sua')
-    old = _dong(id_phieu, id_dong, ho_so)
+    old = _dong(id_phieu, id_dong, ho_so, hanh_dong='sua')
     if old['trang_thai_phieu'] in ('HUY', 'HOAN_THANH'):
         raise XungDot('Phiếu đã kết thúc, không thể sửa dòng.')
     if any(not str(data.get(key) or '').strip() for key in
@@ -62,19 +65,19 @@ def them_xac_nhan(id_phieu: str, id_dong: str, data: dict,
 def _them_xac_nhan_trong_ket_noi(id_phieu: str, id_dong: str, data: dict,
                                  ho_so: dict, khoa: str, conn) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'xem', conn)
+    row = _dong(id_phieu, id_dong, ho_so, conn)
+    if ho_so.get('vai_tro') != 'QC':
+        kiem_scope(kiem_quyen(ho_so, 'xac_nhan_kt', 'sua', conn), row, ho_so)
     prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa,
                                    f'POST:/api/v1/dat-ngoai/dong/{id_dong}/xac-nhan-kt', conn)
     if prior is not None:
         return prior
-    row = _dong(id_phieu, id_dong, ho_so, conn)
     if row['trang_thai_phieu'] == 'HUY' or (
         row['trang_thai_phieu'] == 'HOAN_THANH' and not row.get('cho_xac_nhan_kt')
     ):
         raise XungDot('Phiếu không có yêu cầu kỹ thuật đang chờ xác nhận.')
     if not row.get('can_xac_nhan_ky_thuat') and not row.get('cho_xac_nhan_kt'):
         raise XungDot('Mã hàng này không được đánh dấu cần xác nhận kỹ thuật.')
-    if ho_so.get('vai_tro') != 'QC':
-        kiem_quyen(ho_so, 'xac_nhan_kt', 'sua', conn)
     content = str(data['noi_dung']).strip()
     if not content:
         raise ThieuDuLieu('Nội dung xác nhận không được để trống.')
@@ -92,11 +95,11 @@ def _them_xac_nhan_trong_ket_noi(id_phieu: str, id_dong: str, data: dict,
 def them_yeu_cau_ky_thuat(id_phieu: str, id_dong: str, data: dict,
                           ho_so: dict, khoa: str) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'sua')
+    row = _dong(id_phieu, id_dong, ho_so, hanh_dong='sua')
     prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa,
                                    f'POST:/api/v1/dat-ngoai/dong/{id_dong}/yeu-cau-kt')
     if prior is not None:
         return prior
-    row = _dong(id_phieu, id_dong, ho_so)
     if row['trang_thai_phieu'] == 'HUY':
         raise XungDot('Phiếu đã hủy, không thể yêu cầu kỹ thuật.')
     if row.get('cho_xac_nhan_kt'):
@@ -114,11 +117,11 @@ def them_yeu_cau_ky_thuat(id_phieu: str, id_dong: str, data: dict,
 def them_dot_giao(id_phieu: str, id_dong: str, data: dict,
                   ho_so: dict, khoa: str) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'sua')
+    row = _dong(id_phieu, id_dong, ho_so, hanh_dong='sua')
     prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa,
                                    f'POST:/api/v1/dat-ngoai/dong/{id_dong}/dot-giao')
     if prior is not None:
         return prior
-    row = _dong(id_phieu, id_dong, ho_so)
     if row['trang_thai_phieu'] in ('HUY', 'HOAN_THANH'):
         raise XungDot('Phiếu đã kết thúc, không thể thêm đợt giao.')
     current = dat_ngoai_chi_tiet_repo.danh_sach_dot_giao(id_dong)
@@ -137,9 +140,12 @@ def them_dot_giao(id_phieu: str, id_dong: str, data: dict,
 def nhan_dot_giao(id_phieu: str, id_dong: str, id_dot: str,
                   phien_ban: int, ngay_thuc_te, ho_so: dict) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'sua')
-    _dong(id_phieu, id_dong, ho_so)
-    row = dat_ngoai_chi_tiet_repo.nhan_dot_giao(
-        id_dong, id_dot, phien_ban, ngay_thuc_te, ho_so['ma_nhan_vien'])
+    _dong(id_phieu, id_dong, ho_so, hanh_dong='sua')
+    try:
+        row = dat_ngoai_chi_tiet_repo.nhan_dot_giao(
+            id_dong, id_dot, phien_ban, ngay_thuc_te, ho_so['ma_nhan_vien'])
+    except ValueError as exc:
+        raise XungDot(str(exc)) from exc
     if not row:
         raise XungDot('Đợt giao vừa được cập nhật. Hãy tải lại.')
     return row
@@ -148,7 +154,7 @@ def nhan_dot_giao(id_phieu: str, id_dong: str, id_dot: str,
 def sua_dot_giao(id_phieu: str, id_dong: str, id_dot: str,
                  data: dict, ho_so: dict) -> dict:
     kiem_quyen(ho_so, 'dat_ngoai', 'sua')
-    row = _dong(id_phieu, id_dong, ho_so)
+    row = _dong(id_phieu, id_dong, ho_so, hanh_dong='sua')
     if row['trang_thai_phieu'] in ('HUY', 'HOAN_THANH'):
         raise XungDot('Phiếu đã kết thúc, không thể điều chỉnh đợt giao.')
     if not str(data.get('ly_do') or '').strip():

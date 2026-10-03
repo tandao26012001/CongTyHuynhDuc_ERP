@@ -33,6 +33,11 @@ export interface HoSo {
   quyen?: Record<string, { xem?: boolean; sua?: boolean; duyet?: boolean; xuat?: boolean; pham_vi?: string }>;
 }
 
+export function coTheNhanThongBaoKyThuat(hoSo: HoSo): boolean {
+  return hoSo.vai_tro.trim().toUpperCase() === 'KY_THUAT'
+    && hoSo.quyen?.xac_nhan_kt?.xem === true;
+}
+
 interface ApiEnvelope<T> {
   ok: boolean;
   data: T;
@@ -865,6 +870,7 @@ export interface PhieuDatNgoai {
   id_ncc: string | null;
   lenh_san_xuat: string;
   nguoi_lap: string;
+  ten_nguoi_lap?: string | null;
   ngay_lap: string;
   ten_ncc_chup: string | null;
   nha_cung_cap_tom_tat: string | null;
@@ -882,6 +888,7 @@ export interface PhieuDatNgoai {
     trang_thai_moi: string;
     noi_dung: string | null;
     nguoi_thuc_hien: string;
+    ten_nguoi_thuc_hien?: string | null;
     thoi_diem: string;
     ma_hang?: string | null;
     loai?: 'PHIEU' | 'YEU_CAU_KY_THUAT' | 'XAC_NHAN_KY_THUAT';
@@ -940,6 +947,7 @@ export async function duyetDeXuatNhaCungCap(item: NhaCungCapQuanLy) {
 }
 
 export interface MatHangNcc {
+  pham_vi_danh_gia: 'NHOM_HANG' | 'MA_VAT_TU';
   id: string;
   id_ncc: string;
   ma_ncc: string;
@@ -978,11 +986,12 @@ export async function layDanhMucMatHangNcc() {
   return api<DanhMucMatHangNcc>('/api/v1/mat-hang-ncc/danh-muc');
 }
 
-export async function layMatHangNcc(idNcc?: string, q = '', trangThai = '') {
+export async function layMatHangNcc(idNcc?: string, q = '', trangThai = '', filters: Record<string, string> = {}) {
   const params = new URLSearchParams();
   if (idNcc) params.set('id_ncc', idNcc);
   if (q) params.set('q', q);
   if (trangThai) params.set('trang_thai', trangThai);
+  for (const key of ['nhom_hang_chinh', 'nhom_hang_chi_tiet', 'ma_loai_gia_cong', 'muc_chat_luong']) if (filters[key]) params.set(key, filters[key]);
   return api<MatHangNcc[]>(`/api/v1/mat-hang-ncc?${params}`);
 }
 
@@ -1019,6 +1028,7 @@ export interface DiemNcc {
 
 export type DiemNhapNcc = Pick<DiemNcc, 'diem_gia_ca' | 'diem_tam_voc' | 'diem_thanh_toan' | 'diem_dich_vu'> & { ghi_chu?: string };
 export interface NguonDiemNcc {
+  pham_vi_danh_gia: 'NHOM_HANG' | 'MA_VAT_TU';
   id: string;
   ten_ncc: string;
   ten_hang: string;
@@ -1055,6 +1065,11 @@ export async function duyetDanhGiaMatHangNcc(item: DiemNcc) {
 }
 
 export interface DanhGiaNccDenHan {
+  pham_vi_danh_gia: MatHangNcc['pham_vi_danh_gia'];
+  nhom_hang_chinh: string | null;
+  nhom_hang_chi_tiet: string | null;
+  ma_loai_gia_cong: string | null;
+  ma_cong_doan: string | null;
   id: string; id_ncc: string; ten_ncc: string; ten_hang: string;
   ma_vat_tu: string | null; ngay_cham_gan_nhat: string | null;
   diem_tong: number | null; xep_loai: string | null;

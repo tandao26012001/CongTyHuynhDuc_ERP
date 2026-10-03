@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavigationTab } from '../types';
-import { HoSo, layHangDoiKyThuatDatNgoai, PhieuDatNgoai, layThongBaoTag, docThongBaoTag, docThongBaoKyThuat, ThongBaoTag } from '../api/client';
+import { coTheNhanThongBaoKyThuat, HoSo, layHangDoiKyThuatDatNgoai, PhieuDatNgoai, layThongBaoTag, docThongBaoTag, docThongBaoKyThuat, ThongBaoTag } from '../api/client';
 import { HoSoTuongTacPanel } from './HoSoTuongTacPanel';
 
 interface TopbarProps {
@@ -56,7 +56,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       await markTagRead(item);
     } catch { setNotificationError('Không đánh dấu được thông báo đã đọc.'); }
   }
-  const hasTechnicalPermission = (currentUser.quyen?.xac_nhan_kt as { xem?: boolean } | undefined)?.xem === true;
+  const hasTechnicalPermission = coTheNhanThongBaoKyThuat(currentUser);
   useEffect(() => {
     let active = true;
     setTechnicalQueue([]);
@@ -87,7 +87,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'company-data':
         return { main: 'QUẢN TRỊ', sub: 'Dữ liệu gốc' };
       case 'suppliers':
-        return { main: 'QUẢN TRỊ', sub: 'Nhà cung cấp' };
+        return { main: 'MUA HÀNG', sub: 'Nhà cung cấp' };
       case 'utilities':
         return { main: 'QUẢN TRỊ', sub: 'Tiện ích' };
       case 'reports':

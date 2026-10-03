@@ -1,6 +1,7 @@
 """Bay bang goc bao cao F2, chi doc tu chung tu."""
 
 from backend.data.db import get_conn
+from backend.data.ncc_nhom import dieu_kien_vat_tu
 
 
 QUERIES = {
@@ -82,7 +83,7 @@ QUERIES = {
         AND (%(ncc)s IS NULL OR y.id_ncc=%(ncc)s)
         AND (%(status)s IS NULL OR coalesce(dt.trang_thai,y.trang_thai)=%(status)s)
       ORDER BY y.ngay_yeu_cau DESC,y.id LIMIT 2000""",
-    'nha-cung-cap': """SELECT m.id AS ma_dong,n.id AS id_ncc,n.ma_ncc,
+    'nha-cung-cap': f"""SELECT m.id AS ma_dong,n.id AS id_ncc,n.ma_ncc,
         n.ten AS nha_cung_cap,n.trang_thai,n.da_phe_duyet,
         n.dinh_muc_thang,m.ten_hang,m.nhom_hang_chinh AS nhom_hang,
         m.trang_thai AS trang_thai_mat_hang,
@@ -91,11 +92,11 @@ QUERIES = {
         dg.diem_tong,dg.xep_loai,dg.ngay_danh_gia,
         (SELECT count(*) FROM nhan_hang_dong d JOIN nhan_hang h ON h.id=d.id_nhan_hang
          LEFT JOIN vat_tu v ON v.id=d.id_vat_tu
-         WHERE h.id_ncc=n.id AND v.ma_vat_tu=m.ma_vat_tu
+         WHERE h.id_ncc=n.id AND {dieu_kien_vat_tu()}
            AND h.ngay_nhan BETWEEN %(from)s AND %(to)s)::integer AS so_dong_giao,
         (SELECT count(*) FROM nhan_hang_dong d JOIN nhan_hang h ON h.id=d.id_nhan_hang
          LEFT JOIN vat_tu v ON v.id=d.id_vat_tu
-         WHERE h.id_ncc=n.id AND v.ma_vat_tu=m.ma_vat_tu
+         WHERE h.id_ncc=n.id AND {dieu_kien_vat_tu()}
            AND h.ngay_nhan BETWEEN %(from)s AND %(to)s
            AND d.so_ngay_som_tre>0)::integer AS so_dong_tre
       FROM nha_cung_cap n LEFT JOIN mat_hang_ncc m ON m.id_ncc=n.id

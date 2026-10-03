@@ -62,7 +62,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_co_the_yeu_cau_lai_sau_khi_da_xac_nhan(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={
                  'trang_thai_phieu': 'HOAN_THANH', 'can_xac_nhan_ky_thuat': True,
@@ -77,7 +77,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
         save.assert_called_once_with('DONG-1', 'Kiểm tra lại kích thước', 'NV-1', 'TK-1', 'KEY-2')
 
     def test_yeu_cau_moi_o_buoc_bao_gia_xuat_hien_trong_hang_doi(self):
-        ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1'}
+        ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1', 'vai_tro': 'KY_THUAT'}
         rows = [
             {'id': 'P-1', 'trang_thai': 'DANG_BAO_GIA',
              'dong': [{'cho_xac_nhan_kt': True}]},
@@ -86,7 +86,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
             {'id': 'P-3', 'trang_thai': 'HOAN_THANH',
              'dong': [{'cho_xac_nhan_kt': True}]},
         ]
-        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_service, 'get_conn') as connection, \
              patch.object(dat_ngoai_service.dat_ngoai_repo,
                           'danh_sach_dat_ngoai', return_value=rows):
@@ -96,7 +96,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_khong_gui_trung_yeu_cau_khi_con_cho_ky_thuat(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={
                  'trang_thai_phieu': 'HOAN_THANH', 'cho_xac_nhan_kt': True,
@@ -111,7 +111,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_ky_thuat_xac_nhan_yeu_cau_moi_cho_ma_khong_danh_dau_ban_dau(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1', 'vai_tro': 'KY_THUAT'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={
                  'trang_thai_phieu': 'DANG_BAO_GIA', 'can_xac_nhan_ky_thuat': False,
@@ -199,7 +199,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_khong_xac_nhan_chung_khi_co_cau_hoi_dang_cho(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1', 'vai_tro': 'KY_THUAT'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={
                  'trang_thai_phieu': 'DANG_BAO_GIA', 'can_xac_nhan_ky_thuat': True,
@@ -214,7 +214,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_co_the_xac_nhan_tiep_sau_khi_phieu_da_qua_buoc_ky_thuat(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1', 'vai_tro': 'KY_THUAT'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen') as check_permission, \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo') as check_permission, \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={'trang_thai_phieu': 'DANG_BAO_GIA', 'can_xac_nhan_ky_thuat': True}), \
              patch.object(dat_ngoai_chi_tiet_service.dat_ngoai_chi_tiet_repo, 'them_xac_nhan', return_value={'id': 'XN-2'}) as save:
@@ -228,7 +228,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
 
     def test_khong_ghi_xac_nhan_cho_ma_khong_duoc_danh_dau(self):
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1', 'vai_tro': 'KY_THUAT'}
-        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_chi_tiet_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_chi_tiet_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_chi_tiet_service, '_dong', return_value={'trang_thai_phieu': 'DANG_BAO_GIA', 'can_xac_nhan_ky_thuat': False}), \
              patch.object(dat_ngoai_chi_tiet_service.dat_ngoai_chi_tiet_repo, 'them_xac_nhan') as save:
@@ -244,7 +244,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
         with patch.object(dat_ngoai_service, 'get_conn', return_value=manager), \
              patch.object(dat_ngoai_service.dat_ngoai_repo, 'san_sang', return_value=True), \
              patch.object(dat_ngoai_service.dat_ngoai_repo, 'lay_dat_ngoai', return_value={'trang_thai': 'CHO_XAC_NHAN_KY_THUAT'}), \
-             patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen'), \
+             patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_service.dat_ngoai_repo, 'dong_chua_xac_nhan_ky_thuat', return_value=[{'id': 'DONG-2', 'ma_hang': 'MH-2'}]), \
              patch.object(dat_ngoai_service.dat_ngoai_repo, 'chuyen_trang_thai') as change:
             with self.assertRaises(ThieuDuLieu):
@@ -268,7 +268,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
             for barcode in ('V1', 'V2')
         ]
         ho_so = {'ma_tai_khoan': 'TK-1', 'ma_nhan_vien': 'NV-1'}
-        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_service, 'lay_ket_qua_idempotency', return_value=None), \
              patch.object(dat_ngoai_service, 'get_conn', return_value=manager), \
              patch.object(dat_ngoai_service.dat_ngoai_repo, 'san_sang', return_value=True), \
@@ -287,7 +287,7 @@ class TestLichSuXacNhanKyThuat(TestCase):
         detail = {'ma_vach': 'V1', 'noi_dung_gia_cong': 'Gia công',
                   'yeu_cau_ky_thuat': 'Theo bản vẽ', 'yeu_cau_chat_luong': 'Đạt',
                   'can_xac_nhan_ky_thuat': True, 'noi_dung_can_xac_nhan_kt': '  '}
-        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen'), \
+        with patch.object(dat_ngoai_service.phan_quyen_service, 'kiem_quyen', return_value='toan_bo'), \
              patch.object(dat_ngoai_service, 'lay_ket_qua_idempotency', return_value=None):
             with self.assertRaises(ThieuDuLieu):
                 dat_ngoai_service.tao_bao_gia(

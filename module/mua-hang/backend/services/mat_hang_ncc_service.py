@@ -16,34 +16,18 @@ def danh_muc_phan_loai(ho_so: dict) -> dict:
     return mat_hang_ncc_repo.danh_muc_phan_loai()
 
 
-def danh_sach(id_ncc: str | None, tu_khoa: str, trang_thai: str | None, ho_so: dict) -> list[dict]:
+def danh_sach(id_ncc: str | None, tu_khoa: str, trang_thai: str | None, ho_so: dict, filters: dict | None = None) -> list[dict]:
     kiem_quyen(ho_so, "ncc", "xem")
     if trang_thai not in (None, "DE_XUAT", "DA_DUYET", "TAM_NGUNG"):
         raise ThieuDuLieu("Trạng thái mặt hàng không hợp lệ.")
-    return mat_hang_ncc_repo.danh_sach(id_ncc, tu_khoa.strip(), trang_thai)
+    return mat_hang_ncc_repo.danh_sach(id_ncc, tu_khoa.strip(), trang_thai, filters)
 
 
 def tao(du_lieu: dict, ho_so: dict, khoa: str) -> dict:
     kiem_quyen(ho_so, "ncc", "xem")
     if ho_so.get("vai_tro") == "CHI_XEM":
         raise KhongCoQuyen("Tài khoản chỉ xem không được đề xuất mặt hàng NCC.")
-    if du_lieu["loai"] == "HANG_HOA" and not du_lieu.get("nhom_hang_chinh"):
-        raise ThieuDuLieu("Mặt hàng hóa phải có nhóm hàng chính.")
-    if du_lieu["loai"] == "GIA_CONG" and not du_lieu.get("ma_loai_gia_cong"):
-        raise ThieuDuLieu("Mặt hàng gia công phải có loại gia công.")
-    if du_lieu["loai"] == "HANG_HOA":
-        groups = {item["ma"]: item for item in mat_hang_ncc_repo.danh_muc_phan_loai()["nhom_hang"]}
-        main = groups.get(du_lieu["nhom_hang_chinh"])
-        if not main or main["ma_cha"]:
-            raise ThieuDuLieu("Nhóm hàng chính phải là nhóm gốc trong danh mục chuẩn.")
-        detail_code = du_lieu.get("nhom_hang_chi_tiet")
-        if detail_code and (detail_code not in groups or groups[detail_code]["ma_cha"] != main["ma"]):
-            raise ThieuDuLieu("Nhóm hàng chi tiết phải thuộc nhóm hàng chính đã chọn.")
-    ncc = catalog_service.lay_nha_cung_cap(du_lieu["id_ncc"])
-    if du_lieu["loai"] == "HANG_HOA" and not ncc.get("la_ncc_mua_hang"):
-        raise ThieuDuLieu("NCC này chưa được khai là nhà cung cấp hàng hóa.")
-    if du_lieu["loai"] == "GIA_CONG" and not ncc.get("la_ncc_gia_cong"):
-        raise ThieuDuLieu("NCC này chưa được khai là nhà cung cấp gia công.")
+    _kiem_tra(du_lieu)
     du_lieu["trang_thai"] = "DA_DUYET" if _la_mua_hang(ho_so) else "DE_XUAT"
     du_lieu["nguoi_duyet"] = ho_so["ma_nhan_vien"] if _la_mua_hang(ho_so) else None
     try:
@@ -140,3 +124,66 @@ def so_theo_doi_bm08(ho_so: dict) -> list[dict]:
             conclusion = 'Chưa xác định'
         result.append({**row, 'ket_luan_bm08': conclusion})
     return result
+
+
+def _kiem_tra(du_lieu: dict, legacy: bool = False):
+    du_lieu['ten_hang'] = str(du_lieu.get('ten_hang') or '').strip()
+    if not du_lieu['ten_hang']:
+        raise ThieuDuLieu('Tên nhóm cung cấp không được để trống.')
+    catalog = mat_hang_ncc_repo.danh_muc_phan_loai()
+    if du_lieu.get('dvt') not in {item['dvt'] for item in catalog['don_vi_tinh']}:
+        raise ThieuDuLieu('Đơn vị tính không tồn tại hoặc đã ngừng sử dụng.')
+    if du_lieu['loai'] == 'GIA_CONG':
+        if du_lieu.get('ma_loai_gia_cong') not in {item['ma'] for item in catalog['loai_gia_cong']}:
+            raise ThieuDuLieu('Loại gia công không có trong danh mục chuẩn.')
+        if du_lieu.get('ma_cong_doan') and du_lieu['ma_cong_doan'] not in {item['ma'] for item in catalog['cong_doan']}:
+            raise ThieuDuLieu('Công đoạn không có trong danh mục chuẩn.')
+    if du_lieu["loai"] == "HANG_HOA" and not du_lieu.get("nhom_hang_chinh"):
+        raise ThieuDuLieu("Mặt hàng hóa phải có nhóm hàng chính.")
+    if du_lieu["loai"] == "GIA_CONG" and not du_lieu.get("ma_loai_gia_cong"):
+        raise ThieuDuLieu("Mặt hàng gia công phải có loại gia công.")
+    if du_lieu["loai"] == "HANG_HOA":
+        groups = {item["ma"]: item for item in catalog["nhom_hang"]}
+        main = groups.get(du_lieu["nhom_hang_chinh"])
+        if not main or main["ma_cha"]:
+            raise ThieuDuLieu("Nhóm hàng chính phải là nhóm gốc trong danh mục chuẩn.")
+        detail_code = du_lieu.get("nhom_hang_chi_tiet")
+        if detail_code and (detail_code not in groups or groups[detail_code]["ma_cha"] != main["ma"]):
+            raise ThieuDuLieu("Nhóm hàng chi tiết phải thuộc nhóm hàng chính đã chọn.")
+    ncc = catalog_service.lay_nha_cung_cap(du_lieu["id_ncc"])
+    # Ho so moi la mot nhom cung cap; ma vat tu chi thuoc ho so lich su.
+    if du_lieu.get('ma_vat_tu') and not legacy:
+        raise ThieuDuLieu('Hồ sơ mới đánh giá theo nhóm hàng, không gắn một mã vật tư riêng.')
+    if du_lieu['loai'] == 'HANG_HOA':
+        du_lieu['ma_loai_gia_cong'] = None
+        du_lieu['ma_cong_doan'] = None
+    else:
+        du_lieu['nhom_hang_chinh'] = None
+        du_lieu['nhom_hang_chi_tiet'] = None
+    if du_lieu["loai"] == "HANG_HOA" and not ncc.get("la_ncc_mua_hang"):
+        raise ThieuDuLieu("NCC này chưa được khai là nhà cung cấp hàng hóa.")
+    if du_lieu["loai"] == "GIA_CONG" and not ncc.get("la_ncc_gia_cong"):
+        raise ThieuDuLieu("NCC này chưa được khai là nhà cung cấp gia công.")
+
+
+def sua(id_mat_hang: str, data: dict, ho_so: dict) -> dict:
+    from backend.data import mat_hang_ncc_edit_repo as repo
+    kiem_quyen(ho_so, 'ncc', 'xem')
+    if not _la_mua_hang(ho_so):
+        raise KhongCoQuyen('Chỉ Mua hàng được sửa nhóm cung cấp NCC.')
+    old = repo.lay(id_mat_hang)
+    data = {**data, 'id_ncc': old['id_ncc'], 'ma_vat_tu': old.get('ma_vat_tu')}
+    _kiem_tra(data, legacy=True)
+    try:
+        return repo.sua(id_mat_hang, data['phien_ban'], data, ho_so['ma_nhan_vien'])
+    except UniqueViolation as exc:
+        raise XungDot('Nhóm cung cấp này đã có trong NCC.') from exc
+    except (ForeignKeyViolation, CheckViolation) as exc:
+        raise ThieuDuLieu('Mã danh mục hoặc dữ liệu mặt hàng không hợp lệ.') from exc
+
+
+def lich_su(id_mat_hang: str, ho_so: dict) -> list[dict]:
+    from backend.data import mat_hang_ncc_edit_repo as repo
+    kiem_quyen(ho_so, 'ncc', 'xem')
+    repo.lay(id_mat_hang)
+    return repo.lich_su(id_mat_hang)

@@ -133,7 +133,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
 
       <div className="p-4 space-y-5">
         {actionError && <div role="alert" className="p-3 bg-[#FDECEE] border-l-4 border-[#EE202E] text-[#C4141F] text-[12px]">{actionError}</div>}
-        {request?.trang_thai === 'HUY' && <div className="p-3 border border-[#F2CD82] bg-[#FFF7E6] rounded text-[13px]"><strong>Phiếu đã hủy.</strong> Lý do: {request.ly_do_huy || '—'}{(() => { const entry = request.lich_su?.find((item) => item.trang_thai_moi === 'HUY'); return entry ? <span className="block mt-1 text-[12px]">Người hủy: <strong>{entry.nguoi_thuc_hien}</strong> · Thời điểm: <strong>{displayDate(entry.thoi_diem, true)}</strong></span> : null; })()}</div>}
+        {request?.trang_thai === 'HUY' && <div className="p-3 border border-[#F2CD82] bg-[#FFF7E6] rounded text-[13px]"><strong>Phiếu đã hủy.</strong> Lý do: {request.ly_do_huy || '—'}{(() => { const entry = request.lich_su?.find((item) => item.trang_thai_moi === 'HUY'); return entry ? <span className="block mt-1 text-[12px]">Người hủy: <strong>{entry.ten_nguoi_thuc_hien || '—'}</strong> · Thời điểm: <strong>{displayDate(entry.thoi_diem, true)}</strong></span> : null; })()}</div>}
         {showCancelForm && <form onSubmit={(event) => void cancelRequest(event)} className="p-4 border border-[#F2CD82] bg-[#FFF7E6] rounded space-y-3">
           <label className="block text-[12px] font-bold">LÝ DO HỦY PHIẾU *<textarea required minLength={1} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} rows={3} className="mt-1 w-full p-3 border rounded font-normal bg-white" placeholder="Nhập lý do hủy để lưu vào lịch sử phiếu." /></label>
           <div className="flex justify-end gap-2"><button type="button" disabled={confirming} onClick={() => { setShowCancelForm(false); setActionError(''); }} className="min-h-10 px-4 border rounded font-bold">ĐÓNG</button><button type="submit" disabled={confirming || !cancelReason.trim()} className="min-h-10 px-4 bg-[#283A97] text-white rounded font-bold disabled:opacity-50">{confirming ? 'ĐANG HỦY…' : 'XÁC NHẬN HỦY'}</button></div>
@@ -160,7 +160,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
               <Info label="TRẠNG THÁI PHIẾU" value={`${statusLabel(request.trang_thai)}${request.trang_thai === 'CHO_XAC_NHAN_KY_THUAT' ? ` · còn ${pendingTechnicalLines} mã` : ''}`} />
               <Info label="NHÀ CUNG CẤP THEO MÃ" value={supplierSummary} />
               <Info label="TỔNG GIÁ TRỊ" value={money(request.tong_gia_tri)} mono />
-              <Info label="NGƯỜI LẬP" value={request.nguoi_lap || '—'} />
+              <Info label="NGƯỜI LẬP" value={request.ten_nguoi_lap || '—'} />
               <Info label="NGÀY LẬP" value={displayDate(request.ngay_lap)} mono />
               <Info label="HẠN GIAO SỚM NHẤT" value={displayDate(request.ky_han)} mono />
               <Info label="PHIÊN BẢN" value={String(request.phien_ban)} mono />
@@ -214,7 +214,7 @@ export function OutsourceDetailModal({ lsx, request, onClose, canConfirmTechnica
 
         {request && <section>
           <h3 className="font-bold text-[15px] mb-3">LỊCH SỬ XỬ LÝ</h3>
-          {!request.lich_su?.length ? <div className="p-4 border rounded text-[13px] text-[#59627A]">Chưa có lịch sử xử lý.</div> : <div className="border rounded divide-y">{request.lich_su.map((item, index) => <div key={`${item.thoi_diem}-${index}`} className="p-3 grid md:grid-cols-[170px_1fr_180px] gap-2 text-[12px]"><span className="font-mono">{displayDate(item.thoi_diem, true)}</span><div>{item.ma_hang && <span className="mb-1 inline-block rounded bg-[#EEF0F9] px-2 py-0.5 font-mono font-bold text-[#283A97]">Mã {item.ma_hang}</span>}<strong className="block">{item.loai === 'YEU_CAU_KY_THUAT' ? 'Gửi yêu cầu xác nhận kỹ thuật' : item.loai === 'XAC_NHAN_KY_THUAT' ? 'Kỹ thuật đã xác nhận · Chuyển sang báo giá' : `${statusLabel(item.trang_thai_cu)} → ${statusLabel(item.trang_thai_moi)}`}</strong><span className="block text-[#59627A]">{item.noi_dung || '—'}</span></div><span>Thực hiện: <strong>{item.nguoi_thuc_hien}</strong></span></div>)}</div>}
+          {!request.lich_su?.length ? <div className="p-4 border rounded text-[13px] text-[#59627A]">Chưa có lịch sử xử lý.</div> : <div className="border rounded divide-y">{request.lich_su.map((item, index) => <div key={`${item.thoi_diem}-${index}`} className="p-3 grid md:grid-cols-[170px_1fr_180px] gap-2 text-[12px]"><span className="font-mono">{displayDate(item.thoi_diem, true)}</span><div>{item.ma_hang && <span className="mb-1 inline-block rounded bg-[#EEF0F9] px-2 py-0.5 font-mono font-bold text-[#283A97]">Mã {item.ma_hang}</span>}<strong className="block">{item.loai === 'YEU_CAU_KY_THUAT' ? 'Gửi yêu cầu xác nhận kỹ thuật' : item.loai === 'XAC_NHAN_KY_THUAT' ? 'Kỹ thuật đã xác nhận · Chuyển sang báo giá' : `${statusLabel(item.trang_thai_cu)} → ${statusLabel(item.trang_thai_moi)}`}</strong><span className="block text-[#59627A]">{item.noi_dung || '—'}</span></div><span>Thực hiện: <strong>{item.ten_nguoi_thuc_hien || '—'}</strong></span></div>)}</div>}
         </section>}
       </div>
 

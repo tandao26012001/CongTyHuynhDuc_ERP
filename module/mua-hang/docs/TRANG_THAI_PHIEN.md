@@ -1,5 +1,45 @@
 # Trạng thái phiên
 
+## Xuất/in biểu mẫu NCC — 03/10/2026
+
+- Hoàn thành xuất XLSX/PDF BM03/BM06/BM07/BM08 từ mẫu Excel nguồn; thêm nút tải trên các tab NCC, chọn năm BM07 và kỳ BM08.
+- BM06 chỉ tải bảng đã duyệt, có 8 tiêu chí/3 dòng ký, ghi hệ số có dữ liệu; BM07 hiện riêng từng NCC/nhóm và kết luận cuối tháng (chưa làm trung bình trọng số cấp NCC).
+- Đã cài và thêm `openpyxl` vào requirements. Migration 081 tạo nhật ký xuất biểu mẫu đã áp dụng. `pymupdf` chỉ dùng kiểm tra PDF cục bộ, không là phụ thuộc vận hành.
+- 18 test/2 subtest, TypeScript và build đạt. Truy vấn/dựng file BM03/07/08 trên DB đạt; BM06 kiểm tra PDF với dữ liệu giả. Chưa UAT bản in hay số liệu nghiệp vụ.
+
+## Hoàn thiện màn mặt hàng NCC — 03/10/2026
+
+- Form/bảng có thêm công đoạn, điểm kỹ thuật, chất lượng, năng lực tháng và ngày giao chuẩn; thêm bộ lọc phía server, sửa theo phiên bản và lịch sử tạo/sửa/duyệt.
+- Nhóm đã duyệt hoặc có điểm giữ phạm vi phân loại cố định, tránh đổi nghĩa điểm cũ. Chỉ Mua hàng được sửa; lỗi giữ nguyên form để chỉnh.
+- Đã áp dụng migration 079–080; giữ xếp loại cũ A/B/C và bổ sung 5 bậc BM06. INSERT mặt hàng đã ép kiểu tham số NULL cho ngày duyệt.
+- 16 test/2 subtest, TypeScript và build đạt. Luồng repo trên PostgreSQL tạo/sửa/duyệt/chấm/duyệt điểm đạt với dữ liệu rollback; sinh mã/idempotency mock. Quy tắc chọn NCC kiểm thử bằng mock, chưa UAT trình duyệt.
+- Kế tiếp: BM03–BM08; đối chiếu danh mục chuẩn và nghiệm thu dữ liệu nghiệp vụ vẫn còn.
+
+## Sửa lỗi danh sách mặt hàng NCC — 03/10/2026
+
+- API `/api/v1/mat-hang-ncc` lỗi IndeterminateDatatype khi bộ lọc NCC/trạng thái là NULL. Các placeholder `%s IS NULL` chưa có kiểu để PostgreSQL suy luận.
+- Đã ép kiểu text cho hai tham số kiểm tra NULL ở `mat_hang_ncc_repo.danh_sach`.
+- Kiểm tra trực tiếp trên PostgreSQL đạt với: không bộ lọc, chỉ trạng thái, tìm tên và chỉ NCC. Không thay đổi dữ liệu hoặc migration.
+
+## Sửa lỗi mở danh mục NCC — 03/10/2026
+
+- Log người dùng: danh sách NCC lỗi UndefinedColumn `trang_thai_xet_duyet`. DB thiếu các cột hồ sơ xét duyệt trong migration 048.
+- Áp dụng migration 077 bổ sung cột xét duyệt/người/ngày và xuất xứ; giữ số NCC, cờ phê duyệt và trạng thái hoạt động. Chỉ NCC có cờ phê duyệt mới ánh xạ DA_DUYET.
+- Kiểm tra liên quan phát hiện hàng đợi đến hạn thiếu `trang_thai_duyet`. Áp dụng 078 khôi phục cột, giữ trạng thái duyệt hợp lệ từ cột runtime `trang_thai`, không thay điểm lịch sử.
+- Đã chạy trực tiếp service danh sách trang 1/25 và truy vấn hàng đợi đến hạn trên DB cấu hình: cả hai thành công.
+
+## Cập nhật 03/10/2026 — F1 đánh giá theo nhóm NCC
+
+- Phiên tiếp theo: xác nhận DB đã có 074; áp dụng 075 bổ sung cây chủng loại và 076 khôi phục bảng tham số NCC bị thiếu. EXPLAIN ba truy vấn nguồn điểm đạt trên PostgreSQL.
+- Đã sửa hai test F03; tổng 10 test nhóm/scope/F03 đạt. Runtime có 33 chủng loại và 17 ĐVT; loại gia công/công đoạn đang rỗng. Chưa nghiệm thu số liệu hoặc chuẩn VTPO/VTTH.
+
+- Migration 074 giữ hồ sơ và điểm cũ theo mã; hồ sơ mới đánh giá theo nhóm hàng chính/chi tiết hoặc loại gia công/công đoạn.
+- Đã sửa nguồn điểm hàng hóa, lựa chọn NCC trong Báo giá, phạm vi giao hàng trong báo cáo NCC và các màn khai nhóm/đánh giá/đến hạn.
+- Gia công chưa có khóa liên kết giao nhận đủ để tính tự động; giao diện thông báo thiếu dữ liệu. Kho vận hiện chưa có danh mục VTPO/VTTH trong repo để đối chiếu.
+- Kiểm thử phạm vi nhóm/lịch sử và scope báo cáo: 6 test đạt. Bộ test F03 mở rộng có hai lỗi ở mock kết nối và truy cập route FastAPI, ngoài phần thay đổi.
+- TypeScript và production build frontend đạt; Vite còn cảnh báo bundle lớn hơn 500 kB.
+- Đã kiểm tra/cập nhật database ở phiên tiếp theo; chưa nghiệm thu staging. Chi tiết theo `F1_F4_KE_HOACH_6_CHANG.md`.
+
 ## Cập nhật 21/09/2026 — Danh mục vật tư và đơn vị tính
 
 - Đã đặt màn hình quản lý tại **Quản trị → Dữ liệu gốc → Dữ liệu công ty**; không đặt thành mục nghiệp vụ riêng của Mua hàng.

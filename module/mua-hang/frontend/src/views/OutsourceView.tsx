@@ -138,7 +138,7 @@ function importedToGroup(item: LsxDatNgoai, requests: PhieuDatNgoai[]): Progress
   return {
     id: item.lenh_san_xuat, title: item.ghi_chu || `Lệnh sản xuất ${item.lenh_san_xuat}`,
     priority: item.muc_do_uu_tien ? `ƯU TIÊN ${item.muc_do_uu_tien}` : 'BÌNH THƯỜNG',
-    workshop: item.ten_bo_phan_chup || item.ma_bo_phan || 'Bộ phận Kinh doanh', coordinator: request?.nguoi_lap || 'Chưa phân công',
+    workshop: item.ten_bo_phan_chup || item.ma_bo_phan || 'Bộ phận Kinh doanh', coordinator: request?.ten_nguoi_lap || 'Chưa phân công',
     customer: item.ten_khach_hang_chup || item.ma_khach_hang || 'Chưa cập nhật', po: item.so_po || '—',
     supplier: [...new Set((request?.dong || []).map((line) => line.ten_ncc_chup).filter(Boolean))].join(', ') || request?.ten_ncc_chup || 'Chưa chọn nhà cung cấp', quantity: `${item.dong.length} mã hàng`,
     progress, due: displayDate(dueValue), timing: overdue ? 'QUÁ HẠN' : (dueValue ? 'TRONG HẠN' : 'CHƯA CÓ HẠN'),

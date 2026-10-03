@@ -59,4 +59,12 @@ BEGIN;
 \ir migrations/071_tag_nhan_vien_trao_doi.sql
 \ir migrations/072_danh_dau_doc_thong_bao_ky_thuat.sql
 \ir migrations/073_tuong_thich_de_nghi_viec_cua_toi.sql
+\ir migrations/074_danh_gia_ncc_theo_nhom.sql
+\ir migrations/075_khoi_phuc_cay_chung_loai.sql
+\ir migrations/076_khoi_phuc_tham_so_ncc.sql
+\ir migrations/077_khoi_phuc_xet_duyet_ncc.sql
+\ir migrations/078_khoi_phuc_duyet_danh_gia_ncc.sql
+\ir migrations/079_lich_su_mat_hang_ncc.sql
+\ir migrations/080_khoi_phuc_xep_loai_bm06.sql
+\ir migrations/081_nhat_ky_xuat_bieu_mau_ncc.sql
 COMMIT;

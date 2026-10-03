@@ -25,6 +25,7 @@ class TestF03(TestCase):
         with patch.object(f03_service, "_sua"), \
              patch.object(f03_service, "get_conn", return_value=nullcontext(conn)), \
              patch.object(f03_service.repo, "lay_ycbg", return_value=ycbg), \
+             patch.object(f03_service, "sinh_ma", return_value="BG-1"), \
              patch.object(f03_service.repo, "lay_ycbg_dong", return_value=[{"id_de_nghi_dong": "DND-1", "id": "YCBGD-1", "ten_hang_chup": "Thep", "dvt_chup": "KG", "so_luong": 2}] ), \
              patch.object(f03_service.repo, "tao_bao_gia", return_value={"id": "BG-1"}):
             with self.assertRaises(LoiNghiepVu) as ctx:
@@ -47,7 +48,7 @@ class TestF03Routes(TestCase):
     def test_routes_da_duoc_mount(self):
         from backend.api.app import app
 
-        paths = {route.path for route in app.routes}
+        paths = set(app.openapi()['paths'])
         self.assertIn("/api/v1/yeu-cau-bao-gia", paths)
         self.assertIn("/api/v1/yeu-cau-bao-gia/{id_ycbg}", paths)
         self.assertIn("/api/v1/bao-gia", paths)

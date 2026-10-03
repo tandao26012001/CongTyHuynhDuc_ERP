@@ -61,11 +61,11 @@ def tinh_diem(nguon: dict, diem_nhap: dict) -> dict:
         ly_do['diem_thoi_gian_hop_tac'] = 'Chưa có lần nhận hàng cho mặt hàng này.'
     value_limit = Decimal(str(nguon.get('gia_tri_muc_5') or 0))
     value = Decimal(str(nguon.get('gia_tri_12_thang') or 0))
-    if value_limit > 0:
+    if value_limit > 0 and nguon.get('gia_tri_12_thang') is not None:
         auto['diem_gia_tri_giao_dich'] = _lam_tron(min(Decimal(5), value * 5 / value_limit))
         ly_do['diem_gia_tri_giao_dich'] = f'{value} VND đơn đặt hàng trong 12 tháng / ngưỡng {value_limit} VND.'
     else:
-        ly_do['diem_gia_tri_giao_dich'] = 'Chưa cấu hình ngưỡng giá trị giao dịch; tiêu chí tạm không tính.'
+        ly_do['diem_gia_tri_giao_dich'] = 'Chưa có giao dịch hoặc chưa cấu hình ngưỡng; tiêu chí tạm không tính.'
     weights = {'diem_chat_luong': 2, 'diem_giao_hang': 2, 'diem_gia_ca': 2,
                'diem_tam_voc': 1, 'diem_thanh_toan': 1, 'diem_dich_vu': 1,
                'diem_thoi_gian_hop_tac': 1, 'diem_gia_tri_giao_dich': 1}

@@ -118,7 +118,8 @@ class TestBaoGiaDatNgoaiService(TestCase):
             "NCC_1": {"id": "NCC_1", "ma_ncc": "M1", "ten": "Nhà 1", "la_ncc_gia_cong": True, "trang_thai": "HOAT_DONG"},
             "NCC_2": {"id": "NCC_2", "ma_ncc": "M2", "ten": "Nhà 2", "la_ncc_gia_cong": True, "trang_thai": "HOAT_DONG"},
         }
-        with patch.object(dat_ngoai_service.phan_quyen_service, "kiem_quyen"), \
+        with patch.object(dat_ngoai_service, 'kiem_phieu'), \
+                patch.object(dat_ngoai_service.phan_quyen_service, "kiem_quyen"), \
                 patch.object(dat_ngoai_service.catalog_service, "lay_nha_cung_cap", side_effect=lambda id_ncc: suppliers[id_ncc]), \
                 patch.object(dat_ngoai_service.dat_ngoai_repo, "cap_nhat_bao_gia", return_value={"id": "TEST"}) as save:
             dat_ngoai_service.cap_nhat_bao_gia("TEST", 1, self.payload, self.profile)

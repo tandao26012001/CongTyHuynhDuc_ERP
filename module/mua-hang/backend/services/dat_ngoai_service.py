@@ -13,7 +13,8 @@ from backend.data.db import get_conn
 from backend.data.catalog_repo import lay_ket_qua_idempotency
 from backend.services import catalog_service
 from backend.services import phan_quyen_service
-from backend.services.errors import KhongTimThay, ThieuDuLieu, XungDot
+from backend.services.dat_ngoai_scope import kiem_phieu
+from backend.services.errors import KhongCoQuyen, KhongTimThay, ThieuDuLieu, XungDot
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +165,11 @@ def danh_sach_lsx(tu_khoa: str, ho_so: dict) -> list[dict]:
 
 def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: bool,
                 noi_dung: str | None, ghi_chu: str | None, ho_so: dict, khoa: str) -> dict:
-    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
+    scope = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     prior = lay_ket_qua_idempotency(ho_so['ma_tai_khoan'], khoa, 'POST:/api/v1/dat-ngoai')
     if prior is not None:
+        for item in prior:
+            kiem_phieu(item['id'], scope, ho_so)
         return {'so_phieu': len(prior), 'items': prior}
     ds_ma = list(dict.fromkeys(str(ma).strip() for ma in ma_vach if str(ma).strip()))
     if not ds_ma:
@@ -217,19 +220,23 @@ def tao_bao_gia(ma_vach: list[str], chi_tiet_dong: list[dict], can_xac_nhan: boo
 
 
 def danh_sach(ho_so: dict) -> list[dict]:
-    phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
-    return [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai()]
+    scope = phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "xem")
+    return [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai(scope=scope, profile=ho_so)]
 
 
 def hang_doi_xac_nhan_ky_thuat(ho_so: dict) -> list[dict]:
+    if str(ho_so.get("vai_tro", "")).strip().upper() != "KY_THUAT":
+        raise KhongCoQuyen("Chỉ tài khoản có vai trò Kỹ thuật được nhận thông báo xác nhận kỹ thuật.")
     started = perf_counter()
     timings = [started]
     try:
         with get_conn() as conn:
             timings.append(perf_counter())
-            phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "xem", conn)
+            scope = phan_quyen_service.kiem_quyen(ho_so, "xac_nhan_kt", "xem", conn)
             timings.append(perf_counter())
-            items = [dict(row) for row in dat_ngoai_repo.danh_sach_dat_ngoai(conn)
+            rows = (dat_ngoai_repo.danh_sach_dat_ngoai(conn) if scope == 'toan_bo'
+                    else dat_ngoai_repo.danh_sach_dat_ngoai(conn, scope, ho_so))
+            items = [dict(row) for row in rows
                     if row["trang_thai"] == "CHO_XAC_NHAN_KY_THUAT"
                     or (row["trang_thai"] != "HUY"
                         and any(dong.get('cho_xac_nhan_kt') for dong in row['dong']))]
@@ -303,6 +310,8 @@ def cap_nhat_bao_gia(id_phieu: str, phien_ban: int, du_lieu: dict, ho_so: dict) 
         ncc = suppliers[item["id_ncc"]]
         item["ma_ncc"] = ncc.get("ma_ncc")
         item["ten_ncc"] = ncc.get("ten")
+    scope = phan_quyen_service.kiem_quyen(ho_so, 'dat_ngoai', 'sua')
+    kiem_phieu(id_phieu, scope, ho_so)
     row = dat_ngoai_repo.cap_nhat_bao_gia(id_phieu, phien_ban, du_lieu, ho_so["ma_nhan_vien"])
     if not row:
         raise XungDot("Không thể lưu báo giá mã hàng. Hãy tải lại phiếu và kiểm tra mã đã xác nhận kỹ thuật, không còn yêu cầu đang chờ.")
@@ -338,6 +347,10 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
         phan_quyen_service.kiem_quyen(ho_so, "dat_ngoai", "sua")
     if la_huy and not str(noi_dung or "").strip():
         raise ThieuDuLieu("Phải nhập lý do huỷ.", "THIEU_LY_DO_HUY")
+    trang = 'xac_nhan_kt' if hien_tai == 'CHO_XAC_NHAN_KY_THUAT' and trang_thai_moi == 'DANG_BAO_GIA' else 'dat_ngoai'
+    action = 'duyet' if trang_thai_moi == 'DA_DUYET' else 'sua'
+    scope = phan_quyen_service.kiem_quyen(ho_so, trang, action)
+    kiem_phieu(id_phieu, scope, ho_so)
     try:
         row = dat_ngoai_repo.chuyen_trang_thai(
             id_phieu, phien_ban, trang_thai_moi, noi_dung, ho_so["ma_nhan_vien"]

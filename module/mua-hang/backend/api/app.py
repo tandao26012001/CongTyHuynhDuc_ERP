@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from backend.api.routes.danh_muc import router as danh_muc_router
 from backend.api.routes.de_nghi import router as de_nghi_router
 from backend.api.routes.dat_ngoai import router as dat_ngoai_router
 from backend.api.routes.mat_hang_ncc import router as mat_hang_ncc_router
+from backend.api.routes.ncc_bieu_mau import router as ncc_bieu_mau_router
 from backend.api.routes.bao_cao_f2 import router as bao_cao_f2_router
 from backend.api.routes.tuong_tac_ho_so import router as tuong_tac_ho_so_router
 from backend.config.settings import APP_NAME, API_PREFIX
@@ -22,7 +24,20 @@ from backend.api.routes.f02 import router as f02_router
 from backend.api.routes.f03 import router as f03_router
 from backend.services.errors import LoiNghiepVu
 
+from backend.data.db import open_pool, close_pool
+
+
+@asynccontextmanager
+async def lifespan(app):
+    open_pool()
+    try:
+        yield
+    finally:
+        close_pool()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title=APP_NAME,
     version="0.1.0",
     description="He thong Mua hang & Gia cong ngoai — RESTful API (Swagger tai /docs)",
@@ -54,9 +69,12 @@ app.include_router(f03_router, prefix=API_PREFIX, tags=["F03"])
 app.include_router(health_router, tags=["health"])
 app.include_router(auth_router, prefix=API_PREFIX, tags=["xác thực"])
 app.include_router(quan_tri_router, prefix=API_PREFIX, tags=["quản trị"])
+# Route NCC co ten co dinh phai dung truoc /nha-cung-cap/{id_ncc}.
+app.include_router(mat_hang_ncc_router, prefix=API_PREFIX, tags=["nhà cung cấp"])
 app.include_router(danh_muc_router, prefix=API_PREFIX, tags=["danh mục"])
 app.include_router(de_nghi_router, prefix=API_PREFIX, tags=["đề nghị"])
 app.include_router(dat_ngoai_router, prefix=API_PREFIX, tags=["đặt ngoài"])
-app.include_router(mat_hang_ncc_router, prefix=API_PREFIX, tags=["nhà cung cấp"])
 app.include_router(bao_cao_f2_router, prefix=API_PREFIX, tags=["báo cáo"])
 app.include_router(tuong_tac_ho_so_router, prefix=API_PREFIX, tags=["trao đổi và tệp hồ sơ"])
+
+app.include_router(ncc_bieu_mau_router, prefix=API_PREFIX, tags=["NCC ISO"])

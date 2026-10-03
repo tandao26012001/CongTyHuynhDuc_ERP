@@ -14,7 +14,7 @@ def test_line_detail_reuses_one_database_connection(monkeypatch):
         yield connection
 
     monkeypatch.setattr(service, "get_conn", fake_connection)
-    monkeypatch.setattr(service, "kiem_quyen", lambda profile, page, action, conn: calls.append((page, action, conn)))
+    monkeypatch.setattr(service, "kiem_quyen", lambda profile, page, action, conn: calls.append((page, action, conn)) or 'toan_bo')
     monkeypatch.setattr(service.dat_ngoai_chi_tiet_repo, "lay_dong",
                         lambda request_id, line_id, conn: {"id": line_id, "ma_hang": "MH-1"})
     monkeypatch.setattr(service.dat_ngoai_chi_tiet_repo, "danh_sach_xac_nhan",

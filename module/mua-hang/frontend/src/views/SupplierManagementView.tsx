@@ -1,3 +1,4 @@
+import { SupplierFormDownload } from '../components/SupplierFormDownload';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   deXuatNhaCungCap, duyetDeXuatNhaCungCap, DuLieuNhaCungCap, layDanhSachNhaCungCap,
@@ -209,6 +210,7 @@ export function SupplierManagementView({ onNotify, canEdit, canApprove, canPropo
 
   return <div className="space-y-4">
     <nav className="bg-white border rounded flex flex-wrap gap-1 p-1"><button type="button" onClick={() => setTab('catalog')} className={`min-h-11 px-4 rounded font-bold ${tab === 'catalog' ? 'bg-[#283A97] text-white' : 'text-[#283A97]'}`}>DANH MỤC</button><button type="button" onClick={() => setTab('items')} className={`min-h-11 px-4 rounded font-bold ${tab === 'items' ? 'bg-[#283A97] text-white' : 'text-[#283A97]'}`}>MẶT HÀNG CỦA NCC</button><button type="button" onClick={() => setTab('evaluation')} className={`min-h-11 px-4 rounded font-bold ${tab === 'evaluation' ? 'bg-[#283A97] text-white' : 'text-[#283A97]'}`}>ĐÁNH GIÁ BM06</button><button type="button" onClick={() => setTab('due')} className={`min-h-11 px-4 rounded font-bold ${tab === 'due' ? 'bg-[#283A97] text-white' : 'text-[#283A97]'}`}>ĐẾN HẠN ĐÁNH GIÁ</button><button type="button" onClick={() => setTab('incidents')} className={`min-h-11 px-4 rounded font-bold ${tab === 'incidents' ? 'bg-[#283A97] text-white' : 'text-[#283A97]'}`}>SỔ BM08</button></nav>
+    {tab === 'catalog' && <SupplierFormDownload form="BM03" />}
     {tab === 'items' ? <SupplierItemsPanel supplier={selectedSupplier} canEdit={canEdit} canApprove={canApprove} canPropose={canPropose} onNotify={onNotify} /> : tab === 'evaluation' ? <SupplierEvaluationPanel supplier={selectedSupplier} canEdit={canEdit} canApprove={canApprove} onNotify={onNotify} /> : tab === 'due' ? <SupplierDuePanel /> : tab === 'incidents' ? <SupplierIncidentsPanel /> : <>
     <header className="bg-white border border-[#DCE1EC] rounded p-4 flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-[21px] font-bold">QUẢN LÝ NHÀ CUNG CẤP</h1><p className="mt-1 text-[13px] text-[#59627A]">Danh mục NCC do bộ phận Mua hàng quản lý; Kinh doanh chỉ chọn NCC gia công khi xử lý Đặt ngoài.</p></div>

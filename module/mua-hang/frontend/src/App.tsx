@@ -4,7 +4,7 @@ import { INITIAL_REQUESTS } from './data/initialData';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { Toast } from './components/Toast';
-import { api, dangXuat, HoSo, layHangDoiKyThuatDatNgoai, layHoSo, layToken, PHIEN_HET_HAN_EVENT } from './api/client';
+import { coTheNhanThongBaoKyThuat, api, dangXuat, HoSo, layHangDoiKyThuatDatNgoai, layHoSo, layToken, PHIEN_HET_HAN_EVENT } from './api/client';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -43,7 +43,7 @@ export default function App() {
     const load = async () => {
       const results = await Promise.allSettled([
         currentUser.quyen?.de_nghi?.duyet ? api<{ tong: number }>('/api/v1/de-nghi/cho-duyet?kich_thuoc=1') : Promise.resolve({ tong: 0 }),
-        currentUser.quyen?.xac_nhan_kt?.xem ? layHangDoiKyThuatDatNgoai() : Promise.resolve([]),
+        coTheNhanThongBaoKyThuat(currentUser) ? layHangDoiKyThuatDatNgoai() : Promise.resolve([]),
       ]);
       if (active) setPendingTasksCount((results[0].status === 'fulfilled' ? results[0].value.tong : 0) + (results[1].status === 'fulfilled' ? results[1].value.length : 0));
     };

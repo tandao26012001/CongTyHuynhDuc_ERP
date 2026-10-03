@@ -1,9 +1,9 @@
 """Nghiep vu yeu cau va so sanh bao gia (F03)."""
-
 from datetime import date
 from decimal import Decimal
 
 from backend.data.db import get_conn
+from backend.data.ncc_nhom import dieu_kien_vat_tu
 from backend.data import f03_repo as repo
 from backend.services.errors import KhongTimThay, LoiNghiepVu, ThieuDuLieu, XungDot
 from backend.services.phan_quyen_service import kiem_quyen
@@ -135,12 +135,14 @@ def chon_bao_gia(id_bao_gia, ly_do_chon, phien_ban, ho_so):
             if count < 2 and not bg["mien_tru_2_bao_gia"]:
                 raise LoiNghiepVu(f"Dong {line['id_de_nghi_dong']} chua du 2 bao gia.", "BG01_CHUA_DU_BAO_GIA")
             rating = conn.execute(
-                """SELECT dg.xep_loai FROM de_nghi_dong d
+                f"""SELECT dg.xep_loai FROM de_nghi_dong d
                    JOIN vat_tu v ON v.id=coalesce(d.id_vt_duyet_mua,d.id_vt_de_nghi)
-                   JOIN mat_hang_ncc m ON m.ma_vat_tu=v.ma_vat_tu AND m.id_ncc=%s
+                   JOIN mat_hang_ncc m ON {dieu_kien_vat_tu()} AND m.id_ncc=%s
                    JOIN danh_gia_ncc dg ON dg.id_mat_hang_ncc=m.id
-                   WHERE d.id=%s AND dg.trang_thai_duyet='DA_DUYET'
-                   ORDER BY dg.ngay_danh_gia DESC,dg.ngay_duyet DESC LIMIT 1""",
+                   WHERE d.id=%s AND m.trang_thai='DA_DUYET' AND dg.trang_thai_duyet='DA_DUYET'
+                   ORDER BY (m.pham_vi_danh_gia='NHOM_HANG') DESC,
+                            (m.nhom_hang_chi_tiet IS NOT NULL) DESC,
+                            dg.ngay_danh_gia DESC,dg.ngay_duyet DESC LIMIT 1""",
                 (bg['id_ncc'], line['id_de_nghi_dong']),
             ).fetchone()
             if rating and rating['xep_loai'] == 'KHONG_CHON':

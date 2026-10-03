@@ -112,7 +112,7 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
     const received = receiveDates[idDot] ?? localToday();
     if (!received) { setError('Hãy chọn ngày nhận thực tế.'); return; }
     setBusy(true); setError('');
-    try { await nhanDotGiaoDatNgoai(idPhieu, idDong, idDot, version, received); await load(); }
+    try { await nhanDotGiaoDatNgoai(idPhieu, idDong, idDot, version, received); await load(); await onRequestChanged?.(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được ngày nhận.'); }
     finally { setBusy(false); }
   }
@@ -213,6 +213,7 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
         </ol>}
       </div>
       <div className="border-t pt-3 space-y-2"><h5 className="font-bold">CÁC ĐỢT GIAO</h5>
+        <p className="text-[13px]">Đã nhận {line.dot_giao.filter((item) => item.ngay_thuc_te).reduce((sum, item) => sum + Number(item.so_luong), 0).toLocaleString('vi-VN')} / {Number(line.so_luong).toLocaleString('vi-VN')} {quoteLine.dvt}. Ghi nhận một đợt là nhận đủ số lượng của đợt đó.</p>
         {line.dot_giao.length === 0 && <p>Chưa lập lịch giao.</p>}
         {line.dot_giao.map((item) => <div key={item.id} className="grid gap-4 rounded border border-[#DCE1EC] bg-[#F4F6FA]/60 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="flex min-w-0 items-start gap-3">
@@ -232,7 +233,7 @@ export function OutsourceLineDetails({ idPhieu, idDong, request, quoteLine, supp
             }} className="inline-flex min-h-10 items-center justify-center gap-2 rounded border border-[#C6CCE9] bg-white px-3 text-[12px] font-bold text-[#283A97] hover:bg-[#EEF0F9] disabled:opacity-50">
               <span className="material-symbols-outlined text-[17px]" aria-hidden="true">edit_calendar</span> ĐIỀU CHỈNH HẠN
             </button>
-            {!item.ngay_thuc_te && <div className="flex flex-wrap items-end gap-2">
+            {!item.ngay_thuc_te && canEdit && ['DA_DAT', 'DANG_LAM', 'DA_NHAN'].includes(request.trang_thai) && <div className="flex flex-wrap items-end gap-2">
               <label className="block min-w-[170px] flex-1 text-[11px] font-bold text-[#59627A]">NGÀY NHẬN
                 <input aria-label={`Ngày nhận đợt ${item.dot_so}`} type="date" required value={receiveDates[item.id] ?? localToday()} onChange={(event) => setReceiveDates({ ...receiveDates, [item.id]: event.target.value })} className="mt-1 block h-10 w-full rounded border border-[#DCE1EC] bg-white px-2 text-[14px] font-normal text-[#0E1220] focus:border-[#283A97] focus:outline-none focus:ring-2 focus:ring-[#C6CCE9]" />
               </label>

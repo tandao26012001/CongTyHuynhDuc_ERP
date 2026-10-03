@@ -1,5 +1,21 @@
 # Supabase — schema `mua_hang`
 
+Migration 081 tạo nhật ký xuất biểu mẫu NCC BM03–BM08; đã áp dụng trên DB
+runtime ngày 03/10/2026. Triển khai migration này trước phiên bản ứng dụng
+có chức năng tải biểu mẫu. Backend cần `openpyxl` theo requirements và bốn
+mẫu XLSX trong `form-mau`; PDF cần font Arial trên Windows hoặc DejaVuSans trên Linux.
+
+## Nền đánh giá NCC theo nhóm
+
+Migration 074 phân biệt hồ sơ nhóm mới với hồ sơ mã vật tư cũ. Migration 075
+khôi phục cột `chung_loai.ma_cha` nếu database đã ghi nhận 048 nhưng thiếu cột.
+Migration 076 khôi phục bảng tham số và tham số NCC nếu thiếu. Cả ba giữ
+nguyên điểm và hồ sơ lịch sử, không tự gán nhóm con hoặc tự đặt ngưỡng tiền.
+Áp dụng 074 → 075 → 076 trước khi dùng phiên bản đánh giá theo nhóm.
+
+Ngày 03/10/2026: xác nhận 074 và áp dụng 075–076 trên DB cấu hình hiện tại;
+truy vấn nguồn điểm đã qua EXPLAIN PostgreSQL. Chưa đối soát điểm thực tế.
+
 ## Chuyển Điều xe sang Kho vận (F4)
 
 Trước khi áp dụng migration `047`, tạo một bản Excel lịch sử bằng

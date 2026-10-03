@@ -11,6 +11,7 @@ def lay_dong(id_phieu: str, id_dong: str, conn=None) -> dict | None:
     with get_conn() if conn is None else nullcontext(conn) as db:
         row = db.execute(
             """SELECT d.*,p.trang_thai AS trang_thai_phieu,p.nguoi_lap,
+                      (SELECT nv.ma_bo_phan FROM nhan_vien nv WHERE nv.ma_nhan_vien=p.nguoi_lap) AS ma_bo_phan,
                       EXISTS (
                         SELECT 1 FROM dat_ngoai_yeu_cau_kt y
                         WHERE y.id_dat_ngoai_dong=d.id
@@ -245,6 +246,12 @@ def them_dot_giao(id_dong: str, data: dict, nguoi: str,
         prior = _bat_dau_idempotency(conn, tai_khoan, khoa, path)
         if prior is not None:
             return prior
+        phieu = conn.execute(
+            """SELECT p.trang_thai FROM dat_ngoai p JOIN dat_ngoai_dong d ON d.id_dat_ngoai=p.id
+               WHERE d.id=%s FOR UPDATE OF p""", (id_dong,),
+        ).fetchone()
+        if not phieu or phieu['trang_thai'] in ('HUY', 'HOAN_THANH'):
+            raise ValueError('Phiếu đã kết thúc, không thể thêm đợt giao.')
         parent = conn.execute(
             'SELECT so_luong FROM dat_ngoai_dong WHERE id=%s FOR UPDATE', (id_dong,),
         ).fetchone()
@@ -269,12 +276,24 @@ def them_dot_giao(id_dong: str, data: dict, nguoi: str,
 def nhan_dot_giao(id_dong: str, id_dot: str, phien_ban: int,
                   ngay_thuc_te, nguoi: str) -> dict | None:
     with get_conn() as conn:
+        from backend.data.dat_ngoai_nhan_hang import tong_hop, dong_bo
+        phieu = conn.execute(
+            """SELECT p.* FROM dat_ngoai p JOIN dat_ngoai_dong d ON d.id_dat_ngoai=p.id
+               WHERE d.id=%s FOR UPDATE OF p""", (id_dong,),
+        ).fetchone()
+        if not phieu or phieu['trang_thai'] not in ('DA_DAT', 'DANG_LAM', 'DA_NHAN'):
+            raise ValueError('Chỉ nhận hàng cho phiếu đã đặt hoặc đang làm.')
+        totals = tong_hop(conn, phieu['id'])
+        if any(r['da_len_lich'] > r['so_luong'] for r in totals):
+            raise ValueError('Lịch giao vượt lượng đặt; cần đối soát trước khi nhận.')
         row = conn.execute(
             """UPDATE dat_ngoai_dot_giao SET ngay_thuc_te=%s,ngay_sua=now(),
                       nguoi_sua=%s,phien_ban=phien_ban+1
-               WHERE id=%s AND id_dat_ngoai_dong=%s AND phien_ban=%s
+               WHERE id=%s AND id_dat_ngoai_dong=%s AND phien_ban=%s AND ngay_thuc_te IS NULL
                RETURNING *""", (ngay_thuc_te, nguoi, id_dot, id_dong, phien_ban),
         ).fetchone()
+        if row:
+            dong_bo(conn, phieu, nguoi)
         return dict(row) if row else None
 
 

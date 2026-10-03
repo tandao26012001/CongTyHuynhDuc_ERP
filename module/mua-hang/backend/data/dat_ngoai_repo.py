@@ -170,14 +170,16 @@ def tao_dat_ngoai(ds_phieu: list[dict], nguoi_tao: str,
         return ket_qua
 
 
-def danh_sach_dat_ngoai(conn=None) -> list[dict]:
+def danh_sach_dat_ngoai(conn=None, scope='toan_bo', profile=None) -> list[dict]:
     if conn is None:
         with get_conn() as own_conn:
-            return danh_sach_dat_ngoai(own_conn)
+            return danh_sach_dat_ngoai(own_conn, scope, profile)
     if not san_sang(conn):
         return []
     return conn.execute(
             """SELECT dn.*,
+                      (SELECT nv.ho_va_ten FROM nhan_vien nv
+                       WHERE nv.ma_nhan_vien=dn.nguoi_lap) AS ten_nguoi_lap,
                       coalesce(jsonb_agg(jsonb_build_object(
                         'id',dd.id,'ma_vach',dd.ma_vach,'ma_hang',dd.ma_hang,
                         'can_xac_nhan_ky_thuat',dd.can_xac_nhan_ky_thuat,
@@ -212,7 +214,15 @@ def danh_sach_dat_ngoai(conn=None) -> list[dict]:
                         'id_su_co',dd.id_su_co
                       ) ORDER BY dd.stt_dong) FILTER (WHERE dd.id IS NOT NULL),'[]'::jsonb) AS dong,
                       coalesce((
-                        SELECT jsonb_agg(to_jsonb(ls) ORDER BY ls.thoi_diem DESC)
+                        SELECT jsonb_agg(to_jsonb(ls) || jsonb_build_object(
+                          'ten_nguoi_thuc_hien', coalesce(
+                            (SELECT nv.ho_va_ten FROM nhan_vien nv
+                             WHERE nv.ma_nhan_vien=ls.nguoi_thuc_hien),
+                            (SELECT coalesce(nv.ho_va_ten, tk.ho_va_ten)
+                             FROM tai_khoan tk
+                             LEFT JOIN nhan_vien nv ON nv.ma_nhan_vien=tk.ma_nhan_vien
+                             WHERE tk.ma_tai_khoan=ls.nguoi_thuc_hien)
+                          )) ORDER BY ls.thoi_diem DESC)
                         FROM (
                           SELECT l.trang_thai_cu,l.trang_thai_moi,l.noi_dung,
                                  l.nguoi_thuc_hien,l.thoi_diem,NULL::varchar AS ma_hang,
@@ -239,7 +249,11 @@ def danh_sach_dat_ngoai(conn=None) -> list[dict]:
                       ,coalesce(string_agg(DISTINCT dd.ten_ncc_chup,', ' ORDER BY dd.ten_ncc_chup)
                                 FILTER (WHERE dd.ten_ncc_chup IS NOT NULL),dn.ten_ncc_chup) AS nha_cung_cap_tom_tat
                FROM dat_ngoai dn LEFT JOIN dat_ngoai_dong dd ON dd.id_dat_ngoai=dn.id
-               GROUP BY dn.id ORDER BY dn.ngay_tao DESC,dn.id DESC"""
+               WHERE (%s='toan_bo' OR (%s='ca_nhan' AND dn.nguoi_lap=%s)
+                      OR (%s='bo_phan' AND EXISTS (SELECT 1 FROM nhan_vien nv
+                          WHERE nv.ma_nhan_vien=dn.nguoi_lap AND nv.ma_bo_phan=%s)))
+               GROUP BY dn.id ORDER BY dn.ngay_tao DESC,dn.id DESC""",
+            (scope, scope, (profile or {}).get('ma_nhan_vien'), scope, (profile or {}).get('ma_bo_phan')),
     ).fetchall()
 
 
@@ -340,6 +354,9 @@ def chuyen_trang_thai(id_phieu: str, phien_ban: int, trang_thai_moi: str, noi_du
         phieu = lay_dat_ngoai(conn, id_phieu, True)
         if not phieu or phieu["phien_ban"] != phien_ban:
             return None
+        if trang_thai_moi in ('DA_NHAN', 'HOAN_THANH'):
+            from backend.data.dat_ngoai_nhan_hang import tong_hop, kiem_tra_du
+            kiem_tra_du(tong_hop(conn, id_phieu))
         if trang_thai_moi == 'HOAN_THANH' and conn.execute(
             """SELECT 1 FROM dat_ngoai_yeu_cau_kt y
                JOIN dat_ngoai_dong d ON d.id=y.id_dat_ngoai_dong

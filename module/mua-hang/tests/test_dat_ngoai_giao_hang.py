@@ -19,7 +19,7 @@ class TestSuaDotGiaoService(TestCase):
 
     def test_requires_reason_for_delivery_date_change(self):
         data = {**self.data, "ly_do": "  "}
-        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen"), \
+        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen", return_value="toan_bo"), \
                 patch.object(dat_ngoai_chi_tiet_service, "_dong", return_value={"trang_thai_phieu": "DANG_LAM"}), \
                 patch.object(dat_ngoai_chi_tiet_service.dat_ngoai_chi_tiet_repo, "sua_ngay_du_kien_dot_giao") as save:
             with self.assertRaises(ThieuDuLieu):
@@ -27,7 +27,7 @@ class TestSuaDotGiaoService(TestCase):
         save.assert_not_called()
 
     def test_rejects_changes_after_request_is_closed(self):
-        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen"), \
+        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen", return_value="toan_bo"), \
                 patch.object(dat_ngoai_chi_tiet_service, "_dong", return_value={"trang_thai_phieu": "HOAN_THANH"}), \
                 patch.object(dat_ngoai_chi_tiet_service.dat_ngoai_chi_tiet_repo, "sua_ngay_du_kien_dot_giao") as save:
             with self.assertRaises(XungDot):
@@ -37,7 +37,7 @@ class TestSuaDotGiaoService(TestCase):
     def test_saves_trimmed_reason_with_actor(self):
         expected = {"id": "G1", "ngay_du_kien": self.data["ngay_du_kien"]}
         data = {**self.data, "ly_do": "  NCC lùi lịch giao  "}
-        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen"), \
+        with patch.object(dat_ngoai_chi_tiet_service, "kiem_quyen", return_value="toan_bo"), \
                 patch.object(dat_ngoai_chi_tiet_service, "_dong", return_value={"trang_thai_phieu": "DANG_LAM"}), \
                 patch.object(dat_ngoai_chi_tiet_service.dat_ngoai_chi_tiet_repo,
                              "sua_ngay_du_kien_dot_giao", return_value=expected) as save:

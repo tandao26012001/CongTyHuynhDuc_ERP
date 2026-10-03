@@ -43,6 +43,20 @@ class DuyetIn(BaseModel):
     phien_ban: int = Field(ge=1)
 
 
+class MatHangSuaIn(MatHangIn):
+    phien_ban: int = Field(ge=1)
+
+
+@router.patch('/mat-hang-ncc/{id_mat_hang}', summary='Sửa hồ sơ nhóm cung cấp NCC', response_model=PhanHoi)
+def sua(id_mat_hang: str, body: MatHangSuaIn, request: Request):
+    return thanh_cong(mat_hang_ncc_service.sua(id_mat_hang, body.model_dump(), lay_ho_so(request)))
+
+
+@router.get('/mat-hang-ncc/{id_mat_hang}/lich-su', summary='Lịch sử nhóm cung cấp NCC', response_model=PhanHoi)
+def lich_su(id_mat_hang: str, request: Request):
+    return thanh_cong(mat_hang_ncc_service.lich_su(id_mat_hang, lay_ho_so(request)))
+
+
 class DinhMucIn(BaseModel):
     phien_ban: int = Field(ge=1)
     dinh_muc_thang: int | None = Field(default=None, ge=0)
@@ -76,8 +90,12 @@ def danh_muc_phan_loai(request: Request):
 
 
 @router.get("/mat-hang-ncc", summary="Danh sách mặt hàng theo nhà cung cấp", response_model=PhanHoi)
-def danh_sach(request: Request, id_ncc: str | None = None, q: str = "", trang_thai: str | None = None):
-    return thanh_cong(mat_hang_ncc_service.danh_sach(id_ncc, q, trang_thai, lay_ho_so(request)))
+def danh_sach(request: Request, id_ncc: str | None = None, q: str = "", trang_thai: str | None = None,
+              nhom_hang_chinh: str | None = None, nhom_hang_chi_tiet: str | None = None,
+              ma_loai_gia_cong: str | None = None, muc_chat_luong: str | None = None):
+    filters = dict(nhom_hang_chinh=nhom_hang_chinh, nhom_hang_chi_tiet=nhom_hang_chi_tiet,
+                   ma_loai_gia_cong=ma_loai_gia_cong, muc_chat_luong=muc_chat_luong)
+    return thanh_cong(mat_hang_ncc_service.danh_sach(id_ncc, q, trang_thai, lay_ho_so(request), filters))
 
 
 @router.post("/mat-hang-ncc", summary="Khai mặt hàng hoặc đề xuất mặt hàng NCC", response_model=PhanHoi)
